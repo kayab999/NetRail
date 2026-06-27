@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
@@ -19,17 +20,47 @@ DEFAULTS: dict[str, Any] = {
     "history_ttl_days": 90,
 }
 
+def _as_bool(value: str) -> bool:
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+def _apply_env_overrides(settings: dict[str, Any]) -> dict[str, Any]:
+    if url := os.environ.get("NETRAIL_SEARXNG_URL") or os.environ.get("SEARXNG_URL"):
+        settings["searxng_url"] = url
+
+    if raw := os.environ.get("NETRAIL_HISTORY_ENABLED"):
+        settings["history_enabled"] = _as_bool(raw)
+
+    if raw := os.environ.get("NETRAIL_HISTORY_ENCRYPT"):
+        settings["history_encrypt"] = _as_bool(raw)
+
+    if raw := os.environ.get("NETRAIL_HISTORY_TTL_DAYS"):
+        try:
+            settings["history_ttl_days"] = int(raw)
+        except ValueError:
+            pass
+
+    if raw := os.environ.get("NETRAIL_MAX_RESULTS"):
+        try:
+            settings["max_results"] = int(raw)
+        except ValueError:
+            pass
+
+    return settings
+
 
 def load_settings() -> dict[str, Any]:
-    if not CONFIG_FILE.exists():
-        return DEFAULTS.copy()
-    try:
-        data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return DEFAULTS.copy()
+    if CONFIG_FILE.exists():
+        try:
+            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            data = {}
+    else:
+        data = {}
+
     merged = DEFAULTS.copy()
     merged.update({k: v for k, v in data.items() if k in DEFAULTS})
-    return merged
+    return _apply_env_overrides(merged)
 
 
 def save_settings(settings: dict[str, Any]) -> dict[str, Any]:
@@ -37,4 +68,4 @@ def save_settings(settings: dict[str, Any]) -> dict[str, Any]:
     payload = DEFAULTS.copy()
     payload.update({k: settings[k] for k in DEFAULTS if k in settings})
     CONFIG_FILE.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return payload
+    return _apply_env_overrides(payload)

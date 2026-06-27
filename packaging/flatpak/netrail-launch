@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export PYTHONPATH="/app/lib:${PYTHONPATH:-}"
+export NETRAIL_AUTO_OPEN="${NETRAIL_AUTO_OPEN:-true}"
+
+echo "NetRail starting at http://127.0.0.1:7421"
+echo "No telemetry. Press Ctrl+C to stop."
+
+exec python3 -m netrail

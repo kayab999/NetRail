@@ -7,7 +7,7 @@ NetRail is a privacy-first search front-end that runs entirely on your machine. 
 > This is an open letter in code: you do not need a surveillance company to find things on the internet.  
 > Read the full manifesto in [OPEN_LETTER.md](OPEN_LETTER.md).
 
-**Version:** 0.3.0 · **License:** [AGPL-3.0](LICENSE)
+**Version:** 0.4.0 · **License:** [AGPL-3.0](LICENSE)
 
 **Tagline:** *Search first. Browse second. On your terms.*
 
@@ -34,18 +34,37 @@ NetRail is a privacy-first search front-end that runs entirely on your machine. 
 
 ## Quick Start
 
-### Option A — Run script (recommended)
+### Option A — One-click install (recommended)
 
 ```bash
 git clone <your-repo-url> NetRail
 cd NetRail
-chmod +x run.sh
-./run.sh
+chmod +x install.sh
+./install.sh
+netrail-launch
 ```
 
-Open **http://127.0.0.1:7421**
+Your browser opens automatically to **http://127.0.0.1:7421**
 
-### Option B — Manual setup
+### Option B — Run script (developers)
+
+```bash
+chmod +x run.sh && ./run.sh
+```
+
+### Option C — Docker (headless / homelab)
+
+```bash
+cp .env.example .env   # set NETRAIL_DB_KEY
+docker compose up -d netrail
+curl http://127.0.0.1:7421/api/health
+```
+
+### Option D — Flatpak / AppImage
+
+See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md)
+
+### Option E — Manual setup
 
 ```bash
 python3 -m venv .venv
@@ -85,6 +104,7 @@ NetRail/
 |----------|-------------|
 | [User Manual](docs/MANUAL.md) | How to search, use operators, configure browsers, troubleshoot |
 | [Architecture & Roadmap](docs/ARCHITECTURE.md) | System design, privacy model, modular boundaries, long-term lifecycle |
+| [Distribution Guide](docs/DISTRIBUTION.md) | Flatpak, Docker, AppImage, install.sh, sandbox notes |
 | [Viability Assessment](docs/VIABILITY.md) | Product risks, competitive position, business model, strategic responses |
 | [Open Letter](OPEN_LETTER.md) | Philosophy and motivation (includes v0.2 honesty about index chain) |
 
@@ -164,9 +184,9 @@ Configuration is stored at `~/.config/netrail/settings.json`.
 
 | Phase | Focus |
 |-------|-------|
-| **v0.3** *(current)* | History, collections, revisit badges, FTS5 local search |
+| **v0.4** *(current)* | Flatpak, Docker, AppImage, install.sh, desktop integration |
+| **v0.3** | History, collections, revisit badges, FTS5 local search |
 | **v0.2** | SearchBackend protocol, SearXNG, provenance UI, tests |
-| **v0.4** | Flatpak, AppImage, Docker, installers |
 | **v0.5** | Tauri + Rust port (no Python sidecar) |
 | **v1.0** | Multi-backend fanout, BYO API keys, public launch |
 | **v2.x** | Local crawl cache, owned indexes |

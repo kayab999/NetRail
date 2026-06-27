@@ -1,0 +1,31 @@
+services:
+  netrail:
+    build: .
+    container_name: netrail
+    ports:
+      # SECURITY: keep 127.0.0.1 — omitting it exposes the API on your LAN
+      - "127.0.0.1:7421:7421"
+    volumes:
+      - netrail_data:/app/data
+    environment:
+      NETRAIL_DB_PATH: /app/data/netrail.db
+      NETRAIL_DB_KEY: ${NETRAIL_DB_KEY:?Set NETRAIL_DB_KEY in .env — generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"}
+      NETRAIL_AUTO_OPEN: "false"
+      NETRAIL_HISTORY_ENCRYPT: "true"
+      SEARXNG_URL: ${SEARXNG_URL:-}
+    restart: unless-stopped
+
+  searxng:
+    image: searxng/searxng:latest
+    container_name: netrail-searxng
+    profiles:
+      - searxng
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - searxng_data:/etc/searxng
+    restart: unless-stopped
+
+volumes:
+  netrail_data:
+  searxng_data:

@@ -1,0 +1,41 @@
+app-id: io.netrail.NetRail
+runtime: org.freedesktop.Platform
+runtime-version: "23.08"
+sdk: org.freedesktop.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.python3
+
+command: netrail-launch
+
+finish-args:
+  - --share=network
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --socket=session-bus
+  - --talk-name=org.freedesktop.secrets
+  - --filesystem=xdg-config/netrail:create
+  - --filesystem=xdg-data/netrail:create
+  - --filesystem=/usr/share/applications:ro
+  - --filesystem=home/.local/share/applications:ro
+
+modules:
+  - name: netrail
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/python3/bin
+    build-commands:
+      - pip3 install --prefix=${FLATPAK_DEST} --no-cache-dir -r requirements.txt
+      - install -d ${FLATPAK_DEST}/lib/netrail
+      - cp -r netrail ${FLATPAK_DEST}/lib/
+      - install -Dm755 packaging/flatpak/netrail-launch ${FLATPAK_DEST}/bin/netrail-launch
+      - install -Dm644 assets/netrail.desktop ${FLATPAK_DEST}/share/applications/io.netrail.NetRail.desktop
+      - install -Dm644 assets/netrail.svg ${FLATPAK_DEST}/share/icons/hicolor/scalable/apps/io.netrail.NetRail.svg
+    sources:
+      - type: dir
+        path: ../..
+        skip:
+          - .git
+          - .venv
+          - build
+          - dist
+          - .pytest_cache

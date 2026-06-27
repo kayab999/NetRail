@@ -5,7 +5,10 @@ import sqlite3
 from pathlib import Path
 
 DATA_DIR = Path.home() / ".local" / "share" / "netrail"
-DB_PATH = Path(os.environ.get("NETRAIL_DB_PATH", str(DATA_DIR / "netrail.db")))
+
+
+def db_path() -> Path:
+    return Path(os.environ.get("NETRAIL_DB_PATH", str(DATA_DIR / "netrail.db")))
 
 SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;
@@ -74,8 +77,9 @@ def normalize_url(url: str) -> str:
 
 
 def connect() -> sqlite3.Connection:
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+    path = db_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(path, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA_SQL)
     return conn

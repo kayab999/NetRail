@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import os
 import re
+import threading
 import webbrowser
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Any, Literal
 
 import uvicorn
@@ -17,10 +18,11 @@ from netrail.backends.registry import get_enabled_backends
 from netrail.browsers import discover_browsers, open_url
 from netrail.config import load_settings, save_settings
 from netrail.history.store import get_store, init_history_on_startup
+from netrail.runtime import is_flatpak, static_dir
 from netrail.search import search
 from netrail.security import validate_open_url
 
-STATIC_DIR = Path(__file__).parent / "static"
+STATIC_DIR = static_dir()
 
 CSP = (
     "default-src 'self'; "
@@ -125,6 +127,7 @@ async def health() -> dict[str, Any]:
         "backends_configured": [b.name for b in backends],
         "default_provenance": "ddgs → DuckDuckGo metasearch → primarily Bing index",
         "history": store.stats() if store else {"enabled": False},
+        "sandbox": "flatpak" if is_flatpak() else "native",
     }
 
 
@@ -283,7 +286,21 @@ async def export_collection(
     return PlainTextResponse(content=content, media_type=media)
 
 
+def _schedule_ui_open() -> None:
+    if os.getenv("NETRAIL_AUTO_OPEN", "true").lower() not in {"1", "true", "yes", "on"}:
+        return
+
+    def _open() -> None:
+        try:
+            webbrowser.open("http://127.0.0.1:7421")
+        except Exception:  # noqa: BLE001
+            pass
+
+    threading.Timer(1.5, _open).start()
+
+
 def main() -> None:
+    _schedule_ui_open()
     uvicorn.run(
         "netrail.main:app",
         host="127.0.0.1",

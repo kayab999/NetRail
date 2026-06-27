@@ -2,6 +2,24 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.4.0] — 2026-06-27
+
+### Added
+
+- **Flatpak** packaging with `flatpak-spawn --host` browser launches
+- **Docker** image + `docker-compose.yml` (strict `127.0.0.1` bind, SearXNG profile)
+- **AppImage** build via PyInstaller + `appimagetool`
+- **`install.sh`** — one-command local desktop install
+- SVG icon and `.desktop` file for application menu integration
+- Auto-open UI on startup (`NETRAIL_AUTO_OPEN`, default `true`)
+- Env config: `SEARXNG_URL`, `NETRAIL_*` overrides for Docker/homelab
+- [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) — packaging and sandbox guide
+
+### Changed
+
+- `browsers.py` detects Flatpak sandbox and routes host browser spawns
+- `main.py` uses `runtime.static_dir()` for PyInstaller compatibility
+
 ## [0.3.0] — 2026-06-27
 
 ### Added

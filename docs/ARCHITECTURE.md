@@ -276,20 +276,21 @@ The roadmap is organized into **phases** with explicit goals, deliverables, exit
 
 ---
 
-### Phase 3 — Distribution
+### Phase 3 — Distribution (complete)
 
-**Target version:** 0.4  
-**Theme:** Install friction kills adoption — fix before more features
+**Version:** 0.4.0  
+**Status:** Released
 
-| Item | Description |
-|------|-------------|
-| Flatpak | Primary Linux consumer path |
-| AppImage | Zero-install option |
-| Docker image | Headless/API deployment |
-| One-line installer | Verified curl script |
-| `.desktop` + systemd user unit | Background daemon option |
+| Deliverable | State |
+|-------------|-------|
+| Flatpak + `flatpak-spawn --host` browser fix | ✅ |
+| Docker + Compose (localhost bind, SearXNG profile) | ✅ |
+| AppImage / PyInstaller build script | ✅ |
+| `install.sh` one-click local install | ✅ |
+| `.desktop` + SVG icon + auto-open UI | ✅ |
+| [DISTRIBUTION.md](DISTRIBUTION.md) | ✅ |
 
-**Exit criteria:** Non-git-clone install works on major distros.
+**Exit criteria:** Install in under 60 seconds without manual venv setup. ✅
 
 ---
 

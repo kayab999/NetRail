@@ -7,6 +7,8 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
+from netrail.runtime import is_flatpak
+
 
 @dataclass(frozen=True)
 class Browser:
@@ -40,7 +42,7 @@ KNOWN_BROWSERS: dict[str, tuple[str, str | None]] = {
 
 def _parse_desktop_file(path: Path) -> tuple[str, str, list[str]] | None:
     parser = configparser.ConfigParser(interpolation=None)
-    parser.optionxform = str  # preserve case
+    parser.optionxform = str
     try:
         parser.read(path, encoding="utf-8")
     except (configparser.Error, OSError):
@@ -56,11 +58,7 @@ def _parse_desktop_file(path: Path) -> tuple[str, str, list[str]] | None:
         return None
 
     name = section.get("Name", path.stem)
-    try:
-        exec_line = section.get("Exec", "")
-    except KeyError:
-        return None
-
+    exec_line = section.get("Exec", "")
     executable = exec_line.split("%")[0].strip()
     if not executable:
         return None
@@ -75,10 +73,44 @@ def _is_browser(meta: list[str]) -> bool:
     return "webbrowser" in joined or "x-scheme-handler/http" in joined
 
 
+def _host_which(command: str) -> str | None:
+    token = Path(command.split()[0]).name
+    try:
+        result = subprocess.run(
+            ["flatpak-spawn", "--host", "which", token],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+    return None
+
+
 def _resolve_executable(command: str) -> str | None:
-    token = Path(command).name
-    resolved = shutil.which(token) or shutil.which(command)
+    token = command.split()[0]
+    if is_flatpak():
+        if token.startswith("/"):
+            return token
+        return _host_which(command) or token
+
+    resolved = shutil.which(Path(token).name) or shutil.which(token)
     return resolved
+
+
+def _spawn_process(cmd: list[str], env: dict[str, str]) -> None:
+    if is_flatpak():
+        cmd = ["flatpak-spawn", "--host", *cmd]
+    subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        start_new_session=True,
+        env=env,
+    )
 
 
 def discover_browsers() -> list[Browser]:
@@ -115,7 +147,10 @@ def discover_browsers() -> list[Browser]:
             )
 
     for stem, (display_name, private_flag) in KNOWN_BROWSERS.items():
-        resolved = shutil.which(stem)
+        if is_flatpak():
+            resolved = _host_which(stem)
+        else:
+            resolved = shutil.which(stem)
         if resolved and resolved not in seen:
             seen.add(resolved)
             browsers.append(
@@ -155,13 +190,7 @@ def open_url(url: str, browser_id: str | None = None, private_mode: bool = False
     env = os.environ.copy()
     env.pop("LD_PRELOAD", None)
 
-    subprocess.Popen(
-        cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-        env=env,
-    )
+    _spawn_process(cmd, env)
 
     mode = "private" if private_mode and browser.private_flag else "normal"
     return {
@@ -169,4 +198,5 @@ def open_url(url: str, browser_id: str | None = None, private_mode: bool = False
         "executable": browser.executable,
         "mode": mode,
         "url": url,
+        "sandbox": "flatpak-host" if is_flatpak() else "native",
     }

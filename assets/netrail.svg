@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="NetRail">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3dd6c6"/>
+      <stop offset="100%" stop-color="#4f8cff"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="24" fill="#0b0f14"/>
+  <path d="M24 88h80" stroke="url(#g)" stroke-width="8" stroke-linecap="round"/>
+  <path d="M40 88V56M64 88V44M88 88V64" stroke="#e8edf5" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="64" cy="36" r="14" fill="url(#g)"/>
+  <path d="M58 36h12M64 30v12" stroke="#041018" stroke-width="3" stroke-linecap="round"/>
+</svg>

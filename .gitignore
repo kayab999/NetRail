@@ -10,3 +10,7 @@ build/
 *.log
 .DS_Store
 config.json
+.env
+build/
+dist/
+*.spec.bak

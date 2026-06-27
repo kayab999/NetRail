@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=NetRail
+Comment=Local research console — search first, browse second
+GenericName=Research Console
+Exec=netrail-launch %U
+Icon=netrail
+Terminal=true
+Type=Application
+Categories=Network;WebBrowser;Utility;
+Keywords=search;privacy;research;osint;
+StartupNotify=true
+MimeType=
