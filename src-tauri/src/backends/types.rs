@@ -62,6 +62,7 @@ pub struct SearchResponse {
     pub provenance_chain: Vec<String>,
     pub sovereignty_step: u8,
     pub errors: Vec<String>,
+    pub search_strategy: String,
 }
 
 impl SearchResponse {
@@ -89,6 +90,7 @@ impl SearchResponse {
                 "label": Self::sovereignty_label(self.sovereignty_step),
             },
             "errors": self.errors,
+            "search_strategy": self.search_strategy,
         })
     }
 }

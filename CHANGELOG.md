@@ -2,6 +2,27 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.0] — 2026-06-27
+
+### Added
+
+- **Multi-backend fanout** — concurrent queries to all enabled backends via `tokio::join!` / thread pool
+- **Merge & dedupe** — URL normalization (strip `www.`, tracking params), richer-snippet wins, round-robin interleave
+- **Brave Search API** — BYO key via `BRAVE_SEARCH_API_KEY` env (never stored in settings)
+- **Structured `backends` config** — optional array in `settings.json` alongside legacy `backend_order`
+- **`search_strategy`** — `fanout` (default) or `fallback` for legacy sequential behavior
+- **`netrail-api` binary** — headless server (`cargo build --bin netrail-api --no-default-features`)
+- **UI: keyboard navigation** — ↑/↓ highlight, Enter open, Shift+Enter private, Ctrl+C copy URL
+- **UI: export rail** — JSON export (Shift+click for CSV) from header button
+- **UI: backend pills** — `[DDGS]` / `[SearXNG]` / `[Brave]` provenance badges
+- **GitHub Actions** — release workflow builds AppImage, `.deb`, and `netrail-api` on tag push
+
+### Changed
+
+- Sovereignty step 3 when Brave or SearXNG contributes results
+- README rewritten for production launch positioning
+- OPEN_LETTER postscript for v1.0
+
 ## [0.5.0] — 2026-06-27
 
 ### Added

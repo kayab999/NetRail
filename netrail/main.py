@@ -74,13 +74,33 @@ class OpenRequest(BaseModel):
     result_id: int | None = None
 
 
+class BackendConfigModel(BaseModel):
+    id: str
+    enabled: bool = True
+    url: str | None = None
+    api_key_env: str | None = None
+
+
 class SettingsModel(BaseModel):
     browser_id: str | None = None
     private_mode: bool = False
     max_results: int = Field(default=25, ge=1, le=50)
-    backend_order: list[str] = Field(default_factory=lambda: ["searxng", "ddgs"])
+    backend_order: list[str] = Field(default_factory=lambda: ["searxng", "ddgs", "brave"])
     ddgs_enabled: bool = True
     searxng_url: str | None = None
+    brave_enabled: bool = False
+    search_strategy: Literal["fanout", "fallback"] = "fanout"
+    backends: list[BackendConfigModel] = Field(
+        default_factory=lambda: [
+            BackendConfigModel(id="searxng", enabled=True),
+            BackendConfigModel(id="ddgs", enabled=True),
+            BackendConfigModel(
+                id="brave",
+                enabled=False,
+                api_key_env="BRAVE_SEARCH_API_KEY",
+            ),
+        ]
+    )
     history_enabled: bool = True
     history_encrypt: bool = True
     history_ttl_days: int = Field(default=90, ge=0, le=3650)

@@ -40,6 +40,7 @@ class SearchResponse:
     sovereignty_step: int = 1
     sovereignty_total: int = 5
     errors: list[str] = field(default_factory=list)
+    search_strategy: str = "fanout"
 
     def as_dict(self) -> dict:
         return {
@@ -55,6 +56,7 @@ class SearchResponse:
                 "label": _sovereignty_label(self.sovereignty_step),
             },
             "errors": self.errors,
+            "search_strategy": self.search_strategy,
         }
 
 

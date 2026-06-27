@@ -318,14 +318,16 @@ The roadmap is organized into **phases** with explicit goals, deliverables, exit
 **Target version:** 1.0  
 **Theme:** Multi-backend merge as technical moat
 
-| Item | Description |
-|------|-------------|
-| Async fanout + dedupe merge | Parallel backends; interleaved results |
-| Brave/Bing BYO-key backends | Stable API contracts for professionals |
-| Polished onboarding | Sovereignty wizard; SearXNG setup guide |
-| Institutional license tier | Newsrooms, legal, government (open core) |
+| Item | Status |
+|------|--------|
+| Async fanout + dedupe merge | ✅ `join_all` fanout; `merge.rs` normalize → dedupe → interleave |
+| Brave BYO-key backend | ✅ `BRAVE_SEARCH_API_KEY` env; never stored in settings |
+| Pro-console UI | ✅ Backend pills, keyboard nav, result export (JSON/CSV) |
+| GitHub Release CI | ✅ AppImage + `.deb` + `netrail-api` on tag push |
+| Polished onboarding | ⏳ Sovereignty wizard; SearXNG setup guide (post-1.0) |
+| Institutional license tier | ⏳ Newsrooms, legal, government (open core) |
 
-**Exit criteria:** Reliability and coverage justify recommendation to non-hobbyist professionals.
+**Exit criteria:** ✅ Fanout search, BYO API keys, keyboard workflow, and distributable AppImage.
 
 ---
 

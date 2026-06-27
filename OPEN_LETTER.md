@@ -67,4 +67,16 @@ The web is still out there — messy, magnificent, bigger than any single compan
 
 **Search first. Browse second. Take back the rail.**
 
+---
+
+## Postscript — v1.0 (June 2026)
+
+v0.1 was a promise. **v1.0 is the receipt.**
+
+The index chain is disclosed on every result — `[DDGS]`, `[SearXNG]`, `[Brave]` pills show you exactly which engine answered. Your history is encrypted at rest. The engine is Rust. The telemetry is still **zero**.
+
+NetRail now fans out to every backend you enable simultaneously, merges and dedupes on your machine, and opens links only when you say so. No Python sidecar. No accounts. No engagement funnel.
+
+This is not a demo anymore. It is a sovereign research console you can ship, fork, and run on a fresh Ubuntu box in under a minute.
+
 — The NetRail contributors

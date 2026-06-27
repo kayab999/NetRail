@@ -2,6 +2,8 @@ const state = {
   view: "search",
   mode: "web",
   searching: false,
+  highlightIndex: -1,
+  lastPayload: null,
   settings: {
     browser_id: null,
     private_mode: false,
@@ -12,10 +14,17 @@ const state = {
   saveTarget: null,
 };
 
+const BACKEND_LABELS = {
+  ddgs: "DDGS",
+  searxng: "SearXNG",
+  brave: "Brave",
+};
+
 const els = {
   form: document.getElementById("search-form"),
   query: document.getElementById("query"),
   searchBtn: document.getElementById("search-btn"),
+  exportBtn: document.getElementById("export-btn"),
   tabs: document.querySelectorAll(".tab"),
   browserSelect: document.getElementById("browser-select"),
   privateMode: document.getElementById("private-mode"),
@@ -119,6 +128,8 @@ function showState(title, message, isError = false) {
   els.state.innerHTML = `<h2>${title}</h2><p>${message}</p>`;
   els.state.hidden = false;
   els.results.classList.add("hidden");
+  state.highlightIndex = -1;
+  if (els.exportBtn) els.exportBtn.disabled = true;
 }
 
 function updateSovereignty(payload) {
@@ -126,7 +137,8 @@ function updateSovereignty(payload) {
   const label = document.getElementById("sovereignty-label");
   if (!pill || !label || !payload.sovereignty) return;
   const { step, total, label: text } = payload.sovereignty;
-  label.textContent = `Step ${step}/${total} · ${text.toLowerCase()}`;
+  const strategy = payload.search_strategy === "fanout" ? " · fanout" : "";
+  label.textContent = `Step ${step}/${total} · ${text.toLowerCase()}${strategy}`;
   pill.title = (payload.provenance_chain || []).join("\n");
 }
 
@@ -142,21 +154,57 @@ function visitBadge(meta) {
   return `<span class="revisit-badge">visited ${ago}${count}</span>`;
 }
 
+function backendPill(backend, provenance) {
+  const label = BACKEND_LABELS[backend] || (backend || "?").toUpperCase();
+  const cls = backend ? `backend-pill ${backend}` : "backend-pill";
+  const title = provenance ? escapeHtml(provenance) : "";
+  return `<span class="${cls}" title="${title}">[${escapeHtml(label)}]</span>`;
+}
+
+function setHighlight(index) {
+  const cards = els.results.querySelectorAll(".result-card");
+  if (!cards.length) {
+    state.highlightIndex = -1;
+    return;
+  }
+  const clamped = Math.max(0, Math.min(index, cards.length - 1));
+  state.highlightIndex = clamped;
+  cards.forEach((card, i) => {
+    card.classList.toggle("highlighted", i === clamped);
+    if (i === clamped) {
+      card.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  });
+}
+
+function highlightedItem() {
+  if (!state.lastPayload?.results?.length) return null;
+  if (state.highlightIndex < 0) return state.lastPayload.results[0];
+  return state.lastPayload.results[state.highlightIndex] || null;
+}
+
 function renderResults(payload) {
   els.state.hidden = true;
   els.results.innerHTML = "";
   els.results.classList.remove("hidden");
   els.historyPanel.classList.add("hidden");
+  state.lastPayload = payload;
+  state.highlightIndex = payload.results.length ? 0 : -1;
   updateSovereignty(payload);
+
+  if (els.exportBtn) {
+    els.exportBtn.disabled = !payload.results.length;
+  }
 
   if (!payload.results.length) {
     showState("No results", `Nothing came back for “${payload.query}”. Try different operators.`);
     return;
   }
 
-  for (const item of payload.results) {
+  payload.results.forEach((item, index) => {
     const li = document.createElement("li");
-    li.className = `result-card${state.mode === "images" ? " image-card" : ""}`;
+    li.className = `result-card${state.mode === "images" ? " image-card" : ""}${index === 0 ? " highlighted" : ""}`;
+    li.dataset.index = String(index);
 
     if (state.mode === "images" && item.image) {
       const img = document.createElement("img");
@@ -169,12 +217,10 @@ function renderResults(payload) {
 
     const body = document.createElement("div");
     body.className = "result-body";
-    const provenance = item.provenance
-      ? `<span class="provenance-badge" title="${escapeHtml(item.provenance)}">via ${escapeHtml(item.backend || "unknown")}</span>`
-      : "";
+    const pill = backendPill(item.backend, item.provenance);
     const revisit = visitBadge(item.visit_metadata);
     body.innerHTML = `
-      <h3><a href="#" data-url="${encodeURIComponent(item.url)}">${escapeHtml(item.title)}</a> ${provenance}</h3>
+      <h3><a href="#" data-url="${encodeURIComponent(item.url)}">${escapeHtml(item.title)}</a> ${pill}</h3>
       <span class="result-url">${escapeHtml(item.url)} ${revisit}</span>
       ${item.snippet ? `<p class="result-snippet">${escapeHtml(item.snippet)}</p>` : ""}
     `;
@@ -205,8 +251,10 @@ function renderResults(payload) {
       openLink(item.url, item.result_id);
     });
 
+    li.addEventListener("mouseenter", () => setHighlight(index));
+
     els.results.appendChild(li);
-  }
+  });
 }
 
 function escapeHtml(value) {
@@ -217,14 +265,15 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
-async function openLink(url, resultId = null) {
+async function openLink(url, resultId = null, forcePrivate = null) {
   await persistSettings();
+  const privateMode = forcePrivate ?? state.settings.private_mode;
   const result = await api("/api/open", {
     method: "POST",
     body: JSON.stringify({
       url,
       browser_id: state.settings.browser_id,
-      private_mode: state.settings.private_mode,
+      private_mode: privateMode,
       result_id: resultId,
     }),
   });
@@ -241,7 +290,7 @@ async function runSearch() {
 
   state.searching = true;
   els.searchBtn.disabled = true;
-  showState("Searching…", `Querying the web for “${escapeHtml(query)}”. Your machine, your request.`);
+  showState("Searching…", `Fanout query for “${escapeHtml(query)}”. Your machine, your request.`);
 
   try {
     await persistSettings();
@@ -260,6 +309,52 @@ async function runSearch() {
     state.searching = false;
     els.searchBtn.disabled = state.view === "history";
   }
+}
+
+function exportResults(fmt = "json") {
+  const payload = state.lastPayload;
+  if (!payload?.results?.length) return;
+
+  const exported = {
+    query: payload.query,
+    mode: payload.mode,
+    search_strategy: payload.search_strategy,
+    backends_used: payload.backends_used,
+    exported_at: new Date().toISOString(),
+    results: payload.results.map((r) => ({
+      title: r.title,
+      url: r.url,
+      snippet: r.snippet,
+      backend: r.backend,
+      provenance: r.provenance,
+    })),
+  };
+
+  let content;
+  let mime;
+  let filename;
+
+  if (fmt === "csv") {
+    const rows = ["title,url,snippet,backend"];
+    for (const r of exported.results) {
+      const esc = (v) => `"${String(v || "").replaceAll('"', '""')}"`;
+      rows.push([esc(r.title), esc(r.url), esc(r.snippet), esc(r.backend)].join(","));
+    }
+    content = rows.join("\n");
+    mime = "text/csv";
+    filename = "netrail-results.csv";
+  } else {
+    content = JSON.stringify(exported, null, 2);
+    mime = "application/json";
+    filename = "netrail-results.json";
+  }
+
+  const blob = new Blob([content], { type: mime });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
 }
 
 async function loadCollections() {
@@ -374,6 +469,46 @@ async function purgeHistory() {
   loadHistory();
 }
 
+function handleKeyboard(event) {
+  if (state.view !== "search" || !state.lastPayload?.results?.length) return;
+
+  const active = document.activeElement;
+  const queryFocused = active === els.query;
+  const count = state.lastPayload.results.length;
+
+  if (queryFocused && event.ctrlKey && event.key.toLowerCase() === "c") {
+    const item = highlightedItem();
+    if (item?.url) {
+      event.preventDefault();
+      navigator.clipboard.writeText(item.url).catch(() => {});
+    }
+    return;
+  }
+
+  if (queryFocused && !["ArrowDown", "ArrowUp", "Enter"].includes(event.key)) {
+    return;
+  }
+
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    setHighlight(state.highlightIndex < 0 ? 0 : state.highlightIndex + 1);
+    return;
+  }
+
+  if (event.key === "ArrowUp") {
+    event.preventDefault();
+    setHighlight(state.highlightIndex <= 0 ? 0 : state.highlightIndex - 1);
+    return;
+  }
+
+  if (event.key === "Enter" && state.highlightIndex >= 0) {
+    event.preventDefault();
+    const item = state.lastPayload.results[state.highlightIndex];
+    if (!item) return;
+    openLink(item.url, item.result_id, event.shiftKey ? true : null);
+  }
+}
+
 async function bootstrap() {
   try {
     const [browsers, settings, health] = await Promise.all([
@@ -414,5 +549,13 @@ els.historySearchBtn.addEventListener("click", loadHistory);
 els.historyPurgeBtn.addEventListener("click", purgeHistory);
 els.saveForm.addEventListener("submit", saveToCollection);
 els.saveCancel.addEventListener("click", () => els.saveDialog.close());
+
+if (els.exportBtn) {
+  els.exportBtn.addEventListener("click", (event) => {
+    exportResults(event.shiftKey ? "csv" : "json");
+  });
+}
+
+document.addEventListener("keydown", handleKeyboard);
 
 bootstrap();

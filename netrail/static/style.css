@@ -44,6 +44,17 @@ body {
   gap: 1rem;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.icon-action {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -304,15 +315,41 @@ select {
   color: var(--accent);
 }
 
-.provenance-badge {
+.provenance-badge,
+.backend-pill {
   display: inline-block;
   margin-left: 0.35rem;
-  padding: 0.1rem 0.4rem;
+  padding: 0.1rem 0.45rem;
   border-radius: 4px;
   border: 1px solid var(--border);
   background: var(--surface-2);
-  color: var(--muted);
+  color: var(--accent);
   font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.backend-pill.brave {
+  color: #fb542b;
+}
+
+.backend-pill.searxng {
+  color: #6eb5ff;
+}
+
+.backend-pill.ddgs {
+  color: var(--accent);
+}
+
+.result-card.highlighted {
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 0 1px var(--accent-dim), var(--shadow);
+  outline: none;
+}
+
+.provenance-badge {
+  color: var(--muted);
   font-size: 0.68rem;
   font-weight: 500;
   vertical-align: middle;
