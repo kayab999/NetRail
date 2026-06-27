@@ -246,13 +246,7 @@ function renderResults(payload) {
     errorsEl.setAttribute("aria-live", "polite");
     els.results.parentNode.insertBefore(errorsEl, els.results);
   }
-  if (payload.errors?.length) {
-    errorsEl.textContent = `Some backends failed: ${payload.errors.join("; ")}`;
-    errorsEl.classList.remove("hidden");
-  } else {
-    errorsEl.classList.add("hidden");
-    errorsEl.textContent = "";
-  }
+  renderFanoutErrors(payload, errorsEl);
 
   if (!payload.results.length) {
     if (els.resultsMeta) els.resultsMeta.classList.add("hidden");
@@ -370,6 +364,71 @@ function formatSnippet(item) {
   return "";
 }
 
+function formatFanoutError(err) {
+  const lower = String(err).toLowerCase();
+  if (lower.includes("bot challenge") || lower.includes("ddgs_bot")) {
+    return "DuckDuckGo blocked automated search";
+  }
+  const colon = err.indexOf(":");
+  if (colon > 0 && colon < 24) {
+    const msg = err.slice(colon + 1).trim();
+    if (msg.length > 80) {
+      return `${err.slice(0, colon + 1)} ${msg.slice(0, 77)}…`;
+    }
+  }
+  return err.length > 100 ? `${err.slice(0, 97)}…` : err;
+}
+
+function fanoutRecoveryHint(errors, backendsUsed) {
+  const ddgsDown = (errors || []).some((e) => /ddgs|duckduckgo/i.test(e));
+  if (!ddgsDown) return "";
+  const wikiOnly =
+    backendsUsed?.length === 1 && backendsUsed[0] === "wikipedia";
+  if (wikiOnly) {
+    return " Showing Wikipedia fallback. For web results: set NETRAIL_SEARXNG_URL or BRAVE_SEARCH_API_KEY.";
+  }
+  return " Tip: enable Brave or SearXNG in ~/.config/netrail/settings.json.";
+}
+
+function renderFanoutErrors(payload, errorsEl) {
+  if (!payload.errors?.length) {
+    errorsEl.classList.add("hidden");
+    errorsEl.replaceChildren();
+    return;
+  }
+
+  const primary = formatFanoutError(payload.errors[0]);
+  const more =
+    payload.errors.length > 1 ? ` (+${payload.errors.length - 1} more)` : "";
+  const hint = fanoutRecoveryHint(payload.errors, payload.backends_used);
+  const text = document.createElement("span");
+  text.className = "fanout-errors-text";
+  text.textContent = `Some backends failed: ${primary}${more}${hint}`;
+
+  const dismiss = document.createElement("button");
+  dismiss.type = "button";
+  dismiss.className = "fanout-errors-dismiss";
+  dismiss.setAttribute("aria-label", "Dismiss backend errors");
+  dismiss.textContent = "×";
+  dismiss.addEventListener("click", () => {
+    errorsEl.classList.add("hidden");
+  });
+
+  errorsEl.replaceChildren(text, dismiss);
+  errorsEl.classList.remove("hidden");
+}
+
+function resultSnippetHtml(item) {
+  const snippet = formatSnippet(item);
+  if (snippet) {
+    return `<p class="result-snippet">${escapeHtml(snippet)}</p>`;
+  }
+  if ((item.backend || "").toLowerCase() === "wikipedia") {
+    return "";
+  }
+  return '<p class="result-snippet result-snippet--empty">No description available.</p>';
+}
+
 function updateResultsMeta(payload, visibleCount) {
   if (!els.resultsMeta || !els.resultsCount) return;
   const total = payload.results.length;
@@ -422,13 +481,12 @@ function buildResultCard(item, index) {
   const revisit = visitBadge(item.visit_metadata);
   const title = formatResultTitle(item);
   const displayUrl = formatDisplayUrl(item.url);
-  const snippet = formatSnippet(item);
   const resolvedUrl = resolveDisplayUrl(item.url);
 
   body.innerHTML = `
     <h3><a href="#" data-url="${encodeURIComponent(resolvedUrl)}" title="${escapeHtml(resolvedUrl)}">${escapeHtml(title)}</a> ${pill}</h3>
     <span class="result-url" title="${escapeHtml(resolvedUrl)}">${escapeHtml(displayUrl)} ${revisit}</span>
-    ${snippet ? `<p class="result-snippet">${escapeHtml(snippet)}</p>` : '<p class="result-snippet result-snippet--empty">No description available.</p>'}
+    ${resultSnippetHtml(item)}
   `;
   li.appendChild(body);
 

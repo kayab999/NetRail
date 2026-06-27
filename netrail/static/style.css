@@ -294,6 +294,7 @@ select {
   color: var(--text);
   border-radius: 6px;
   padding: 0.35rem 0.5rem;
+  min-width: 8.5rem;
 }
 
 .checkbox-wrap input {
@@ -400,6 +401,9 @@ select {
 }
 
 .fanout-errors {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
   margin-bottom: 0.65rem;
   padding: 0.65rem 0.85rem;
   border-radius: var(--radius);
@@ -408,6 +412,28 @@ select {
   color: #ffb4b4;
   font-family: var(--mono);
   font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.fanout-errors-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.fanout-errors-dismiss {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: #ffb4b4;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.1rem 0.25rem;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.fanout-errors-dismiss:hover {
+  opacity: 1;
 }
 
 .fanout-errors.hidden {

@@ -61,7 +61,7 @@ impl DdgsBackend {
                 code: "DDGS_BOT_CHALLENGE",
                 backend: self.name().into(),
                 message:
-                    "DuckDuckGo blocked automated HTML search (bot challenge). Try again later or enable Brave/SearXNG."
+                    "DuckDuckGo blocked automated search (bot challenge). Enable Brave or SearXNG."
                         .into(),
             });
         }

@@ -166,11 +166,31 @@ async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
         }
     }
 
+    let backend_names: Vec<&str> = backends.iter().map(|b| b.name()).collect();
+    let brave_key_present = std::env::var("BRAVE_SEARCH_API_KEY")
+        .or_else(|_| std::env::var("NETRAIL_BRAVE_API_KEY"))
+        .is_ok();
+    let searxng_configured = settings.searxng_url.is_some()
+        || settings.backends.iter().any(|b| b.id == "searxng" && b.url.is_some());
+    let mut recovery_hints: Vec<&str> = Vec::new();
+    if !searxng_configured {
+        recovery_hints.push("Set NETRAIL_SEARXNG_URL to a SearXNG instance for self-hosted metasearch.");
+    }
+    if !settings.brave_enabled || !brave_key_present {
+        recovery_hints.push("Export BRAVE_SEARCH_API_KEY and enable Brave in settings for richer web results.");
+    }
+
     Json(serde_json::json!({
         "status": "ok",
         "version": VERSION,
         "telemetry": "none",
-        "backends_configured": backends.iter().map(|b| b.name()).collect::<Vec<_>>(),
+        "backends_configured": backend_names,
+        "search_recovery": {
+            "searxng_configured": searxng_configured,
+            "brave_key_present": brave_key_present,
+            "brave_enabled": settings.brave_enabled,
+            "hints": recovery_hints,
+        },
         "default_provenance": "ddgs → DuckDuckGo metasearch → primarily Bing index",
         "history": history,
         "sandbox": if is_flatpak() { "flatpak" } else { "native" },
