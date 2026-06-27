@@ -137,16 +137,29 @@ async def index() -> FileResponse:
 
 @app.get("/api/health")
 async def health() -> dict[str, Any]:
+    from netrail.history.crypto import encryption_active, ensure_encryption_key
+
     settings = load_settings()
     backends = get_enabled_backends(settings)
+    encrypt_requested = bool(settings.get("history_encrypt", True))
+    if encrypt_requested:
+        ensure_encryption_key()
+    encryption_ok = encryption_active()
     store = get_store()
+    history = store.stats() if store else {"enabled": False}
+    history["encrypt_requested"] = encrypt_requested
+    history["encryption_active"] = encryption_ok
+    if encrypt_requested and not encryption_ok:
+        history["encryption_warning"] = (
+            "History encryption is enabled but no key is available."
+        )
     return {
         "status": "ok",
         "version": __version__,
         "telemetry": "none",
         "backends_configured": [b.name for b in backends],
         "default_provenance": "ddgs → DuckDuckGo metasearch → primarily Bing index",
-        "history": store.stats() if store else {"enabled": False},
+        "history": history,
         "sandbox": "flatpak" if is_flatpak() else "native",
     }
 
@@ -185,7 +198,10 @@ async def get_settings() -> dict[str, Any]:
 
 @app.put("/api/settings")
 async def put_settings(settings: SettingsModel) -> dict[str, Any]:
-    return save_settings(settings.model_dump())
+    try:
+        return save_settings(settings.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/search")

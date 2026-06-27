@@ -1,6 +1,7 @@
 use crate::backends::get_enabled_backends;
 use crate::browsers::{discover_browsers, open_url};
 use crate::config::{is_flatpak, load_settings, save_settings, static_dir, Settings, HOST, PORT, VERSION};
+use crate::crypto::{encryption_active, ensure_encryption_key};
 use crate::history::{get_store, init_history_on_startup, HistoryStore};
 use crate::search;
 use crate::security::{validate_open_url, CSP};
@@ -101,9 +102,26 @@ async fn index() -> impl IntoResponse {
 async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
     let settings = (state.settings_fn)();
     let backends = get_enabled_backends(&settings);
-    let history = get_store(&settings)
+    let encrypt_requested = settings.history_encrypt;
+    if encrypt_requested {
+        ensure_encryption_key();
+    }
+    let encryption_ok = encryption_active();
+    let store = get_store(&settings);
+    let mut history = store
+        .as_ref()
         .map(|s| s.stats())
         .unwrap_or_else(|| serde_json::json!({ "enabled": false }));
+    if let serde_json::Value::Object(ref mut map) = history {
+        map.insert("encrypt_requested".into(), encrypt_requested.into());
+        map.insert("encryption_active".into(), encryption_ok.into());
+        if encrypt_requested && !encryption_ok {
+            map.insert(
+                "encryption_warning".into(),
+                "History encryption is enabled but no key is available.".into(),
+            );
+        }
+    }
 
     Json(serde_json::json!({
         "status": "ok",
@@ -154,11 +172,11 @@ async fn get_settings(State(state): State<AppState>) -> Json<Settings> {
 async fn put_settings(
     State(state): State<AppState>,
     Json(body): Json<Settings>,
-) -> Json<Settings> {
-    let saved = save_settings(&body);
+) -> Result<Json<Settings>, ApiError> {
+    let saved = save_settings(&body).map_err(ApiError::bad_request)?;
     init_history_on_startup(&saved);
     let _ = state;
-    Json(saved)
+    Ok(Json(saved))
 }
 
 #[derive(Deserialize)]

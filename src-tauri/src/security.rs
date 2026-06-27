@@ -72,6 +72,64 @@ fn block_unsafe_host(host: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Validate a user-configured backend URL (e.g. SearXNG). Localhost is allowed;
+/// cloud metadata, rebinding hostnames, and link-local addresses are blocked.
+pub fn validate_backend_url(raw: &str) -> Result<String, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Err("Backend URL cannot be empty.".into());
+    }
+
+    let parsed = Url::parse(trimmed).map_err(|_| "Invalid backend URL.".to_string())?;
+
+    let scheme = parsed.scheme();
+    if scheme != "http" && scheme != "https" {
+        return Err("Backend URL must use http:// or https://.".into());
+    }
+
+    if parsed.username() != "" || parsed.password().is_some() {
+        return Err("Backend URLs with embedded credentials are not allowed.".into());
+    }
+
+    let host = parsed.host_str().ok_or("Backend URL must include a host.")?;
+    block_backend_host(host)?;
+
+    Ok(trimmed.to_string())
+}
+
+fn block_backend_host(host: &str) -> Result<(), String> {
+    let host_lower = host.to_lowercase();
+
+    if host_lower.ends_with(".nip.io")
+        || host_lower.ends_with(".sslip.io")
+        || host_lower.ends_with(".xip.io")
+    {
+        return Err("DNS rebinding hostnames are not allowed in backend URLs.".into());
+    }
+
+    if let Ok(ip) = host_lower.parse::<IpAddr>() {
+        if is_cloud_metadata_ip(ip) {
+            return Err("Cloud metadata addresses cannot be used as backend URLs.".into());
+        }
+        let link_local = match ip {
+            IpAddr::V4(v4) => v4.is_link_local(),
+            IpAddr::V6(v6) => v6.is_unicast_link_local(),
+        };
+        if ip.is_unspecified() || link_local {
+            return Err("Unspecified or link-local addresses cannot be used as backend URLs.".into());
+        }
+    }
+
+    Ok(())
+}
+
+fn is_cloud_metadata_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => v4.octets() == [169, 254, 169, 254],
+        IpAddr::V6(v6) => v6.segments() == [0xfd00, 0xec2, 0, 0, 0, 0, 0, 0],
+    }
+}
+
 pub const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 #[cfg(test)]
@@ -109,5 +167,23 @@ mod tests {
             validate_open_url(ddg).unwrap(),
             "https://rust-lang.org/"
         );
+    }
+
+    #[test]
+    fn allows_localhost_searxng_url() {
+        assert_eq!(
+            validate_backend_url("http://127.0.0.1:8080").unwrap(),
+            "http://127.0.0.1:8080"
+        );
+    }
+
+    #[test]
+    fn rejects_metadata_backend_url() {
+        assert!(validate_backend_url("http://169.254.169.254/latest/meta-data/").is_err());
+    }
+
+    #[test]
+    fn rejects_nip_io_backend_url() {
+        assert!(validate_backend_url("http://127.0.0.1.nip.io/").is_err());
     }
 }

@@ -98,7 +98,31 @@ def load_settings() -> dict[str, Any]:
     return _apply_env_overrides(merged)
 
 
+def validate_settings(settings: dict[str, Any]) -> None:
+    from netrail.security import validate_backend_url
+
+    max_results = int(settings.get("max_results", DEFAULTS["max_results"]))
+    if max_results < 1 or max_results > 50:
+        raise ValueError("max_results must be between 1 and 50.")
+
+    ttl = int(settings.get("history_ttl_days", DEFAULTS["history_ttl_days"]))
+    if ttl < 0 or ttl > 3650:
+        raise ValueError("history_ttl_days must be between 0 and 3650.")
+
+    strategy = settings.get("search_strategy", DEFAULTS["search_strategy"])
+    if strategy not in {"fanout", "fallback"}:
+        raise ValueError("search_strategy must be 'fanout' or 'fallback'.")
+
+    if url := settings.get("searxng_url"):
+        validate_backend_url(url)
+
+    for entry in settings.get("backends") or []:
+        if entry_url := entry.get("url"):
+            validate_backend_url(entry_url)
+
+
 def save_settings(settings: dict[str, Any]) -> dict[str, Any]:
+    validate_settings(settings)
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
     payload = DEFAULTS.copy()
     for key in DEFAULTS:

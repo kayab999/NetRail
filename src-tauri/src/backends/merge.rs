@@ -70,15 +70,20 @@ fn richer(a: &SearchResult, b: &SearchResult) -> SearchResult {
 /// Dedupe by normalized URL, keeping the richer snippet.
 pub fn dedupe_results(results: Vec<SearchResult>) -> Vec<SearchResult> {
     let mut map: HashMap<String, SearchResult> = HashMap::new();
+    let mut order: Vec<String> = Vec::new();
     for item in results {
         let key = normalize_url_key(&item.url);
-        map.entry(key)
-            .and_modify(|existing| {
-                *existing = richer(existing, &item);
-            })
-            .or_insert(item);
+        if let Some(existing) = map.get(&key) {
+            map.insert(key, richer(existing, &item));
+        } else {
+            order.push(key.clone());
+            map.insert(key, item);
+        }
     }
-    map.into_values().collect()
+    order
+        .into_iter()
+        .filter_map(|key| map.remove(&key))
+        .collect()
 }
 
 /// Round-robin interleave across backend batches for index diversity.

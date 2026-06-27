@@ -1,5 +1,63 @@
 use super::types::{SearchMode, SearchResult};
+use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use reqwest::Client;
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
+
+const HEALTH_TTL: Duration = Duration::from_secs(60);
+const HEALTH_TIMEOUT: Duration = Duration::from_secs(3);
+
+struct HealthEntry {
+    ok: bool,
+    checked_at: Instant,
+}
+
+static HEALTH_CACHE: Lazy<Mutex<HashMap<String, HealthEntry>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn cache_key(base_url: &str) -> String {
+    base_url.trim_end_matches('/').to_lowercase()
+}
+
+fn url_format_ok(base_url: &str) -> bool {
+    base_url.starts_with("http://") || base_url.starts_with("https://")
+}
+
+pub fn cached_health(base_url: &str) -> Option<bool> {
+    let cache = HEALTH_CACHE.lock();
+    let entry = cache.get(&cache_key(base_url))?;
+    if entry.checked_at.elapsed() < HEALTH_TTL {
+        Some(entry.ok)
+    } else {
+        None
+    }
+}
+
+pub fn record_health(base_url: &str, ok: bool) {
+    HEALTH_CACHE.lock().insert(
+        cache_key(base_url),
+        HealthEntry {
+            ok,
+            checked_at: Instant::now(),
+        },
+    );
+}
+
+pub async fn check_health(client: &Client, base_url: &str) -> bool {
+    if !url_format_ok(base_url) {
+        return false;
+    }
+    let url = format!("{}/healthz", base_url.trim_end_matches('/'));
+    let ok = tokio::time::timeout(HEALTH_TIMEOUT, client.get(&url).send())
+        .await
+        .ok()
+        .and_then(|r| r.ok())
+        .map(|r| r.status().as_u16() < 500)
+        .unwrap_or(false);
+    record_health(base_url, ok);
+    ok
+}
 
 pub struct SearxngBackend {
     base_url: String,
@@ -28,22 +86,12 @@ impl SearxngBackend {
         )
     }
 
+    /// Sync availability uses TTL cache only — never blocks on network I/O.
     pub fn is_available(&self) -> bool {
-        if !self.base_url.starts_with("http://") && !self.base_url.starts_with("https://") {
+        if !url_format_ok(&self.base_url) {
             return false;
         }
-        reqwest::blocking::Client::builder()
-            .timeout(std::time::Duration::from_secs(3))
-            .build()
-            .ok()
-            .and_then(|client| {
-                client
-                    .get(format!("{}/healthz", self.base_url))
-                    .send()
-                    .ok()
-            })
-            .map(|r| r.status().as_u16() < 500)
-            .unwrap_or(false)
+        cached_health(&self.base_url).unwrap_or(true)
     }
 
     pub async fn search(

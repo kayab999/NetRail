@@ -171,6 +171,7 @@ fn private_flag_for(browser_id: &str) -> Option<&'static str> {
 }
 
 fn spawn(mut cmd: Command) {
+    cmd.env_remove("LD_PRELOAD");
     if is_flatpak() {
         let program = cmd.get_program().to_string_lossy().to_string();
         let args: Vec<String> = cmd

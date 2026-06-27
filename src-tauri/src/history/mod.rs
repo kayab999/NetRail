@@ -107,6 +107,11 @@ impl HistoryStore {
         let want_encrypt = settings.history_encrypt;
         if want_encrypt {
             ensure_encryption_key();
+            if !encryption_active() {
+                return Err(
+                    "History encryption is enabled but no encryption key is available.".into(),
+                );
+            }
         }
         let use_encrypt = want_encrypt && encryption_active();
         let store = Self {

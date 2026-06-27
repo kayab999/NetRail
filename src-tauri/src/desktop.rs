@@ -45,8 +45,12 @@ pub fn run() {
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show, &quit])?;
 
-            let _tray = TrayIconBuilder::new()
-                .icon(app.default_window_icon().cloned().unwrap())
+            let mut tray_builder = TrayIconBuilder::new();
+            if let Some(icon) = app.default_window_icon().cloned() {
+                tray_builder = tray_builder.icon(icon);
+            }
+
+            let _tray = tray_builder
                 .menu(&menu)
                 .tooltip("NetRail — search first, browse second")
                 .on_menu_event(|app, event| match event.id.as_ref() {

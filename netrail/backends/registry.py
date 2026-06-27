@@ -31,7 +31,7 @@ def get_enabled_backends(settings: dict[str, Any] | None = None) -> list[Any]:
                 if url:
                     backends.append(SearXNGBackend(url))
             elif backend_id == "brave":
-                brave = BraveBackend.from_env()
+                brave = BraveBackend.from_env_var(entry.get("api_key_env"))
                 if brave:
                     backends.append(brave)
         if backends:

@@ -318,6 +318,8 @@ def get_store() -> HistoryStore | None:
             ensure_encryption_key()
         from netrail.history.crypto import encryption_active
 
+        if want_encrypt and not encryption_active():
+            return None
         use_encrypt = want_encrypt and encryption_active()
         _store = HistoryStore(connect(), encrypt=use_encrypt)
         ttl = int(settings.get("history_ttl_days", 90))

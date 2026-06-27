@@ -6,13 +6,16 @@ pub mod types;
 
 use crate::config::Settings;
 use futures::future::join_all;
+use reqwest::Client;
+use std::sync::OnceLock;
+use std::time::Duration;
 use types::{SearchMode, SearchResponse, SearchResult};
 
 #[derive(Debug, Clone)]
 pub enum BackendKind {
     Ddgs,
     Searxng(String),
-    Brave,
+    Brave(Option<String>),
 }
 
 impl BackendKind {
@@ -20,7 +23,7 @@ impl BackendKind {
         match self {
             Self::Ddgs => "ddgs",
             Self::Searxng(_) => "searxng",
-            Self::Brave => "brave",
+            Self::Brave(_) => "brave",
         }
     }
 
@@ -28,7 +31,7 @@ impl BackendKind {
         match self {
             Self::Ddgs => ddgs::PROVENANCE.into(),
             Self::Searxng(url) => format!("SearXNG @ {url} (your instance, your engines)"),
-            Self::Brave => brave::PROVENANCE.into(),
+            Self::Brave(_) => brave::PROVENANCE.into(),
         }
     }
 
@@ -36,7 +39,7 @@ impl BackendKind {
         match self {
             Self::Ddgs => DdgsBackend::new().is_available(),
             Self::Searxng(url) => SearxngBackend::new(url).is_available(),
-            Self::Brave => BraveBackend::from_env().is_some(),
+            Self::Brave(env) => BraveBackend::from_env_var(env.as_deref()).is_some(),
         }
     }
 
@@ -53,8 +56,9 @@ impl BackendKind {
                     .search(query, mode, max_results)
                     .await
             }
-            Self::Brave => {
-                let backend = BraveBackend::from_env().ok_or_else(|| "brave: API key not set".to_string())?;
+            Self::Brave(env) => {
+                let backend = BraveBackend::from_env_var(env.as_deref())
+                    .ok_or_else(|| "brave: API key not set".to_string())?;
                 backend.search(query, mode, max_results).await
             }
         }
@@ -68,6 +72,16 @@ impl BackendKind {
 use ddgs::DdgsBackend;
 use searxng::SearxngBackend;
 use brave::BraveBackend;
+
+fn health_client() -> &'static Client {
+    static CLIENT: OnceLock<Client> = OnceLock::new();
+    CLIENT.get_or_init(|| {
+        Client::builder()
+            .timeout(Duration::from_secs(3))
+            .build()
+            .unwrap_or_default()
+    })
+}
 
 pub fn get_enabled_backends(settings: &Settings) -> Vec<BackendKind> {
     let mut backends = Vec::new();
@@ -85,8 +99,8 @@ pub fn get_enabled_backends(settings: &Settings) -> Vec<BackendKind> {
                         backends.push(BackendKind::Searxng(url));
                     }
                 }
-                "brave" if BraveBackend::from_env().is_some() => {
-                    backends.push(BackendKind::Brave);
+                "brave" if BraveBackend::from_env_var(entry.api_key_env.as_deref()).is_some() => {
+                    backends.push(BackendKind::Brave(entry.api_key_env.clone()));
                 }
                 _ => {}
             }
@@ -103,7 +117,7 @@ pub fn get_enabled_backends(settings: &Settings) -> Vec<BackendKind> {
                 backends.push(BackendKind::Searxng(settings.searxng_url.clone().unwrap()));
             }
             "brave" if settings.brave_enabled && BraveBackend::from_env().is_some() => {
-                backends.push(BackendKind::Brave);
+                backends.push(BackendKind::Brave(None));
             }
             _ => {}
         }
@@ -112,6 +126,19 @@ pub fn get_enabled_backends(settings: &Settings) -> Vec<BackendKind> {
         backends.push(BackendKind::Ddgs);
     }
     backends
+}
+
+async fn backend_available(backend: &BackendKind) -> bool {
+    match backend {
+        BackendKind::Ddgs => DdgsBackend::new().is_available(),
+        BackendKind::Searxng(url) => {
+            if let Some(cached) = searxng::cached_health(url) {
+                return cached;
+            }
+            searxng::check_health(health_client(), url).await
+        }
+        BackendKind::Brave(env) => BraveBackend::from_env_var(env.as_deref()).is_some(),
+    }
 }
 
 fn sovereignty_step(backends_used: &[String]) -> u8 {
@@ -154,6 +181,8 @@ async fn query_backend(
     })
 }
 
+const FANOUT_DEADLINE: Duration = Duration::from_secs(20);
+
 pub async fn search_with_fanout(
     query: &str,
     mode: SearchMode,
@@ -167,16 +196,53 @@ pub async fn search_with_fanout(
         return empty_response(query, mode);
     }
 
-    let backends: Vec<BackendKind> = get_enabled_backends(settings)
-        .into_iter()
-        .filter(|b| b.is_available())
-        .collect();
+    match tokio::time::timeout(
+        FANOUT_DEADLINE,
+        search_with_fanout_inner(query, mode, max_results, settings),
+    )
+    .await
+    {
+        Ok(response) => response,
+        Err(_) => {
+            let mut errors = vec!["fanout: timed out after 20 seconds".into()];
+            let unavailable: Vec<String> = get_enabled_backends(settings)
+                .into_iter()
+                .filter(|b| !b.is_available())
+                .map(|b| format!("{}: unavailable", b.name()))
+                .collect();
+            errors.extend(unavailable);
+            SearchResponse {
+                query: query.into(),
+                mode,
+                results: vec![],
+                backends_used: vec!["none".into()],
+                provenance_chain: vec!["Search timed out".into()],
+                sovereignty_step: 1,
+                errors,
+                search_strategy: settings.search_strategy.clone(),
+            }
+        }
+    }
+}
 
-    let unavailable: Vec<String> = get_enabled_backends(settings)
-        .into_iter()
-        .filter(|b| !b.is_available())
-        .map(|b| format!("{}: unavailable", b.name()))
-        .collect();
+async fn search_with_fanout_inner(
+    query: &str,
+    mode: SearchMode,
+    max_results: usize,
+    settings: &Settings,
+) -> SearchResponse {
+    let enabled = get_enabled_backends(settings);
+    let availability = join_all(enabled.iter().map(backend_available)).await;
+
+    let mut backends = Vec::new();
+    let mut unavailable = Vec::new();
+    for (backend, available) in enabled.into_iter().zip(availability) {
+        if available {
+            backends.push(backend);
+        } else {
+            unavailable.push(format!("{}: unavailable", backend.name()));
+        }
+    }
 
     if backends.is_empty() {
         return SearchResponse {

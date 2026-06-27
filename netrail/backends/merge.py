@@ -59,13 +59,15 @@ def _richer(a: SearchResult, b: SearchResult) -> SearchResult:
 
 def dedupe_results(results: list[SearchResult]) -> list[SearchResult]:
     seen: dict[str, SearchResult] = {}
+    order: list[str] = []
     for item in results:
         key = normalize_url_key(item.url)
         if key in seen:
             seen[key] = _richer(seen[key], item)
         else:
+            order.append(key)
             seen[key] = item
-    return list(seen.values())
+    return [seen[key] for key in order]
 
 
 def interleave_batches(batches: list[list[SearchResult]], max_results: int) -> list[SearchResult]:

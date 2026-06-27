@@ -1,6 +1,6 @@
 import pytest
 
-from netrail.security import validate_open_url
+from netrail.security import validate_backend_url, validate_open_url
 
 
 def test_accepts_https():
@@ -41,3 +41,17 @@ def test_unwraps_ddg_redirect_blocks_inner_localhost():
 def test_unwraps_ddg_redirect_to_safe_url():
     ddg = "https://duckduckgo.com/l/?uddg=https%3A%2F%2Frust-lang.org%2F"
     assert validate_open_url(ddg) == "https://rust-lang.org/"
+
+
+def test_allows_localhost_searxng_url():
+    assert validate_backend_url("http://127.0.0.1:8080") == "http://127.0.0.1:8080"
+
+
+def test_rejects_metadata_backend_url():
+    with pytest.raises(ValueError, match="metadata"):
+        validate_backend_url("http://169.254.169.254/latest/meta-data/")
+
+
+def test_rejects_nip_io_backend_url():
+    with pytest.raises(ValueError, match="rebinding"):
+        validate_backend_url("http://127.0.0.1.nip.io/")

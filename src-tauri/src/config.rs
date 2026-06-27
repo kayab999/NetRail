@@ -116,12 +116,36 @@ pub fn load_settings() -> Settings {
     settings
 }
 
-pub fn save_settings(settings: &Settings) -> Settings {
+pub fn validate_settings(settings: &Settings) -> Result<(), String> {
+    use crate::security::validate_backend_url;
+
+    if settings.max_results < 1 || settings.max_results > 50 {
+        return Err("max_results must be between 1 and 50.".into());
+    }
+    if settings.history_ttl_days > 3650 {
+        return Err("history_ttl_days must be at most 3650.".into());
+    }
+    if settings.search_strategy != "fanout" && settings.search_strategy != "fallback" {
+        return Err("search_strategy must be 'fanout' or 'fallback'.".into());
+    }
+    if let Some(ref url) = settings.searxng_url {
+        validate_backend_url(url)?;
+    }
+    for entry in &settings.backends {
+        if let Some(ref url) = entry.url {
+            validate_backend_url(url)?;
+        }
+    }
+    Ok(())
+}
+
+pub fn save_settings(settings: &Settings) -> Result<Settings, String> {
+    validate_settings(settings)?;
     let dir = config_dir();
     let _ = fs::create_dir_all(&dir);
     let payload = serde_json::to_string_pretty(settings).unwrap_or_default();
     let _ = fs::write(config_file(), format!("{payload}\n"));
-    load_settings()
+    Ok(load_settings())
 }
 
 fn apply_env_overrides(settings: &mut Settings) {

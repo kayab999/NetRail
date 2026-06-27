@@ -11,8 +11,26 @@ pub struct BraveBackend {
 
 impl BraveBackend {
     pub fn from_env() -> Option<Self> {
-        let key = env::var("BRAVE_SEARCH_API_KEY")
-            .or_else(|_| env::var("NETRAIL_BRAVE_API_KEY"))
+        Self::from_env_var(None)
+    }
+
+    pub fn from_env_var(env_name: Option<&str>) -> Option<Self> {
+        let primary = env_name.unwrap_or("BRAVE_SEARCH_API_KEY");
+        let key = env::var(primary)
+            .or_else(|_| {
+                if primary != "NETRAIL_BRAVE_API_KEY" {
+                    env::var("NETRAIL_BRAVE_API_KEY")
+                } else {
+                    Err(env::VarError::NotPresent)
+                }
+            })
+            .or_else(|_| {
+                if primary != "BRAVE_SEARCH_API_KEY" {
+                    env::var("BRAVE_SEARCH_API_KEY")
+                } else {
+                    Err(env::VarError::NotPresent)
+                }
+            })
             .ok()?;
         if key.trim().is_empty() {
             return None;

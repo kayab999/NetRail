@@ -23,7 +23,17 @@ class BraveBackend:
 
     @classmethod
     def from_env(cls) -> "BraveBackend | None":
-        key = os.environ.get("BRAVE_SEARCH_API_KEY") or os.environ.get("NETRAIL_BRAVE_API_KEY")
+        return cls.from_env_var(None)
+
+    @classmethod
+    def from_env_var(cls, env_name: str | None) -> "BraveBackend | None":
+        primary = env_name or "BRAVE_SEARCH_API_KEY"
+        candidates = [primary]
+        if primary != "NETRAIL_BRAVE_API_KEY":
+            candidates.append("NETRAIL_BRAVE_API_KEY")
+        if primary != "BRAVE_SEARCH_API_KEY":
+            candidates.append("BRAVE_SEARCH_API_KEY")
+        key = next((os.environ.get(name) for name in candidates if os.environ.get(name)), None)
         if not key or not key.strip():
             return None
         return cls(key.strip())
