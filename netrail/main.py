@@ -9,11 +9,12 @@ from typing import Any, Literal
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from netrail import __version__
+from netrail.errors import NetRailError
 from netrail.backends.registry import get_enabled_backends
 from netrail.browsers import discover_browsers, open_url
 from netrail.config import load_settings, save_settings
@@ -51,6 +52,11 @@ app = FastAPI(
 )
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.exception_handler(NetRailError)
+async def netrail_error_handler(_request: Request, exc: NetRailError) -> JSONResponse:
+    return JSONResponse(status_code=exc.status, content=exc.to_dict())
 
 
 @app.middleware("http")
@@ -120,7 +126,10 @@ class CollectionItemCreate(BaseModel):
 def _require_store():
     store = get_store()
     if store is None:
-        raise HTTPException(status_code=400, detail="History is disabled in settings.")
+        raise NetRailError(
+            "HISTORY_DISABLED",
+            "History is disabled in settings.",
+        )
     return store
 
 
@@ -199,46 +208,34 @@ async def get_settings() -> dict[str, Any]:
 
 @app.put("/api/settings")
 async def put_settings(settings: SettingsModel) -> dict[str, Any]:
-    try:
-        return save_settings(settings.model_dump())
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return save_settings(settings.model_dump())
 
 
 @app.get("/api/docs/{slug}")
 async def get_doc(slug: str) -> dict[str, str]:
-    try:
-        return load_doc(slug)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return load_doc(slug)
 
 
 @app.get("/api/docs/assets/{filename}")
 async def get_doc_asset(filename: str) -> FileResponse:
     path = asset_path(filename)
     if path is None:
-        raise HTTPException(status_code=404, detail="Document asset not found.")
+        raise NetRailError("DOC_ASSET_NOT_FOUND", "Document asset not found.", status=404)
     return FileResponse(path)
 
 
 @app.post("/api/search")
 async def run_search(request: SearchRequest) -> dict[str, Any]:
-    try:
-        return search(
-            query=request.query,
-            mode=request.mode,
-            max_results=request.max_results,
-        )
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return search(
+        query=request.query,
+        mode=request.mode,
+        max_results=request.max_results,
+    )
 
 
 @app.post("/api/open")
 async def open_link(request: OpenRequest) -> dict[str, str]:
-    try:
-        safe_url = validate_open_url(request.url)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    safe_url = validate_open_url(request.url)
 
     settings = load_settings()
     browser_id = request.browser_id or settings.get("browser_id")
@@ -280,7 +277,11 @@ async def get_history(
 async def delete_history_entry(query_id: int) -> dict[str, Any]:
     store = _require_store()
     if not store.delete_history_entry(query_id):
-        raise HTTPException(status_code=404, detail="History entry not found.")
+        raise NetRailError(
+            "HISTORY_ENTRY_NOT_FOUND",
+            f"history entry {query_id}",
+            status=404,
+        )
     return {"status": "ok", "deleted_id": query_id}
 
 
@@ -300,28 +301,19 @@ async def list_collections() -> list[dict[str, Any]]:
 @app.post("/api/collections")
 async def create_collection(body: CollectionCreate) -> dict[str, Any]:
     store = _require_store()
-    try:
-        return store.create_collection(body.name)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return store.create_collection(body.name)
 
 
 @app.post("/api/collections/{collection_id}/items")
 async def add_collection_item(collection_id: int, body: CollectionItemCreate) -> dict[str, Any]:
     store = _require_store()
-    try:
-        safe_url = validate_open_url(body.url)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    try:
-        return store.add_collection_item(
-            collection_id,
-            url=safe_url,
-            title=body.title,
-            notes=body.notes,
-        )
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    safe_url = validate_open_url(body.url)
+    return store.add_collection_item(
+        collection_id,
+        url=safe_url,
+        title=body.title,
+        notes=body.notes,
+    )
 
 
 @app.get("/api/collections/{collection_id}/export")
@@ -330,10 +322,7 @@ async def export_collection(
     fmt: Literal["json", "csv"] = Query(default="json"),
 ) -> Response:
     store = _require_store()
-    try:
-        content = store.export_collection(collection_id, fmt=fmt)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    content = store.export_collection(collection_id, fmt=fmt)
 
     media = "application/json" if fmt == "json" else "text/csv"
     return PlainTextResponse(content=content, media_type=media)

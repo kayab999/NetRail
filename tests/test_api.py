@@ -20,9 +20,21 @@ def test_backends_endpoint():
     assert any(item["name"] == "ddgs" for item in backends)
 
 
-def test_open_rejects_localhost():
+def test_open_rejects_localhost_with_code():
     response = client.post("/api/open", json={"url": "http://127.0.0.1:8080"})
     assert response.status_code == 400
+    payload = response.json()
+    assert payload["code"] == "OPEN_URL_LOCALHOST"
+    assert payload["status"] == 400
+    assert "detail" in payload
+
+
+def test_unknown_doc_returns_doc_not_found_with_code():
+    response = client.get("/api/docs/unknown-slug")
+    assert response.status_code == 404
+    payload = response.json()
+    assert payload["code"] == "DOC_NOT_FOUND"
+    assert payload["status"] == 404
 
 
 def test_csp_header_on_index():

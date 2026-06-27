@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from urllib.parse import urlparse, unquote
+from urllib.parse import parse_qs, unquote, urlparse
+
+from netrail.errors import NetRailError
 
 _BLOCKED_SCHEMES = frozenset({"javascript", "data", "file", "vbscript"})
 _DDG_HOSTS = frozenset({"duckduckgo.com", "r.duckduckgo.com", "www.duckduckgo.com"})
@@ -15,14 +17,20 @@ def _is_ddg_host(host: str) -> bool:
 def _block_unsafe_host(host: str) -> None:
     host_lower = host.lower()
     if host_lower in {"127.0.0.1", "localhost", "::1", "0.0.0.0", "[::1]"}:
-        raise ValueError("Localhost URLs cannot be opened from search results.")
+        raise NetRailError(
+            "OPEN_URL_LOCALHOST",
+            "Localhost URLs cannot be opened from search results.",
+        )
 
     if (
         host_lower.endswith(".nip.io")
         or host_lower.endswith(".sslip.io")
         or host_lower.endswith(".xip.io")
     ):
-        raise ValueError("DNS rebinding hostnames cannot be opened from search results.")
+        raise NetRailError(
+            "OPEN_URL_DNS_REBINDING",
+            "DNS rebinding hostnames cannot be opened from search results.",
+        )
 
     import ipaddress
 
@@ -32,33 +40,40 @@ def _block_unsafe_host(host: str) -> None:
         return
 
     if ip.is_loopback or ip.is_unspecified or ip.is_link_local:
-        raise ValueError(
-            "Local or link-local IP addresses cannot be opened from search results."
+        raise NetRailError(
+            "OPEN_URL_LINK_LOCAL",
+            "Local or link-local IP addresses cannot be opened from search results.",
         )
 
 
 def _validate_open_url_inner(url: str, depth: int) -> str:
     if depth > _MAX_REDIRECT_DEPTH:
-        raise ValueError("Too many redirect wrappers.")
+        raise NetRailError("OPEN_URL_REDIRECT_DEPTH", "Too many redirect wrappers.")
 
     parsed = urlparse(url.strip())
 
     if parsed.scheme not in {"http", "https"}:
-        raise ValueError("Only http:// and https:// URLs are supported.")
-
-    if parsed.scheme in _BLOCKED_SCHEMES:
-        raise ValueError(f"Blocked URL scheme: {parsed.scheme}")
+        if parsed.scheme in _BLOCKED_SCHEMES:
+            raise NetRailError(
+                "OPEN_URL_INVALID_SCHEME",
+                f"Blocked URL scheme: {parsed.scheme}",
+            )
+        raise NetRailError(
+            "OPEN_URL_INVALID",
+            "Only http:// and https:// URLs are supported.",
+        )
 
     if parsed.username or parsed.password:
-        raise ValueError("URLs with embedded credentials are not allowed.")
+        raise NetRailError(
+            "OPEN_URL_CREDENTIALS",
+            "URLs with embedded credentials are not allowed.",
+        )
 
     host = (parsed.hostname or "").lower()
     if not host:
-        raise ValueError("URL must include a host.")
+        raise NetRailError("OPEN_URL_NO_HOST", "URL must include a host.")
 
     if _is_ddg_host(host):
-        from urllib.parse import parse_qs
-
         params = parse_qs(parsed.query)
         uddg_vals = params.get("uddg")
         if uddg_vals:
@@ -81,7 +96,10 @@ def _block_backend_host(host: str) -> None:
         or host_lower.endswith(".sslip.io")
         or host_lower.endswith(".xip.io")
     ):
-        raise ValueError("DNS rebinding hostnames are not allowed in backend URLs.")
+        raise NetRailError(
+            "BACKEND_URL_DNS_REBINDING",
+            "DNS rebinding hostnames are not allowed in backend URLs.",
+        )
 
     import ipaddress
 
@@ -91,12 +109,19 @@ def _block_backend_host(host: str) -> None:
         return
 
     if ip == ipaddress.ip_address("169.254.169.254"):
-        raise ValueError("Cloud metadata addresses cannot be used as backend URLs.")
+        raise NetRailError(
+            "BACKEND_URL_CLOUD_METADATA",
+            "Cloud metadata addresses cannot be used as backend URLs.",
+        )
     if ip == ipaddress.ip_address("fd00:ec2::254"):
-        raise ValueError("Cloud metadata addresses cannot be used as backend URLs.")
+        raise NetRailError(
+            "BACKEND_URL_CLOUD_METADATA",
+            "Cloud metadata addresses cannot be used as backend URLs.",
+        )
     if ip.is_unspecified or ip.is_link_local:
-        raise ValueError(
-            "Unspecified or link-local addresses cannot be used as backend URLs."
+        raise NetRailError(
+            "BACKEND_URL_LINK_LOCAL",
+            "Unspecified or link-local addresses cannot be used as backend URLs.",
         )
 
 
@@ -104,17 +129,23 @@ def validate_backend_url(url: str) -> str:
     """Validate a user-configured backend URL (e.g. SearXNG)."""
     trimmed = url.strip()
     if not trimmed:
-        raise ValueError("Backend URL cannot be empty.")
+        raise NetRailError("BACKEND_URL_EMPTY", "Backend URL cannot be empty.")
 
     parsed = urlparse(trimmed)
     if parsed.scheme not in {"http", "https"}:
-        raise ValueError("Backend URL must use http:// or https://.")
+        raise NetRailError(
+            "BACKEND_URL_INVALID_SCHEME",
+            "Backend URL must use http:// or https://.",
+        )
     if parsed.username or parsed.password:
-        raise ValueError("Backend URLs with embedded credentials are not allowed.")
+        raise NetRailError(
+            "BACKEND_URL_CREDENTIALS",
+            "Backend URLs with embedded credentials are not allowed.",
+        )
 
     host = (parsed.hostname or "").lower()
     if not host:
-        raise ValueError("Backend URL must include a host.")
+        raise NetRailError("BACKEND_URL_NO_HOST", "Backend URL must include a host.")
 
     _block_backend_host(host)
     return trimmed

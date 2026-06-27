@@ -5,6 +5,7 @@ from typing import Any
 from netrail.backends.registry import search_with_fallback
 from netrail.backends.types import SearchMode
 from netrail.config import load_settings
+from netrail.errors import NetRailError
 from netrail.history.store import get_store
 
 
@@ -21,10 +22,22 @@ def search(
     query: str,
     mode: SearchMode = "web",
     max_results: int = 25,
+    *,
+    settings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    response = search_with_fallback(query=query, mode=mode, max_results=max_results)
+    active_settings = settings if settings is not None else load_settings()
+    response = search_with_fallback(
+        query=query,
+        mode=mode,
+        max_results=max_results,
+        settings=active_settings,
+    )
     if not response.results and response.errors:
-        raise RuntimeError("; ".join(response.errors))
+        raise NetRailError(
+            "FANOUT_TOTAL_FAILURE",
+            "; ".join(response.errors),
+            status=502,
+        )
 
     payload = response.as_dict()
     payload["sovereignty"]["step"] = _sovereignty_with_history(payload["sovereignty"]["step"])

@@ -12,7 +12,7 @@ NetRail does not replace your browser. It sits in front of it. Results appear in
 
 ## Launching NetRail
 
-### Desktop app (v1.0 — recommended)
+### Desktop app (v1.1 — recommended)
 
 Download the AppImage or `.deb` from [GitHub Releases](https://github.com/kayab999/NetRail/releases/latest), or build from source:
 
@@ -26,7 +26,7 @@ The Tauri shell embeds the UI and starts the Rust API on `127.0.0.1:7421`. Use t
 On Ubuntu 24.04 without FUSE:
 
 ```bash
-APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.0.0_amd64.AppImage
+APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.1.0_amd64.AppImage
 ```
 
 ### Headless API
@@ -290,7 +290,7 @@ curl -s http://127.0.0.1:7421/api/docs/about
 | Symptom | Likely cause | Solution |
 |---------|--------------|----------|
 | **Page won't load** | Server not running | Launch the Tauri app, run `./netrail-api`, or use `./run.sh` / `python -m netrail` |
-| **Search failed (502)** | Network/DNS issue or provider timeout | Check internet connectivity; retry. If using NetMedic or similar tools, run network diagnostics separately. |
+| **Search failed (502)** | Network/DNS issue, provider timeout, or `FANOUT_TOTAL_FAILURE` | Check internet connectivity; retry. Inspect API `code` field — see [API error codes](API_ERRORS.md). |
 | **No browsers listed** | No `.desktop` browser entries found | Install a browser; ensure it has a Freedesktop entry |
 | **Open does nothing** | Browser binary moved or permissions | Re-select browser in dropdown; verify `which firefox` (or your browser) works |
 | **Private mode ignored** | Browser lacks known private flag | Browser opens in normal mode; try Firefox or Chromium |

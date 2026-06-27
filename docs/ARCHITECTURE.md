@@ -463,7 +463,7 @@ User intent  →  Local LLM (GBNF-constrained)
 | Channel | Audience |
 |---------|----------|
 | `main` | Development; may break |
-| Tagged releases | General users (`v0.1.0`, `v1.0.0`) |
+| Tagged releases | General users (`v1.0.0`, `v1.1.0`, …) |
 | LTS (future) | Enterprise/stable after v1.0; security backports |
 
 ### Deprecation rules
@@ -548,7 +548,7 @@ The **workflow** is the inheritance. The **infrastructure** is modernized for a 
 
 ## Summary
 
-NetRail v1.0 is a **modular research console**: localhost API (Rust-primary), multi-backend fanout, encrypted history, browser launcher, zero telemetry. Python and Docker paths remain for packaging parity. The long-term blueprint moves sovereignty forward in four dimensions:
+NetRail v1.1 is a **modular research console**: localhost API (Rust-primary), multi-backend fanout, typed API errors, encrypted history, browser launcher, zero telemetry. Python and Docker paths remain for packaging parity. The long-term blueprint moves sovereignty forward in four dimensions:
 
 1. **Shell** — from browser-hosted UI to native app  
 2. **Discovery** — from borrowed indexes to chosen backends to owned corpora  
@@ -559,4 +559,4 @@ Each phase is shippable alone. No phase requires merging with external projects.
 
 ---
 
-*NetRail Architecture Working Document — v1.0.0 (Rust-primary) — maintained by [kayab999](https://github.com/kayab999) — 2026*
+*NetRail Architecture Working Document — v1.1.0 (Rust-primary) — maintained by [kayab999](https://github.com/kayab999) — 2026*

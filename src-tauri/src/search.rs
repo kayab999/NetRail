@@ -1,6 +1,6 @@
 use crate::backends::types::{SearchMode, SearchResponse};
 use crate::backends::search_with_fallback;
-use crate::config::{load_settings, Settings};
+use crate::config::Settings;
 use crate::error::{NetRailError, NetRailResult};
 use crate::history::{get_store, HistoryStore};
 use reqwest::Client;
@@ -10,8 +10,8 @@ pub async fn search(
     query: &str,
     mode: &str,
     max_results: u32,
+    settings: &Settings,
 ) -> NetRailResult<serde_json::Value> {
-    let settings = load_settings();
     let mode = match mode.trim().to_lowercase().as_str() {
         "web" => SearchMode::Web,
         "images" => SearchMode::Images,
@@ -20,7 +20,7 @@ pub async fn search(
             SearchMode::Web
         }
     };
-    let response = search_with_fallback(client, query, mode, max_results, &settings).await;
+    let response = search_with_fallback(client, query, mode, max_results, settings).await;
 
     if response.results.is_empty() && !response.errors.is_empty() {
         return Err(NetRailError::FanoutFailure {
@@ -30,11 +30,11 @@ pub async fn search(
     }
 
     let mut payload = response.to_json();
-    let step = sovereignty_with_history(response.sovereignty_step, &settings);
+    let step = sovereignty_with_history(response.sovereignty_step, settings);
     payload["sovereignty"]["step"] = step.into();
     payload["sovereignty"]["label"] = SearchResponse::sovereignty_label(step).into();
 
-    if let Some(store) = get_store(&settings) {
+    if let Some(store) = get_store(settings) {
         let backends_used: Vec<String> = payload["backends_used"]
             .as_array()
             .map(|arr| {

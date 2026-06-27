@@ -28,6 +28,7 @@ def test_docs_api_routes():
 
     missing = client.get("/api/docs/unknown")
     assert missing.status_code == 404
+    assert missing.json()["code"] == "DOC_NOT_FOUND"
 
     asset = client.get("/api/docs/assets/netrail-demo.png")
     assert asset.status_code == 200

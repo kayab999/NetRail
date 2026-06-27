@@ -146,6 +146,7 @@ Full API: [docs/MANUAL.md](docs/MANUAL.md)
 | [Architecture](docs/ARCHITECTURE.md) | Design, lifecycle roadmap |
 | [Distribution](docs/DISTRIBUTION.md) | Flatpak, Docker, AppImage, install |
 | [Open Letter](OPEN_LETTER.md) | Philosophy and the v1.0 postscript |
+| [API error codes](docs/API_ERRORS.md) | Stable `code` / `detail` / `status` reference |
 | [Release notes](docs/RELEASE_v1.1.0.md) | v1.1.0 typed errors release |
 
 ---

@@ -227,11 +227,13 @@ async fn run_search(
         }
         .into());
     }
+    let settings = (state.settings_fn)();
     let payload = search::search(
         &state.http_client,
         query,
         &body.mode,
         body.max_results.clamp(1, 50),
+        &settings,
     )
     .await?;
     Ok(Json(payload))

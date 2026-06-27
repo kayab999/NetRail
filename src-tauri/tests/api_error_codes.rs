@@ -3,7 +3,7 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use fernet::Fernet;
-use netrail_lib::config::Settings;
+use netrail_lib::config::{BackendConfig, Settings};
 use netrail_lib::history::init_history_on_startup;
 use netrail_lib::http_client::build_http_client;
 use netrail_lib::server::{build_router, AppState};
@@ -189,4 +189,38 @@ async fn missing_history_entry_returns_history_entry_not_found() {
 
     std::env::remove_var("NETRAIL_DB_KEY");
     std::env::remove_var("NETRAIL_DB_PATH");
+}
+
+#[tokio::test]
+async fn search_total_fanout_failure_returns_fanout_total_failure() {
+    let settings = Settings {
+        backends: vec![
+            BackendConfig {
+                id: "searxng".into(),
+                enabled: true,
+                url: Some("http://127.0.0.1:9".into()),
+                api_key_env: None,
+            },
+            BackendConfig {
+                id: "searxng".into(),
+                enabled: true,
+                url: Some("http://127.0.0.1:10".into()),
+                api_key_env: None,
+            },
+        ],
+        search_strategy: "fanout".into(),
+        ddgs_enabled: false,
+        history_enabled: false,
+        ..Settings::default()
+    };
+    let mut app = build_router(test_state(settings));
+    let (status, json) = request_json(
+        &mut app,
+        "POST",
+        "/api/search",
+        Some(r#"{"query":"rust"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_GATEWAY);
+    assert_api_error(&json, "FANOUT_TOTAL_FAILURE", 502);
 }

@@ -15,7 +15,9 @@ def load_doc(slug: str) -> dict[str, str]:
         "about": (PROJECT_ROOT / "README.md", "About NetRail"),
     }
     if slug not in mapping:
-        raise ValueError("Unknown document.")
+        from netrail.errors import NetRailError
+
+        raise NetRailError("DOC_NOT_FOUND", f"document '{slug}'", status=404)
 
     path, title = mapping[slug]
     markdown = path.read_text(encoding="utf-8")

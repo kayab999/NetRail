@@ -99,19 +99,29 @@ def load_settings() -> dict[str, Any]:
 
 
 def validate_settings(settings: dict[str, Any]) -> None:
+    from netrail.errors import NetRailError
     from netrail.security import validate_backend_url
 
     max_results = int(settings.get("max_results", DEFAULTS["max_results"]))
     if max_results < 1 or max_results > 50:
-        raise ValueError("max_results must be between 1 and 50.")
+        raise NetRailError(
+            "CONFIG_MAX_RESULTS",
+            "max_results must be between 1 and 50.",
+        )
 
     ttl = int(settings.get("history_ttl_days", DEFAULTS["history_ttl_days"]))
     if ttl < 0 or ttl > 3650:
-        raise ValueError("history_ttl_days must be between 0 and 3650.")
+        raise NetRailError(
+            "CONFIG_HISTORY_TTL",
+            "history_ttl_days must be at most 3650.",
+        )
 
     strategy = settings.get("search_strategy", DEFAULTS["search_strategy"])
     if strategy not in {"fanout", "fallback"}:
-        raise ValueError("search_strategy must be 'fanout' or 'fallback'.")
+        raise NetRailError(
+            "CONFIG_SEARCH_STRATEGY",
+            "search_strategy must be 'fanout' or 'fallback'.",
+        )
 
     if url := settings.get("searxng_url"):
         validate_backend_url(url)

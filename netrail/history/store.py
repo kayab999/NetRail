@@ -222,14 +222,24 @@ class HistoryStore:
     def create_collection(self, name: str) -> dict[str, Any]:
         name = name.strip()
         if not name:
-            raise ValueError("Collection name is required.")
+            from netrail.errors import NetRailError
+
+            raise NetRailError(
+                "COLLECTION_NAME_INVALID",
+                "Collection name must be 1-120 characters.",
+            )
         try:
             cursor = self._conn.execute(
                 "INSERT INTO collections (name) VALUES (?)",
                 (name,),
             )
         except sqlite3.IntegrityError as exc:
-            raise ValueError(f"Collection '{name}' already exists.") from exc
+            from netrail.errors import NetRailError
+
+            raise NetRailError(
+                "COLLECTION_EXISTS",
+                f"Collection '{name}' already exists.",
+            ) from exc
         self._conn.commit()
         collection_id = int(cursor.lastrowid)
         return {"id": collection_id, "name": name, "created_at": datetime.now(timezone.utc).isoformat(), "item_count": 0}
@@ -244,7 +254,9 @@ class HistoryStore:
     ) -> dict[str, Any]:
         exists = self._conn.execute("SELECT 1 FROM collections WHERE id = ?", (collection_id,)).fetchone()
         if not exists:
-            raise ValueError("Collection not found.")
+            from netrail.errors import NetRailError
+
+            raise NetRailError("COLLECTION_NOT_FOUND", "Collection not found.", status=404)
 
         self._conn.execute(
             """
@@ -266,7 +278,9 @@ class HistoryStore:
             (collection_id,),
         ).fetchone()
         if not collection:
-            raise ValueError("Collection not found.")
+            from netrail.errors import NetRailError
+
+            raise NetRailError("COLLECTION_NOT_FOUND", "Collection not found.", status=404)
 
         items = self._conn.execute(
             """

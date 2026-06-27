@@ -6,14 +6,22 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 
 ### Added
 
-- **Error-code regression tests** — 7 HTTP integration tests (`tests/api_error_codes.rs`) plus unit coverage for `error`, `config`, and fanout total failure
+- **Error-code regression tests** — 8 HTTP integration tests (`tests/api_error_codes.rs`) plus unit coverage for `error`, `config`, and fanout total failure
 - **`build_router(state)`** — extracted Axum router for testable API surface
 - **Technical audit** — `docs/AUDIT_TECHNICAL_2026-06-27.md`
+- **`docs/API_ERRORS.md`** — stable error code reference for API consumers
+- **Python `NetRailError`** — FastAPI handler returns `{code, detail, status}` (parity with Rust)
+
+### Changed
+
+- **`search::search`** — accepts injected `Settings` from `AppState` (testable fanout total failure)
+- **Docs sync** — `MANUAL.md`, `DISTRIBUTION.md`, `ARCHITECTURE.md` aligned to v1.1.0
 
 ### Fixed
 
 - **CI clippy** — `unnecessary_sort_by` in `browsers.rs` (Rust 1.96)
-- **README / package-lock** — install artifact names aligned to v1.1.0
+- **README / package-lock** — install artifact names aligned to v1.1.0 artifacts
+- **GitHub** — v1.0.0 draft release published as historical release
 
 ## [1.1.0] — 2026-06-27
 

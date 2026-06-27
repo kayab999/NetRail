@@ -16,10 +16,10 @@ NetRail es un producto **maduro para v1.x**: arquitectura Rust-primary coherente
 | Seguridad URL/CSP | ✅ Fuerte | SSRF mitigado; CSP nativo en Tauri |
 | Errores tipados (Rust) | ✅ v1.1.0 | `NetRailError` + `{code, detail, status}` |
 | Tests Rust | ✅ Mejorado | 37 tests (30 unit + 7 HTTP integration) |
-| Paridad Python | ⚠️ Parcial | Sin `code` en errores FastAPI |
-| CI | ✅ Verde (local) | Clippy fix + nueva suite |
-| Documentación | ⚠️ Drift menor | MANUAL/DISTRIBUTION/ARCHITECTURE aún citan 1.0.0 |
-| Releases GitHub | ⚠️ Menor | v1.0.0 sigue en draft; v1.1.0 publicado |
+| Paridad Python | ✅ v1.1.0+ | `NetRailError` + handler FastAPI |
+| CI | ✅ Verde | Clippy fix + 38 tests Rust |
+| Documentación | ✅ Sincronizada | MANUAL/DISTRIBUTION/ARCHITECTURE + `API_ERRORS.md` |
+| Releases GitHub | ✅ | v1.0.0 publicado; v1.1.0 latest |
 
 ---
 

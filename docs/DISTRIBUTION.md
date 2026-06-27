@@ -1,4 +1,4 @@
-# NetRail Distribution Guide (v1.0)
+# NetRail Distribution Guide (v1.1)
 
 NetRail ships as a Rust/Tauri desktop app and a headless API binary. Python sources remain for development parity and legacy packaging paths.
 
@@ -168,4 +168,4 @@ Flatpak uses XDG paths under `~/.var/app/io.netrail.NetRail/`.
 
 ---
 
-*NetRail v1.0.0 — The Sovereign Search Console*
+*NetRail v1.1.0 — The Sovereign Search Console*
