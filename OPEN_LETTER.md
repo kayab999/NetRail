@@ -73,4 +73,4 @@ The web is still out there — messy, magnificent, bigger than any single compan
 
 When we wrote this letter, NetRail was a Python script that wrapped DuckDuckGo and hoped for the best. Today, v1.0 ships as a native Rust/Tauri application. The index chain is explicitly disclosed in the UI. Your history is encrypted at rest with keys you hold. The engine is local, the API is scriptable, and the telemetry is still zero. Independence is incremental. Step 1 is complete.
 
-— The NetRail contributors
+— [Carlos Hernández (@kayab999)](https://github.com/kayab999) and NetRail contributors
