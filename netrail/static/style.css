@@ -271,6 +271,21 @@ select {
   display: none;
 }
 
+.fanout-errors {
+  margin-bottom: 0.65rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius);
+  border: 1px solid rgba(255, 107, 107, 0.45);
+  background: rgba(255, 107, 107, 0.08);
+  color: #ffb4b4;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+}
+
+.fanout-errors.hidden {
+  display: none;
+}
+
 .result-card {
   display: grid;
   grid-template-columns: auto 1fr auto;

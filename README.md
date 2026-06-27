@@ -4,11 +4,12 @@
 
 ## Install (Linux)
 
-Download the **AppImage** or **.deb** from the [latest release](https://github.com/your-org/NetRail/releases/latest).
+Download the **AppImage** or **.deb** from the [latest release](https://github.com/netrail/netrail/releases/latest).
 
 ```bash
 # Desktop app (AppImage)
 chmod +x NetRail_1.0.0_amd64.AppImage
+# Ubuntu 24.04+ without FUSE: APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.0.0_amd64.AppImage
 ./NetRail_1.0.0_amd64.AppImage
 
 # Or Debian/Ubuntu package
@@ -64,6 +65,24 @@ NetRail does not pretend you can overthrow Google overnight. It shows you exactl
 | 4 | 🔜 **Owned corpus** | Local crawl & FTS5 index *(v2.x)* |
 
 Every result shows a backend pill. Every query stays on `127.0.0.1`. Every setting lives in `~/.config/netrail/`.
+
+---
+
+## Threat Model & Encryption Boundaries
+
+NetRail is built for local, single-user use. We are honest about what we protect and what we don't.
+
+**What is encrypted at rest:**
+- Search query text (via Fernet / OS keyring)
+- Result titles and snippets
+
+**What remains plaintext:**
+- FTS5 search index (queries are tokenized for fast local search; encrypted blobs cannot be indexed by SQLite FTS5)
+- Visited URLs and collection items (to allow re-opening and deduplication)
+
+**Localhost API:** NetRail binds to `127.0.0.1` with no authentication. Any process on your machine can read/write the API. If you do not trust your local machine, NetRail cannot protect you.
+
+If your threat model requires full-disk encryption or defense against local malware, use LUKS or FileVault. NetRail protects you from cloud surveillance, not from a rootkit.
 
 ---
 
@@ -134,7 +153,7 @@ Full API: [docs/MANUAL.md](docs/MANUAL.md)
 ## Development
 
 ```bash
-git clone https://github.com/your-org/NetRail.git && cd NetRail
+git clone https://github.com/netrail/netrail.git && cd NetRail
 
 # Native desktop (Tauri)
 npm install && npm run build

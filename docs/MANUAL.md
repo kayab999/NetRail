@@ -12,21 +12,41 @@ NetRail does not replace your browser. It sits in front of it. Results appear in
 
 ## Launching NetRail
 
-### Graphical use (v0.1)
+### Desktop app (v1.0 — recommended)
 
-1. Start the server:
-   ```bash
-   cd NetRail
-   ./run.sh
-   ```
-2. Open **http://127.0.0.1:7421** in any browser.
-3. Use the search bar and link rail. Your chosen browser is only used when you open a result.
+Download the AppImage or `.deb` from [GitHub Releases](https://github.com/netrail/netrail/releases/latest), or build from source:
 
-> **Note:** v0.1 requires a browser to view the NetRail UI itself. A native desktop shell (Tauri) is planned for v1.0 so NetRail becomes fully self-contained.
+```bash
+npm install && npm run build
+./src-tauri/target/release/netrail
+```
+
+The Tauri shell embeds the UI and starts the Rust API on `127.0.0.1:7421`. Use the system tray or `Ctrl+Shift+S` to focus the window.
+
+On Ubuntu 24.04 without FUSE:
+
+```bash
+APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.0.0_amd64.AppImage
+```
+
+### Headless API
+
+```bash
+./netrail-api --api-only
+```
+
+Open **http://127.0.0.1:7421** in any browser if you prefer the web UI without the Tauri shell.
+
+### Python fallback
+
+```bash
+./run.sh
+# or: python -m netrail
+```
 
 ### Stopping NetRail
 
-Press **Ctrl+C** in the terminal where `./run.sh` or `python -m netrail` is running.
+Close the Tauri window (API stops with the app), or press **Ctrl+C** in the terminal for headless/Python mode.
 
 ### Headless / scripting use
 
@@ -136,10 +156,25 @@ NetRail never syncs these settings to the cloud. There is no account system.
 
 ## Privacy Model
 
+### Threat model & encryption boundaries
+
+NetRail is a **single-user localhost tool**. The API on `127.0.0.1:7421` has no authentication — any process on your machine can call it.
+
+**Encrypted at rest** (when `history_encrypt` is enabled and a keyring key exists):
+
+- Query text blobs, result titles, and snippets (Fernet)
+
+**Plaintext by design:**
+
+- FTS5 index tokens (SQLite cannot full-text search encrypted blobs)
+- Visited URLs and collection URLs (needed for re-open and deduplication)
+
+NetRail protects you from **cloud surveillance**, not from malware or untrusted local users. Use full-disk encryption (LUKS/FileVault) for that threat model.
+
 ### What stays local
 
-- Search queries as typed in the UI (not logged to disk in v0.1)
 - Browser and privacy preferences (`~/.config/netrail/`)
+- Search history and collections (see encryption boundaries above)
 - The link rail rendering and UI state
 
 ### What leaves your machine

@@ -125,7 +125,12 @@ async function persistSettings() {
 
 function showState(title, message, isError = false) {
   els.state.classList.toggle("error", isError);
-  els.state.innerHTML = `<h2>${title}</h2><p>${message}</p>`;
+  els.state.replaceChildren();
+  const h2 = document.createElement("h2");
+  h2.textContent = title;
+  const p = document.createElement("p");
+  p.textContent = message;
+  els.state.append(h2, p);
   els.state.hidden = false;
   els.results.classList.add("hidden");
   state.highlightIndex = -1;
@@ -194,6 +199,22 @@ function renderResults(payload) {
 
   if (els.exportBtn) {
     els.exportBtn.disabled = !payload.results.length;
+  }
+
+  let errorsEl = document.getElementById("fanout-errors");
+  if (!errorsEl) {
+    errorsEl = document.createElement("div");
+    errorsEl.id = "fanout-errors";
+    errorsEl.className = "fanout-errors hidden";
+    errorsEl.setAttribute("aria-live", "polite");
+    els.results.parentNode.insertBefore(errorsEl, els.results);
+  }
+  if (payload.errors?.length) {
+    errorsEl.textContent = `Some backends failed: ${payload.errors.join("; ")}`;
+    errorsEl.classList.remove("hidden");
+  } else {
+    errorsEl.classList.add("hidden");
+    errorsEl.textContent = "";
   }
 
   if (!payload.results.length) {

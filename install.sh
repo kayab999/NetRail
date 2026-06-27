@@ -13,7 +13,7 @@ mkdir -p "${BIN_DIR}" "${APP_DIR}" "${ICON_DIR}"
 
 TAURI_BIN="${ROOT}/src-tauri/target/release/netrail"
 if [[ -x "${TAURI_BIN}" ]]; then
-  echo "==> Installing native Tauri binary (v0.5)"
+  echo "==> Installing native Tauri binary (v1.0)"
   install -Dm755 "${TAURI_BIN}" "${BIN_DIR}/netrail"
   cat > "${BIN_DIR}/netrail-launch" <<EOF
 #!/usr/bin/env bash

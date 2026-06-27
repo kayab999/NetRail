@@ -25,3 +25,19 @@ def test_rejects_credentials():
 def test_rejects_localhost():
     with pytest.raises(ValueError, match="Localhost"):
         validate_open_url("http://127.0.0.1:8080/admin")
+
+
+def test_rejects_nip_io():
+    with pytest.raises(ValueError, match="DNS rebinding"):
+        validate_open_url("http://127.0.0.1.nip.io/")
+
+
+def test_unwraps_ddg_redirect_blocks_inner_localhost():
+    ddg = "https://duckduckgo.com/l/?uddg=http%3A%2F%2F127.0.0.1%2Fapi"
+    with pytest.raises(ValueError, match="Localhost"):
+        validate_open_url(ddg)
+
+
+def test_unwraps_ddg_redirect_to_safe_url():
+    ddg = "https://duckduckgo.com/l/?uddg=https%3A%2F%2Frust-lang.org%2F"
+    assert validate_open_url(ddg) == "https://rust-lang.org/"

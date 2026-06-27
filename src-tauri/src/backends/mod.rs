@@ -70,32 +70,41 @@ use searxng::SearxngBackend;
 use brave::BraveBackend;
 
 pub fn get_enabled_backends(settings: &Settings) -> Vec<BackendKind> {
+    let mut backends = Vec::new();
+
     if !settings.backends.is_empty() {
-        return settings
-            .backends
-            .iter()
-            .filter(|b| b.enabled)
-            .filter_map(|b| match b.id.as_str() {
-                "ddgs" => Some(BackendKind::Ddgs),
-                "searxng" => b
-                    .url
-                    .clone()
-                    .or_else(|| settings.searxng_url.clone())
-                    .map(BackendKind::Searxng),
-                "brave" => Some(BackendKind::Brave),
-                _ => None,
-            })
-            .collect();
+        for entry in &settings.backends {
+            if !entry.enabled {
+                continue;
+            }
+            match entry.id.as_str() {
+                "ddgs" => backends.push(BackendKind::Ddgs),
+                "searxng" => {
+                    if let Some(url) = entry.url.clone().or_else(|| settings.searxng_url.clone())
+                    {
+                        backends.push(BackendKind::Searxng(url));
+                    }
+                }
+                "brave" if BraveBackend::from_env().is_some() => {
+                    backends.push(BackendKind::Brave);
+                }
+                _ => {}
+            }
+        }
+        if !backends.is_empty() {
+            return backends;
+        }
     }
 
-    let mut backends = Vec::new();
     for backend_id in &settings.backend_order {
         match backend_id.as_str() {
             "ddgs" if settings.ddgs_enabled => backends.push(BackendKind::Ddgs),
             "searxng" if settings.searxng_url.is_some() => {
                 backends.push(BackendKind::Searxng(settings.searxng_url.clone().unwrap()));
             }
-            "brave" if settings.brave_enabled => backends.push(BackendKind::Brave),
+            "brave" if settings.brave_enabled && BraveBackend::from_env().is_some() => {
+                backends.push(BackendKind::Brave);
+            }
             _ => {}
         }
     }
@@ -247,6 +256,47 @@ fn empty_response(query: &str, mode: SearchMode) -> SearchResponse {
         sovereignty_step: 1,
         errors: vec![],
         search_strategy: "fanout".into(),
+    }
+}
+
+#[cfg(test)]
+mod backend_selection_tests {
+    use super::*;
+    use crate::config::{BackendConfig, Settings};
+
+    #[test]
+    fn structured_empty_falls_back_to_legacy_ddgs() {
+        let settings = Settings {
+            backends: vec![BackendConfig {
+                id: "searxng".into(),
+                enabled: true,
+                url: None,
+                api_key_env: None,
+            }],
+            ddgs_enabled: true,
+            ..Settings::default()
+        };
+        let enabled = get_enabled_backends(&settings);
+        let names: Vec<_> = enabled.iter().map(|b| b.name()).collect();
+        assert_eq!(names, vec!["ddgs"]);
+    }
+
+    #[test]
+    fn brave_not_added_without_api_key() {
+        let settings = Settings {
+            backends: vec![BackendConfig {
+                id: "brave".into(),
+                enabled: true,
+                url: None,
+                api_key_env: Some("BRAVE_SEARCH_API_KEY".into()),
+            }],
+            ..Settings::default()
+        };
+        std::env::remove_var("BRAVE_SEARCH_API_KEY");
+        std::env::remove_var("NETRAIL_BRAVE_API_KEY");
+        let enabled = get_enabled_backends(&settings);
+        let names: Vec<_> = enabled.iter().map(|b| b.name()).collect();
+        assert!(names.iter().all(|n| *n != "brave"));
     }
 }
 

@@ -125,4 +125,5 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 - URL open restricted to `http://` and `https://` schemes
 - Localhost-only server bind in v0.1
 
-[0.1.0]: https://github.com/your-org/NetRail/releases/tag/v0.1.0
+[1.0.0]: https://github.com/netrail/netrail/releases/tag/v1.0.0
+[0.1.0]: https://github.com/netrail/netrail/releases/tag/v0.1.0

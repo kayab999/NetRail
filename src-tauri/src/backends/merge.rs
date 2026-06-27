@@ -87,7 +87,13 @@ pub fn interleave_batches(batches: Vec<Vec<SearchResult>>, max_results: usize) -
         return vec![];
     }
     if batches.len() == 1 {
-        return batches.into_iter().next().unwrap_or_default();
+        return batches
+            .into_iter()
+            .next()
+            .unwrap_or_default()
+            .into_iter()
+            .take(max_results)
+            .collect();
     }
 
     let mut indices = vec![0usize; batches.len()];
@@ -123,6 +129,7 @@ pub fn merge_fanout(
     batches: Vec<(String, Vec<SearchResult>)>,
     max_results: usize,
 ) -> Vec<SearchResult> {
+    let batch_order: Vec<String> = batches.iter().map(|(name, _)| name.clone()).collect();
     let per_backend: Vec<Vec<SearchResult>> = batches
         .into_iter()
         .map(|(_, results)| results)
@@ -138,7 +145,10 @@ pub fn merge_fanout(
             .push(item);
     }
 
-    let ordered_batches: Vec<Vec<SearchResult>> = by_backend.into_values().collect();
+    let ordered_batches: Vec<Vec<SearchResult>> = batch_order
+        .into_iter()
+        .filter_map(|name| by_backend.remove(&name))
+        .collect();
     interleave_batches(ordered_batches, max_results)
 }
 
@@ -175,6 +185,17 @@ mod tests {
         assert_eq!(merged.len(), 1);
         assert_eq!(merged[0].snippet, "much longer snippet here");
         assert_eq!(merged[0].backend, "searxng");
+    }
+
+    #[test]
+    fn single_batch_respects_max_results() {
+        let batch = vec![
+            result("https://a/1", "", "ddgs"),
+            result("https://a/2", "", "ddgs"),
+            result("https://a/3", "", "ddgs"),
+        ];
+        let out = interleave_batches(vec![batch], 2);
+        assert_eq!(out.len(), 2);
     }
 
     #[test]
