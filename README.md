@@ -8,12 +8,12 @@ Download the **AppImage** or **.deb** from the [latest release](https://github.c
 
 ```bash
 # Desktop app (AppImage)
-chmod +x NetRail_1.0.0_amd64.AppImage
-# Ubuntu 24.04+ without FUSE: APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.0.0_amd64.AppImage
-./NetRail_1.0.0_amd64.AppImage
+chmod +x NetRail_1.1.0_amd64.AppImage
+# Ubuntu 24.04+ without FUSE: APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.1.0_amd64.AppImage
+./NetRail_1.1.0_amd64.AppImage
 
 # Or Debian/Ubuntu package
-sudo dpkg -i NetRail_1.0.0_amd64.deb
+sudo dpkg -i NetRail_1.1.0_amd64.deb
 ```
 
 **Headless API** (homelabs, scripting, Docker):
@@ -146,7 +146,7 @@ Full API: [docs/MANUAL.md](docs/MANUAL.md)
 | [Architecture](docs/ARCHITECTURE.md) | Design, lifecycle roadmap |
 | [Distribution](docs/DISTRIBUTION.md) | Flatpak, Docker, AppImage, install |
 | [Open Letter](OPEN_LETTER.md) | Philosophy and the v1.0 postscript |
-| [Release notes](docs/RELEASE_v1.0.0.md) | v1.0.0 launch copy (for GitHub Release) |
+| [Release notes](docs/RELEASE_v1.1.0.md) | v1.1.0 typed errors release |
 
 ---
 

@@ -2,6 +2,19 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Error-code regression tests** — 7 HTTP integration tests (`tests/api_error_codes.rs`) plus unit coverage for `error`, `config`, and fanout total failure
+- **`build_router(state)`** — extracted Axum router for testable API surface
+- **Technical audit** — `docs/AUDIT_TECHNICAL_2026-06-27.md`
+
+### Fixed
+
+- **CI clippy** — `unnecessary_sort_by` in `browsers.rs` (Rust 1.96)
+- **README / package-lock** — install artifact names aligned to v1.1.0
+
 ## [1.1.0] — 2026-06-27
 
 ### Added

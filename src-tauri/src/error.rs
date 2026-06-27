@@ -191,3 +191,58 @@ impl From<url::ParseError> for NetRailError {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use http::StatusCode;
+
+    #[test]
+    fn client_error_codes_map_to_400() {
+        let err = NetRailError::InvalidQuery {
+            code: "QUERY_INVALID",
+            message: "bad".into(),
+        };
+        assert_eq!(err.status_code(), StatusCode::BAD_REQUEST);
+        assert_eq!(err.error_code(), "QUERY_INVALID");
+    }
+
+    #[test]
+    fn not_found_maps_to_404() {
+        let err = NetRailError::NotFound {
+            code: "DOC_NOT_FOUND",
+            entity: "x".into(),
+        };
+        assert_eq!(err.status_code(), StatusCode::NOT_FOUND);
+    }
+
+    #[test]
+    fn fanout_failure_maps_to_502() {
+        let err = NetRailError::FanoutFailure {
+            code: "FANOUT_TOTAL_FAILURE",
+            message: "all backends down".into(),
+        };
+        assert_eq!(err.status_code(), StatusCode::BAD_GATEWAY);
+        assert_eq!(err.error_code(), "FANOUT_TOTAL_FAILURE");
+    }
+
+    #[test]
+    fn to_json_includes_code_detail_status() {
+        let err = NetRailError::InvalidConfig {
+            code: "CONFIG_MAX_RESULTS",
+            message: "max_results must be between 1 and 50.".into(),
+        };
+        let json = err.to_json();
+        assert_eq!(json["code"], "CONFIG_MAX_RESULTS");
+        assert_eq!(json["status"], 400);
+        assert!(json["detail"].as_str().unwrap().contains("max_results"));
+    }
+
+    #[test]
+    fn json_parse_error_maps_to_parse_code() {
+        let bad = serde_json::from_str::<serde_json::Value>("not json").unwrap_err();
+        let err: NetRailError = bad.into();
+        assert_eq!(err.error_code(), "JSON_PARSE_ERROR");
+        assert_eq!(err.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+}

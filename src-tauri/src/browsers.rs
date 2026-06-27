@@ -150,7 +150,7 @@ pub fn discover_browsers() -> Vec<BrowserInfo> {
         }
     }
 
-    browsers.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    browsers.sort_by_key(|b| b.name.to_lowercase());
     browsers
 }
 

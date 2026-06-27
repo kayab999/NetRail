@@ -28,16 +28,9 @@ pub struct AppState {
     pub settings_fn: Arc<dyn Fn() -> Settings + Send + Sync>,
 }
 
-pub async fn start() -> Result<(), String> {
-    init_history_on_startup(&load_settings());
-
-    let state = AppState {
-        http_client: build_http_client(),
-        settings_fn: Arc::new(load_settings),
-    };
-
+pub fn build_router(state: AppState) -> Router {
     let static_path = static_dir();
-    let app = Router::new()
+    Router::new()
         .route("/", get(index))
         .route("/api/health", get(health))
         .route("/api/backends", get(list_backends))
@@ -60,7 +53,18 @@ pub async fn start() -> Result<(), String> {
         .route("/api/docs/assets/{filename}", get(get_doc_asset))
         .nest_service("/static", ServeDir::new(static_path))
         .with_state(state)
-        .layer(axum::middleware::from_fn(security_headers));
+        .layer(axum::middleware::from_fn(security_headers))
+}
+
+pub async fn start() -> Result<(), String> {
+    init_history_on_startup(&load_settings());
+
+    let state = AppState {
+        http_client: build_http_client(),
+        settings_fn: Arc::new(load_settings),
+    };
+
+    let app = build_router(state);
 
     let addr = SocketAddr::from(([127, 0, 0, 1], PORT));
     let listener = tokio::net::TcpListener::bind(addr)

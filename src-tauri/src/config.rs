@@ -219,3 +219,48 @@ pub fn is_flatpak() -> bool {
 pub fn static_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../netrail/static")
 }
+
+#[cfg(test)]
+mod validation_tests {
+    use super::*;
+
+    #[test]
+    fn max_results_out_of_range_returns_config_max_results() {
+        let settings = Settings {
+            max_results: 0,
+            ..Settings::default()
+        };
+        let err = validate_settings(&settings).unwrap_err();
+        assert_eq!(err.error_code(), "CONFIG_MAX_RESULTS");
+    }
+
+    #[test]
+    fn history_ttl_over_limit_returns_config_history_ttl() {
+        let settings = Settings {
+            history_ttl_days: 4000,
+            ..Settings::default()
+        };
+        let err = validate_settings(&settings).unwrap_err();
+        assert_eq!(err.error_code(), "CONFIG_HISTORY_TTL");
+    }
+
+    #[test]
+    fn invalid_search_strategy_returns_config_search_strategy() {
+        let settings = Settings {
+            search_strategy: "parallel".into(),
+            ..Settings::default()
+        };
+        let err = validate_settings(&settings).unwrap_err();
+        assert_eq!(err.error_code(), "CONFIG_SEARCH_STRATEGY");
+    }
+
+    #[test]
+    fn metadata_searxng_url_returns_backend_error() {
+        let settings = Settings {
+            searxng_url: Some("http://169.254.169.254/".into()),
+            ..Settings::default()
+        };
+        let err = validate_settings(&settings).unwrap_err();
+        assert_eq!(err.error_code(), "BACKEND_URL_CLOUD_METADATA");
+    }
+}

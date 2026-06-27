@@ -452,4 +452,34 @@ mod fanout_wiremock_tests {
             response.errors
         );
     }
+
+    #[tokio::test]
+    async fn fanout_total_failure_when_all_backends_unreachable() {
+        let settings = Settings {
+            backends: vec![
+                BackendConfig {
+                    id: "searxng".into(),
+                    enabled: true,
+                    url: Some("http://127.0.0.1:9".into()),
+                    api_key_env: None,
+                },
+                BackendConfig {
+                    id: "searxng".into(),
+                    enabled: true,
+                    url: Some("http://127.0.0.1:10".into()),
+                    api_key_env: None,
+                },
+            ],
+            search_strategy: "fanout".into(),
+            ddgs_enabled: false,
+            ..Settings::default()
+        };
+
+        let client = crate::http_client::build_http_client();
+        let response =
+            search_with_fanout(&client, "rust", SearchMode::Web, 10, &settings).await;
+
+        assert!(response.results.is_empty());
+        assert_eq!(response.errors.len(), 2);
+    }
 }
