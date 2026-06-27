@@ -102,6 +102,17 @@ pkill netrail; netrail &
 
 ---
 
+## Tray menu failure (P0 — fixed)
+
+| Bug | Effect |
+|-----|--------|
+| `RunEvent::ExitRequested` → `api.prevent_exit()` | **Quit** from tray called `app.exit(0)` but exit was blocked — menu closed, app kept running |
+| Tray `TrayIcon` dropped at end of `setup` | Icon could outlive handle via resource table, but menu handlers were fragile; now `app.manage(TrayState)` |
+| Linux tray **left-click** events unsupported (Tauri) | Left-click does not focus window; use **right-click → Show NetRail** |
+| `show`/`quit` only on tray-local handler | Consolidated into `app.on_menu_event` (fires for tray + menubar) |
+
+---
+
 ## Remaining UX recommendations (P2+)
 
 1. **Startup self-test** — refuse tray icon / show modal if `index.html` missing before opening webview.

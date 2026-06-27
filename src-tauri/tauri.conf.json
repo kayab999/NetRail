@@ -25,10 +25,6 @@
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' http://127.0.0.1:7421 ws://127.0.0.1:*; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
       "dangerousDisableAssetCspModification": true
-    },
-    "trayIcon": {
-      "iconPath": "icons/tray-icon.png",
-      "iconAsTemplate": true
     }
   },
   "bundle": {

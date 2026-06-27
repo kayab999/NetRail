@@ -2,10 +2,13 @@ use crate::history;
 use crate::server;
 use tauri::{
     menu::{MenuBuilder, SubmenuBuilder},
-    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager, RunEvent,
+    tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
+    Emitter, Manager,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+
+/// Keep the tray icon alive for the app lifetime (dropping it removes the icon on Linux).
+struct TrayState(TrayIcon);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -62,28 +65,34 @@ pub fn run() {
 
             app.set_menu(app_menu)?;
 
-            app.on_menu_event(|app, event| match event.id().0.as_str() {
-                "doc-manual" => trigger_doc_view(app, "manual"),
-                "doc-about" => trigger_doc_view(app, "about"),
-                "donate" => trigger_donate(app),
-                _ => {}
+            app.on_menu_event(|app, event| {
+                tracing::debug!(menu_id = %event.id().0, "menu event");
+                match event.id().0.as_str() {
+                    "show" => focus_main_window(app),
+                    "quit" => quit_app(app),
+                    "doc-manual" => trigger_doc_view(app, "manual"),
+                    "doc-about" => trigger_doc_view(app, "about"),
+                    "donate" => trigger_donate(app),
+                    _ => {}
+                }
             });
 
             let show = tauri::menu::MenuItem::with_id(app, "show", "Show NetRail", true, None::<&str>)?;
             let quit = tauri::menu::MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             let tray_menu = tauri::menu::Menu::with_items(app, &[&show, &quit])?;
 
-            let mut tray_builder = TrayIconBuilder::new();
+            let mut tray_builder = TrayIconBuilder::with_id("main");
             if let Some(icon) = app.default_window_icon().cloned() {
                 tray_builder = tray_builder.icon(icon);
             }
 
-            let _tray = tray_builder
+            let tray = tray_builder
                 .menu(&tray_menu)
+                .show_menu_on_left_click(true)
                 .tooltip("NetRail — search first, browse second")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => focus_main_window(app),
-                    "quit" => app.exit(0),
+                    "quit" => quit_app(app),
                     _ => {}
                 })
                 .on_tray_icon_event(|tray, event| {
@@ -93,11 +102,11 @@ pub fn run() {
                         ..
                     } = event
                     {
-                        let app = tray.app_handle();
-                        focus_main_window(app);
+                        focus_main_window(tray.app_handle());
                     }
                 })
                 .build(app)?;
+            app.manage(TrayState(tray));
 
             let shortcut =
                 Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyS);
@@ -113,20 +122,25 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app, event| {
-            if let RunEvent::ExitRequested { api, .. } = event {
-                api.prevent_exit();
-            }
-            let _ = app;
-        });
+        .run(|_app, _event| {});
 }
 
 fn focus_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
-    if let Some(window) = app.get_webview_window("main") {
-        let _ = window.show();
-        let _ = window.unminimize();
-        let _ = window.set_focus();
-    }
+    let Some(window) = app.get_webview_window("main") else {
+        tracing::warn!("main window not found for focus");
+        return;
+    };
+    let _ = window.unminimize();
+    let _ = window.show();
+    let _ = window.set_focus();
+    // Wayland compositors sometimes ignore set_focus; briefly pin on top.
+    let _ = window.set_always_on_top(true);
+    let _ = window.set_always_on_top(false);
+}
+
+fn quit_app<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    tracing::info!("NetRail quit requested from menu");
+    app.exit(0);
 }
 
 fn trigger_doc_view<R: tauri::Runtime>(app: &tauri::AppHandle<R>, slug: &str) {
