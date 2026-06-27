@@ -4,8 +4,8 @@ version = "1.0.0"
 default-run = "netrail"
 description = "Local research console — search first, browse second"
 authors = ["Carlos Hernández <https://github.com/kayab999>"]
-homepage = "https://github.com/kayab999/netrail"
-repository = "https://github.com/kayab999/netrail"
+homepage = "https://github.com/kayab999/NetRail"
+repository = "https://github.com/kayab999/NetRail"
 edition = "2021"
 rust-version = "1.84"
 

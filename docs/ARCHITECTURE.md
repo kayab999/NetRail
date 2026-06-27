@@ -43,7 +43,7 @@ Production v1.0 runs a **Rust Axum API** on `127.0.0.1:7421`, shared with a stat
 | UI | `netrail/static/app.js` | Shared across all modes |
 | Python parity | `netrail/` package | Kept for CI and legacy packaging |
 
-Repository: [github.com/kayab999/netrail](https://github.com/kayab999/netrail)
+Repository: [github.com/kayab999/NetRail](https://github.com/kayab999/NetRail)
 
 ---
 

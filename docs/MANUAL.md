@@ -14,7 +14,7 @@ NetRail does not replace your browser. It sits in front of it. Results appear in
 
 ### Desktop app (v1.0 — recommended)
 
-Download the AppImage or `.deb` from [GitHub Releases](https://github.com/kayab999/netrail/releases/latest), or build from source:
+Download the AppImage or `.deb` from [GitHub Releases](https://github.com/kayab999/NetRail/releases/latest), or build from source:
 
 ```bash
 npm install && npm run build
@@ -349,7 +349,7 @@ Review [CHANGELOG.md](../CHANGELOG.md) for breaking changes.
 ## Getting Help & Contributing
 
 - **In-app:** **Help → User Manual** / **About NetRail**
-- **Repository:** [github.com/kayab999/netrail](https://github.com/kayab999/netrail)
+- **Repository:** [github.com/kayab999/NetRail](https://github.com/kayab999/NetRail)
 - **Security:** [SECURITY.md](../SECURITY.md)
 - **Manifesto:** [OPEN_LETTER.md](../OPEN_LETTER.md)
 - **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)

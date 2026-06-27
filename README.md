@@ -4,7 +4,7 @@
 
 ## Install (Linux)
 
-Download the **AppImage** or **.deb** from the [latest release](https://github.com/kayab999/netrail/releases/latest).
+Download the **AppImage** or **.deb** from the [latest release](https://github.com/kayab999/NetRail/releases/latest).
 
 ```bash
 # Desktop app (AppImage)
@@ -153,7 +153,7 @@ Full API: [docs/MANUAL.md](docs/MANUAL.md)
 ## Development
 
 ```bash
-git clone https://github.com/kayab999/netrail.git && cd NetRail
+git clone https://github.com/kayab999/NetRail.git && cd NetRail
 
 # Native desktop (Tauri)
 npm install && npm run build

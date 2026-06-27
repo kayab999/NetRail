@@ -15,7 +15,7 @@ NetRail ships as a Rust/Tauri desktop app and a headless API binary. Python sour
 ## Quick install (60 seconds)
 
 ```bash
-git clone git@github.com:kayab999/netrail.git NetRail && cd NetRail
+git clone git@github.com:kayab999/NetRail.git NetRail && cd NetRail
 chmod +x install.sh && ./install.sh
 netrail-launch
 ```
@@ -28,7 +28,7 @@ Your browser opens to `http://127.0.0.1:7421` automatically.
 
 ### From GitHub Release
 
-Download the AppImage or `.deb` from the [Releases](https://github.com/kayab999/netrail/releases) page. Verify checksums against `SHA256SUMS` in the release assets.
+Download the AppImage or `.deb` from the [Releases](https://github.com/kayab999/NetRail/releases) page. Verify checksums against `SHA256SUMS` in the release assets.
 
 ```bash
 chmod +x NetRail_*_amd64.AppImage
