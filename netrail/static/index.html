@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NetRail</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark">NR</span>
+          <div>
+            <h1>NetRail</h1>
+            <p>Local research console · zero telemetry</p>
+          </div>
+        </div>
+        <div class="status-pill" title="All queries stay on your machine">
+          <span class="dot"></span>
+          Private
+        </div>
+      </header>
+
+      <section class="search-panel">
+        <form id="search-form" class="search-form" autocomplete="off">
+          <div class="search-row">
+            <input
+              id="query"
+              type="search"
+              placeholder='Search the web — try site:gov filetype:pdf "exact phrase"'
+              autofocus
+            />
+            <button type="submit" id="search-btn">Search</button>
+          </div>
+          <div class="controls-row">
+            <div class="tabs" role="tablist">
+              <button type="button" class="tab active" data-mode="web">Web</button>
+              <button type="button" class="tab" data-mode="images">Images</button>
+            </div>
+            <div class="prefs">
+              <label class="select-wrap">
+                <span>Browser</span>
+                <select id="browser-select">
+                  <option value="">Detecting…</option>
+                </select>
+              </label>
+              <label class="checkbox-wrap">
+                <input type="checkbox" id="private-mode" />
+                <span>Private / incognito</span>
+              </label>
+            </div>
+          </div>
+        </form>
+        <p class="operator-hint">
+          Operators:
+          <code>site:</code>
+          <code>filetype:</code>
+          <code>intitle:</code>
+          <code>inurl:</code>
+          <code>"phrase"</code>
+          <code>-exclude</code>
+        </p>
+      </section>
+
+      <main class="results-area">
+        <div id="state" class="state">
+          <h2>Your link rail</h2>
+          <p>
+            Results appear here. Nothing opens in a browser until you choose.
+            NetRail does not phone home — no analytics, no accounts, no ads.
+          </p>
+        </div>
+        <ul id="results" class="results hidden" aria-live="polite"></ul>
+      </main>
+
+      <footer class="footer">
+        <span>NetRail v0.1 — an open letter against big-tech dependency</span>
+        <a href="https://github.com/" id="source-link" hidden>Source</a>
+      </footer>
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>
