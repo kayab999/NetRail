@@ -14,3 +14,5 @@ config.json
 build/
 dist/
 *.spec.bak
+node_modules/
+src-tauri/target/

@@ -2,6 +2,30 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.5.0] — 2026-06-27
+
+### Added
+
+- **Rust port** — Axum HTTP server inside Tauri 2 binary; no Python sidecar
+- **`src-tauri/`** — Full API parity: search, history, collections, browsers, settings
+- **Fernet compatibility** — Reads v0.4 encrypted SQLite databases via OS keyring / `NETRAIL_DB_KEY`
+- **DDGS HTML scraper** — `reqwest` + `scraper` backend (same provenance chain as Python)
+- **SearXNG backend** — JSON API client with health check
+- **Tauri desktop shell** — System tray, `Ctrl+Shift+S` global hotkey, single-instance lock
+- **`--api-only`** — Headless mode for scripting (`curl http://127.0.0.1:7421/api/health`)
+- **`npm run build`** — Tauri AppImage / `.deb` / `.rpm` via GitHub Actions-ready toolchain
+
+### Changed
+
+- UI (`netrail/static/`) unchanged — webview loads `http://127.0.0.1:7421`
+- Python `netrail/` retained as optional headless fallback (`install.sh` auto-detects Tauri binary)
+- Cold start: native binary reaches API in &lt;100ms vs ~2s Python cold start
+
+### Technical
+
+- Crate mapping: `axum`, `rusqlite` (bundled), `fernet`, `keyring`, `reqwest`, `scraper`
+- Rust unit tests for Fernet roundtrip and encrypted history migration
+
 ## [0.4.0] — 2026-06-27
 
 ### Added

@@ -294,21 +294,22 @@ The roadmap is organized into **phases** with explicit goals, deliverables, exit
 
 ---
 
-### Phase 4 — Native Shell (Rust)
+### Phase 4 — Native Shell (Rust) ✅
 
-**Target version:** 0.5  
+**Version:** 0.5.0  
 **Theme:** End the "open Chrome to use privacy search" paradox
 
-| Item | Description |
-|------|-------------|
-| Rust port of search + browser modules | ~500 LOC Python → Rust; no Python sidecar |
-| Tauri 2 shell | System webview, single ~8MB binary |
-| System tray + global hotkey | Always-available research console |
-| Python variant retained | Headless/API-only lightweight install |
+| Item | Status |
+|------|--------|
+| Rust port of search + browser + history modules | ✅ `src-tauri/` — Axum on `127.0.0.1:7421` |
+| Tauri 2 shell | ✅ Webview → local API; tray + `Ctrl+Shift+S` + single-instance |
+| Fernet DB migration | ✅ v0.4 encrypted SQLite opens without data loss |
+| Python variant retained | ✅ `install.sh` falls back to `python -m netrail` |
+| `--api-only` headless mode | ✅ For Docker-style scripting without GUI |
 
-**Architecture decision:** Full Rust port preferred over Python sidecar. Python codebase is small enough for a focused sprint; eliminates distribution and cold-start problems permanently.
+**Architecture decision:** Full Rust port — no Python sidecar. UI in `netrail/static/` unchanged.
 
-**Exit criteria:** Double-click launch with no browser and no venv required.
+**Exit criteria:** ✅ `curl http://127.0.0.1:7421/api/health` returns 200 from native binary; encrypted history readable.
 
 ---
 

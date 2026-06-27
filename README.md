@@ -7,13 +7,13 @@ NetRail is a privacy-first search front-end that runs entirely on your machine. 
 > This is an open letter in code: you do not need a surveillance company to find things on the internet.  
 > Read the full manifesto in [OPEN_LETTER.md](OPEN_LETTER.md).
 
-**Version:** 0.4.0 · **License:** [AGPL-3.0](LICENSE)
+**Version:** 0.5.0 · **License:** [AGPL-3.0](LICENSE)
 
 **Tagline:** *Search first. Browse second. On your terms.*
 
 ---
 
-## Features (v0.3)
+## Features (v0.5)
 
 | Area | Capabilities |
 |------|-------------|
@@ -29,22 +29,32 @@ NetRail is a privacy-first search front-end that runs entirely on your machine. 
 | **Collections** | Save links to named research sets; export CSV/JSON |
 | **Revisit signals** | `visited 3d ago` badges from local open log |
 | **API** | Local REST API for scripting and modular integrations |
+| **Native shell** | Tauri 2 + Rust engine; system tray, global hotkey, single-instance |
+| **Headless fallback** | Python variant still available via `install.sh` or Docker |
 
 ---
 
 ## Quick Start
 
-### Option A — One-click install (recommended)
+### Option A — Native Tauri app (recommended)
 
 ```bash
 git clone <your-repo-url> NetRail
 cd NetRail
-chmod +x install.sh
-./install.sh
+npm install
+npm run build          # produces src-tauri/target/release/netrail
+./install.sh           # installs native binary to ~/.local/bin
 netrail-launch
 ```
 
-Your browser opens automatically to **http://127.0.0.1:7421**
+The Tauri webview loads **http://127.0.0.1:7421** — same UI, native engine underneath.
+
+### Option A2 — One-click Python install (headless fallback)
+
+```bash
+chmod +x install.sh && ./install.sh
+netrail-launch
+```
 
 ### Option B — Run script (developers)
 
@@ -81,12 +91,14 @@ Press **Ctrl+C** to stop the server.
 
 ```
 NetRail/
-├── netrail/              # Core application package
+├── src-tauri/            # Rust + Tauri native shell (v0.5 primary)
+│   └── src/              # Axum API, backends, history, browsers
+├── netrail/              # Python headless fallback
 │   ├── main.py           # FastAPI server and REST API
 │   ├── search.py         # Metasearch adapter (ddgs)
 │   ├── browsers.py       # Browser discovery and launcher
 │   ├── config.py         # XDG settings persistence
-│   └── static/           # Web UI (HTML, CSS, JS)
+│   └── static/           # Web UI (HTML, CSS, JS) — unchanged in v0.5
 ├── docs/
 │   ├── MANUAL.md         # User manual
 │   └── ARCHITECTURE.md   # System design and lifecycle roadmap
@@ -154,8 +166,9 @@ curl -s -X POST http://127.0.0.1:7421/api/search \
 
 ## System Requirements
 
-- **OS:** Linux (primary target); macOS/Windows planned via Tauri shell
-- **Python:** 3.10+
+- **OS:** Linux (primary target); macOS/Windows via Tauri (v1.1)
+- **Native:** Rust 1.77+, Node.js 18+ (for Tauri build)
+- **Python:** 3.10+ (optional headless fallback)
 - **Network:** Outbound HTTPS for metasearch providers
 - **Optional:** One or more desktop web browsers for the open-link workflow
 
@@ -168,6 +181,17 @@ NetRail is designed to remain **standalone**. It shares a philosophy — not a c
 ---
 
 ## Development
+
+**Native (v0.5):**
+
+```bash
+npm install
+npm run dev              # Tauri dev shell + Axum API
+# or headless API only:
+cargo run --manifest-path src-tauri/Cargo.toml -- --api-only
+```
+
+**Python fallback:**
 
 ```bash
 python3 -m venv .venv
@@ -184,10 +208,10 @@ Configuration is stored at `~/.config/netrail/settings.json`.
 
 | Phase | Focus |
 |-------|-------|
-| **v0.4** *(current)* | Flatpak, Docker, AppImage, install.sh, desktop integration |
+| **v0.5** *(current)* | Tauri + Rust port, tray, hotkey, Fernet DB migration |
+| **v0.4** | Flatpak, Docker, AppImage, install.sh, desktop integration |
 | **v0.3** | History, collections, revisit badges, FTS5 local search |
 | **v0.2** | SearchBackend protocol, SearXNG, provenance UI, tests |
-| **v0.5** | Tauri + Rust port (no Python sidecar) |
 | **v1.0** | Multi-backend fanout, BYO API keys, public launch |
 | **v2.x** | Local crawl cache, owned indexes |
 | **v3.x** | Local AI reranking, MCP, modular integrations |
