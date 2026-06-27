@@ -206,7 +206,7 @@ async fn run_search(Json(body): Json<SearchRequest>) -> Result<Json<serde_json::
     }
     let payload = search::search(query, &body.mode, body.max_results.clamp(1, 50))
         .await
-        .map_err(|e| ApiError::bad_gateway(e))?;
+        .map_err(ApiError::bad_gateway)?;
     Ok(Json(payload))
 }
 
@@ -233,7 +233,7 @@ async fn open_link(
     }
 
     let result = open_url(&safe_url, &settings, body.result_id)
-        .map_err(|e| ApiError::internal(e))?;
+        .map_err(ApiError::internal)?;
     Ok(Json(serde_json::to_value(result).unwrap_or_default()))
 }
 
@@ -331,7 +331,7 @@ async fn create_collection(
     store
         .create_collection(name)
         .map(Json)
-        .map_err(|e| ApiError::bad_request(e))
+        .map_err(ApiError::bad_request)
 }
 
 #[derive(Deserialize)]
@@ -383,7 +383,7 @@ fn default_export_fmt() -> String {
 async fn get_doc(Path(slug): Path<String>) -> Result<Json<serde_json::Value>, ApiError> {
     docs::load_doc(&slug)
         .map(Json)
-        .map_err(|e| ApiError::not_found(e))
+        .map_err(ApiError::not_found)
 }
 
 async fn get_doc_asset(Path(filename): Path<String>) -> Result<Response, ApiError> {
@@ -419,7 +419,7 @@ async fn export_collection(
     let fmt = if params.fmt == "csv" { "csv" } else { "json" };
     let content = store
         .export_collection(collection_id, fmt)
-        .map_err(|e| ApiError::not_found(e))?;
+        .map_err(ApiError::not_found)?;
     let media = if fmt == "csv" {
         "text/csv"
     } else {

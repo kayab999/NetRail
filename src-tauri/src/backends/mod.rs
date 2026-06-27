@@ -325,6 +325,16 @@ fn empty_response(query: &str, mode: SearchMode) -> SearchResponse {
     }
 }
 
+/// Backward-compatible alias used by search module.
+pub async fn search_with_fallback(
+    query: &str,
+    mode: SearchMode,
+    max_results: u32,
+    settings: &Settings,
+) -> SearchResponse {
+    search_with_fanout(query, mode, max_results, settings).await
+}
+
 #[cfg(test)]
 mod backend_selection_tests {
     use super::*;
@@ -364,14 +374,4 @@ mod backend_selection_tests {
         let names: Vec<_> = enabled.iter().map(|b| b.name()).collect();
         assert!(names.iter().all(|n| *n != "brave"));
     }
-}
-
-/// Backward-compatible alias used by search module.
-pub async fn search_with_fallback(
-    query: &str,
-    mode: SearchMode,
-    max_results: u32,
-    settings: &Settings,
-) -> SearchResponse {
-    search_with_fanout(query, mode, max_results, settings).await
 }

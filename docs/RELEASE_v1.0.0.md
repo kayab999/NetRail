@@ -53,4 +53,6 @@ curl http://127.0.0.1:7421/api/health
 
 ---
 
+**Repository:** [github.com/kayab999/netrail](https://github.com/kayab999/netrail)
+
 *v0.1 was the promise. v1.0 is the receipt.*

@@ -9,7 +9,7 @@ pub async fn search(
     max_results: u32,
 ) -> Result<serde_json::Value, String> {
     let settings = load_settings();
-    let mode = SearchMode::from_str(mode);
+    let mode = mode.parse().unwrap_or(SearchMode::Web);
     let response = search_with_fallback(query, mode, max_results, &settings).await;
 
     if response.results.is_empty() && !response.errors.is_empty() {

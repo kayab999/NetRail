@@ -542,7 +542,7 @@ impl HistoryStore {
             return Ok(out);
         }
 
-        Ok(serde_json::to_string_pretty(&serde_json::json!({
+        serde_json::to_string_pretty(&serde_json::json!({
             "collection": {
                 "id": id,
                 "name": name,
@@ -551,7 +551,7 @@ impl HistoryStore {
             "items": items,
             "exported_at": Utc::now().to_rfc3339(),
         }))
-        .map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())
     }
 
     pub fn stats(&self) -> serde_json::Value {

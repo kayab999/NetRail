@@ -80,9 +80,9 @@ fn parse_desktop(path: &Path) -> Option<(String, String, bool)> {
             if lower.contains("webbrowser") || lower.contains("x-scheme-handler/http") {
                 is_browser = true;
             }
-        } else if line.starts_with("Type=") && !line.contains("Application") {
-            return None;
-        } else if line.starts_with("NoDisplay=true") {
+        } else if (line.starts_with("Type=") && !line.contains("Application"))
+            || line.starts_with("NoDisplay=true")
+        {
             return None;
         }
     }

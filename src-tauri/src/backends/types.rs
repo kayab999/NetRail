@@ -9,14 +9,18 @@ pub enum SearchMode {
     Images,
 }
 
-impl SearchMode {
-    pub fn from_str(s: &str) -> Self {
-        match s {
+impl std::str::FromStr for SearchMode {
+    type Err = std::convert::Infallible;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(match s {
             "images" => Self::Images,
             _ => Self::Web,
-        }
+        })
     }
+}
 
+impl SearchMode {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Web => "web",

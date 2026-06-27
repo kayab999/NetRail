@@ -30,7 +30,7 @@ pub fn normalize_url_key(raw: &str) -> String {
             let path: Vec<_> = segments.collect();
             if path.last().is_some_and(|s| s.is_empty()) && path.len() > 1 {
                 let joined = path[..path.len() - 1].join("/");
-                let _ = parsed.set_path(&format!("/{joined}"));
+                parsed.set_path(&format!("/{joined}"));
             }
         }
         let mut pairs: Vec<(String, String)> = parsed

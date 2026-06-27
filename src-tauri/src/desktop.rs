@@ -85,7 +85,7 @@ pub fn run() {
                     } = event
                     {
                         let app = tray.app_handle();
-                        focus_main_window(&app);
+                        focus_main_window(app);
                     }
                 })
                 .build(app)?;
