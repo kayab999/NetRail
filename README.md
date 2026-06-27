@@ -2,16 +2,42 @@
 
 **Search first. Browse second. On your terms.**
 
-NetRail is a local, privacy-first research console for Linux. It fans out your query to every search backend you enable, merges results on your machine, and shows them in a link rail — **nothing opens in a browser until you choose**. No accounts. No analytics. No telemetry.
+## Install (Linux)
 
-> *v0.1 was a promise. v1.0 is the receipt.*  
-> Read the manifesto in [OPEN_LETTER.md](OPEN_LETTER.md).
+Download the **AppImage** or **.deb** from the [latest release](https://github.com/your-org/NetRail/releases/latest).
 
-**Version:** 1.0.0 · **License:** [AGPL-3.0](LICENSE)
+```bash
+# Desktop app (AppImage)
+chmod +x NetRail_1.0.0_amd64.AppImage
+./NetRail_1.0.0_amd64.AppImage
+
+# Or Debian/Ubuntu package
+sudo dpkg -i NetRail_1.0.0_amd64.deb
+```
+
+**Headless API** (homelabs, scripting, Docker):
+
+```bash
+chmod +x netrail-api
+./netrail-api --api-only
+curl http://127.0.0.1:7421/api/health
+```
+
+Build from source: see [Development](#development) below.
 
 ---
 
-## Why NetRail
+![NetRail fanout search — link rail with backend pills](docs/assets/netrail-demo.png)
+
+*Fanout search across SearXNG and DDGS. Results stay in the link rail until you open them.*
+
+**Version:** 1.0.0 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
+
+---
+
+## What is NetRail?
+
+NetRail is a local, privacy-first research console for Linux. It fans out your query to every search backend you enable, merges results on your machine, and shows them in a **link rail** — nothing opens in a browser until you choose.
 
 | Problem | NetRail answer |
 |---------|----------------|
@@ -19,46 +45,25 @@ NetRail is a local, privacy-first research console for Linux. It fans out your q
 | One fragile index | **Fanout** to SearXNG + DDGS + Brave concurrently |
 | Opaque provenance | `[DDGS]` / `[SearXNG]` / `[Brave]` pill on every result |
 | Cloud history | Encrypted SQLite + FTS5, local only |
-| Slow Python startup | Native Rust engine, **&lt;100ms** API cold start |
+| Slow startup | Native Rust engine, **&lt;100ms** API cold start |
 | Surveillance economics | Zero telemetry — audit the source |
+
+**Binaries:** 12MB desktop · 6.7MB headless API · zero accounts · zero analytics.
 
 ---
 
-## Quick Start
+## Sovereignty Steps
 
-### Native desktop (recommended)
+NetRail does not pretend you can overthrow Google overnight. It shows you exactly where results come from, and gives you a path to independence.
 
-```bash
-git clone <your-repo-url> NetRail && cd NetRail
-npm install && npm run build
-./install.sh
-netrail-launch
-```
+| Step | Level | What you get |
+|------|-------|--------------|
+| 1 | 🟡 **Default** | DDGS metasearch — disclosed chain: You → NetRail → DDG → Bing |
+| 2 | 🟠 **Self-hosted** | Add your [SearXNG](https://docs.searxng.org/) instance (`searxng_url`) |
+| 3 | 🟢 **Paid independence** | Bring your own Brave Search API key (`BRAVE_SEARCH_API_KEY`) |
+| 4 | 🔜 **Owned corpus** | Local crawl & FTS5 index *(v2.x)* |
 
-The Tauri shell loads `http://127.0.0.1:7421` — same UI, Rust engine underneath.
-
-### Headless API (homelab / scripting)
-
-```bash
-cd src-tauri
-cargo build --release --bin netrail-api --no-default-features
-./target/release/netrail-api
-curl http://127.0.0.1:7421/api/health
-```
-
-### Python fallback
-
-```bash
-./install.sh          # without Tauri build
-netrail-launch
-```
-
-### Docker
-
-```bash
-cp .env.example .env
-docker compose up -d netrail
-```
+Every result shows a backend pill. Every query stays on `127.0.0.1`. Every setting lives in `~/.config/netrail/`.
 
 ---
 
@@ -87,6 +92,8 @@ Set `search_strategy` to `"fallback"` for legacy sequential behavior.
 
 ## Keyboard workflow
 
+Power users don't need a mouse.
+
 | Key | Action |
 |-----|--------|
 | `↑` / `↓` | Highlight result in link rail |
@@ -108,20 +115,7 @@ curl -s -X POST http://127.0.0.1:7421/api/search \
   -d '{"query":"rust programming","mode":"web","max_results":10}'
 ```
 
-Full API: see [docs/MANUAL.md](docs/MANUAL.md).
-
----
-
-## Project structure
-
-```
-NetRail/
-├── src-tauri/          # Rust + Tauri (primary engine)
-├── netrail/static/     # Web UI (unchanged contract)
-├── netrail/            # Python headless fallback
-├── .github/workflows/  # Release CI (AppImage + netrail-api)
-└── docs/
-```
+Full API: [docs/MANUAL.md](docs/MANUAL.md)
 
 ---
 
@@ -132,34 +126,41 @@ NetRail/
 | [User Manual](docs/MANUAL.md) | Search, operators, browsers, troubleshooting |
 | [Architecture](docs/ARCHITECTURE.md) | Design, lifecycle roadmap |
 | [Distribution](docs/DISTRIBUTION.md) | Flatpak, Docker, AppImage, install |
-| [Open Letter](OPEN_LETTER.md) | Philosophy and v1.0 postscript |
-
----
-
-## Releases
-
-Tagged releases (`v1.0.0`) publish via GitHub Actions:
-
-- Linux AppImage + `.deb`
-- `netrail-api` headless binary
-
-Download from [GitHub Releases](https://github.com/your-org/NetRail/releases).
+| [Open Letter](OPEN_LETTER.md) | Philosophy and the v1.0 postscript |
+| [Release notes](docs/RELEASE_v1.0.0.md) | v1.0.0 launch copy (for GitHub Release) |
 
 ---
 
 ## Development
 
 ```bash
-# Native
-npm run dev
+git clone https://github.com/your-org/NetRail.git && cd NetRail
+
+# Native desktop (Tauri)
+npm install && npm run build
+./src-tauri/target/release/netrail
 
 # Headless API only
-cargo run --manifest-path src-tauri/Cargo.toml --bin netrail-api --no-default-features
+cargo build --release --manifest-path src-tauri/Cargo.toml \
+  --bin netrail-api --no-default-features
 
 # Python fallback + tests
-python -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 pytest
+```
+
+---
+
+## Project structure
+
+```
+NetRail/
+├── src-tauri/          # Rust + Tauri (primary engine)
+├── netrail/static/     # Web UI
+├── netrail/            # Python headless fallback
+├── .github/workflows/  # Release CI (AppImage + .deb + netrail-api)
+└── docs/
 ```
 
 ---

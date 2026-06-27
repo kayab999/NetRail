@@ -69,14 +69,8 @@ The web is still out there — messy, magnificent, bigger than any single compan
 
 ---
 
-## Postscript — v1.0 (June 2026)
+**P.S. (2026) — *v0.1 was the promise. v1.0 is the receipt.***
 
-v0.1 was a promise. **v1.0 is the receipt.**
-
-The index chain is disclosed on every result — `[DDGS]`, `[SearXNG]`, `[Brave]` pills show you exactly which engine answered. Your history is encrypted at rest. The engine is Rust. The telemetry is still **zero**.
-
-NetRail now fans out to every backend you enable simultaneously, merges and dedupes on your machine, and opens links only when you say so. No Python sidecar. No accounts. No engagement funnel.
-
-This is not a demo anymore. It is a sovereign research console you can ship, fork, and run on a fresh Ubuntu box in under a minute.
+When we wrote this letter, NetRail was a Python script that wrapped DuckDuckGo and hoped for the best. Today, v1.0 ships as a native Rust/Tauri application. The index chain is explicitly disclosed in the UI. Your history is encrypted at rest with keys you hold. The engine is local, the API is scriptable, and the telemetry is still zero. Independence is incremental. Step 1 is complete.
 
 — The NetRail contributors
