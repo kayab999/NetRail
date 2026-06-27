@@ -1,3 +1,4 @@
+use crate::error::{NetRailError, NetRailResult};
 use std::path::PathBuf;
 
 const MANUAL_MD: &str = include_str!("../../docs/MANUAL.md");
@@ -7,11 +8,16 @@ pub fn project_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..")
 }
 
-pub fn load_doc(slug: &str) -> Result<serde_json::Value, String> {
+pub fn load_doc(slug: &str) -> NetRailResult<serde_json::Value> {
     let (title, markdown) = match slug {
         "manual" => ("User Manual", MANUAL_MD),
         "about" => ("About NetRail", ABOUT_MD),
-        _ => return Err("Unknown document.".into()),
+        _ => {
+            return Err(NetRailError::NotFound {
+                code: "DOC_NOT_FOUND",
+                entity: format!("document '{slug}'"),
+            })
+        }
     };
     let markdown = rewrite_asset_paths(markdown);
     Ok(serde_json::json!({

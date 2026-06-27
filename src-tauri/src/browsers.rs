@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use crate::config::{is_flatpak, Settings};
+use crate::error::{NetRailError, NetRailResult};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct BrowserInfo {
@@ -200,9 +201,13 @@ pub struct OpenResult {
     pub sandbox: String,
 }
 
-pub fn open_url(url: &str, settings: &Settings, result_id: Option<i64>) -> Result<OpenResult, String> {
-    let browser = find_browser(settings.browser_id.as_deref())
-        .ok_or_else(|| "No web browser found on this system.".to_string())?;
+pub fn open_url(url: &str, settings: &Settings, result_id: Option<i64>) -> NetRailResult<OpenResult> {
+    let browser = find_browser(settings.browser_id.as_deref()).ok_or_else(|| {
+        NetRailError::Internal {
+            code: "BROWSER_NOT_FOUND",
+            message: "No web browser found on this system.".into(),
+        }
+    })?;
 
     let private = settings.private_mode;
     let mut cmd = Command::new(&browser.executable);

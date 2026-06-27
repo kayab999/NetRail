@@ -1,7 +1,7 @@
 use super::types::{SearchMode, SearchResult};
+use crate::error::{NetRailError, NetRailResult};
 use reqwest::Client;
 use std::env;
-
 
 pub const PROVENANCE: &str = "Brave Search API (your key, your quota)";
 
@@ -59,14 +59,14 @@ impl BraveBackend {
         query: &str,
         mode: SearchMode,
         max_results: usize,
-    ) -> Result<Vec<SearchResult>, String> {
+    ) -> NetRailResult<Vec<SearchResult>> {
         match mode {
             SearchMode::Images => self.search_images(query, max_results).await,
             SearchMode::Web => self.search_web(query, max_results).await,
         }
     }
 
-    async fn search_web(&self, query: &str, max_results: usize) -> Result<Vec<SearchResult>, String> {
+    async fn search_web(&self, query: &str, max_results: usize) -> NetRailResult<Vec<SearchResult>> {
         let response = self
             .client
             .get("https://api.search.brave.com/res/v1/web/search")
@@ -74,14 +74,17 @@ impl BraveBackend {
             .header("X-Subscription-Token", &self.api_key)
             .query(&[("q", query), ("count", &max_results.min(20).to_string())])
             .send()
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         if !response.status().is_success() {
-            return Err(format!("brave: HTTP {}", response.status()));
+            return Err(NetRailError::BackendHttp {
+                code: "BRAVE_HTTP_ERROR",
+                backend: "brave".into(),
+                status: response.status().as_u16(),
+            });
         }
 
-        let payload: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+        let payload: serde_json::Value = response.json().await?;
         let mut results = Vec::new();
 
         if let Some(items) = payload
@@ -116,7 +119,11 @@ impl BraveBackend {
         Ok(results)
     }
 
-    async fn search_images(&self, query: &str, max_results: usize) -> Result<Vec<SearchResult>, String> {
+    async fn search_images(
+        &self,
+        query: &str,
+        max_results: usize,
+    ) -> NetRailResult<Vec<SearchResult>> {
         let response = self
             .client
             .get("https://api.search.brave.com/res/v1/images/search")
@@ -124,14 +131,17 @@ impl BraveBackend {
             .header("X-Subscription-Token", &self.api_key)
             .query(&[("q", query), ("count", &max_results.min(20).to_string())])
             .send()
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         if !response.status().is_success() {
-            return Err(format!("brave: HTTP {}", response.status()));
+            return Err(NetRailError::BackendHttp {
+                code: "BRAVE_HTTP_ERROR",
+                backend: "brave".into(),
+                status: response.status().as_u16(),
+            });
         }
 
-        let payload: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+        let payload: serde_json::Value = response.json().await?;
         let mut results = Vec::new();
 
         if let Some(items) = payload.get("results").and_then(|v| v.as_array()) {

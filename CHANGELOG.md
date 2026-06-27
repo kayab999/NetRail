@@ -2,6 +2,18 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] — 2026-06-27
+
+### Added
+
+- **`NetRailError`** — typed errors with stable `code`, HTTP `status`, and `thiserror` messages across Rust API
+- API JSON errors now include `code`, `detail`, and `status` (frontend can branch on `code`)
+
+### Changed
+
+- Migrated `security`, `config`, backends, `history`, `search`, and `server` from `Result<T, String>` to `NetRailResult<T>`
+- Fanout partial backend failures still surface as human-readable strings in `errors[]`; total failure uses `FANOUT_TOTAL_FAILURE`
+
 ## [1.0.1] — 2026-06-27
 
 ### Added

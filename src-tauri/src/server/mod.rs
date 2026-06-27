@@ -4,6 +4,7 @@ use crate::config::{is_flatpak, load_settings, save_settings, static_dir, Settin
 use crate::crypto::{encryption_active, ensure_encryption_key};
 use crate::docs;
 use crate::history::{get_store, init_history_on_startup, HistoryStore};
+use crate::error::NetRailError;
 use crate::http_client::build_http_client;
 use crate::search;
 use crate::security::{validate_open_url, CSP};
@@ -187,7 +188,7 @@ async fn put_settings(
     State(state): State<AppState>,
     Json(body): Json<Settings>,
 ) -> Result<Json<Settings>, ApiError> {
-    let saved = save_settings(&body).map_err(ApiError::bad_request)?;
+    let saved = save_settings(&body)?;
     init_history_on_startup(&saved);
     let _ = state;
     Ok(Json(saved))
@@ -216,7 +217,11 @@ async fn run_search(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let query = body.query.trim();
     if query.is_empty() || query.len() > 500 {
-        return Err(ApiError::bad_request("Invalid query."));
+        return Err(NetRailError::InvalidQuery {
+            code: "QUERY_INVALID",
+            message: "Query must be 1-500 characters.".into(),
+        }
+        .into());
     }
     let payload = search::search(
         &state.http_client,
@@ -224,8 +229,7 @@ async fn run_search(
         &body.mode,
         body.max_results.clamp(1, 50),
     )
-    .await
-    .map_err(ApiError::bad_gateway)?;
+    .await?;
     Ok(Json(payload))
 }
 
@@ -242,7 +246,7 @@ async fn open_link(
     State(state): State<AppState>,
     Json(body): Json<OpenRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    let safe_url = validate_open_url(&body.url).map_err(ApiError::bad_request)?;
+    let safe_url = validate_open_url(&body.url)?;
     let mut settings = (state.settings_fn)();
     if let Some(id) = body.browser_id {
         settings.browser_id = Some(id);
@@ -251,8 +255,7 @@ async fn open_link(
         settings.private_mode = true;
     }
 
-    let result = open_url(&safe_url, &settings, body.result_id)
-        .map_err(ApiError::internal)?;
+    let result = open_url(&safe_url, &settings, body.result_id)?;
     Ok(Json(serde_json::to_value(result).unwrap_or_default()))
 }
 
@@ -289,9 +292,11 @@ async fn get_history(
     let settings = (state.settings_fn)();
     let store = require_store(&settings)?;
     let fts_q = params.q.as_deref().map(fts_query);
-    let payload = store
-        .list_history(fts_q.as_deref(), params.limit.clamp(1, 200), params.offset)
-        .map_err(ApiError::internal)?;
+    let payload = store.list_history(
+        fts_q.as_deref(),
+        params.limit.clamp(1, 200),
+        params.offset,
+    )?;
     Ok(Json(payload))
 }
 
@@ -301,11 +306,12 @@ async fn delete_history_entry(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let settings = (state.settings_fn)();
     let store = require_store(&settings)?;
-    if !store
-        .delete_history_entry(query_id)
-        .map_err(ApiError::internal)?
-    {
-        return Err(ApiError::not_found("History entry not found."));
+    if !store.delete_history_entry(query_id)? {
+        return Err(NetRailError::NotFound {
+            code: "HISTORY_ENTRY_NOT_FOUND",
+            entity: format!("history entry {query_id}"),
+        }
+        .into());
     }
     Ok(Json(serde_json::json!({
         "status": "ok",
@@ -316,7 +322,7 @@ async fn delete_history_entry(
 async fn purge_history(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
     let settings = (state.settings_fn)();
     let store = require_store(&settings)?;
-    let count = store.purge_all_history().map_err(ApiError::internal)?;
+    let count = store.purge_all_history()?;
     Ok(Json(serde_json::json!({
         "status": "ok",
         "purged": count,
@@ -333,7 +339,7 @@ async fn list_collections(
 ) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
     let settings = (state.settings_fn)();
     let store = require_store(&settings)?;
-    let items = store.list_collections().map_err(ApiError::internal)?;
+    let items = store.list_collections()?;
     Ok(Json(items))
 }
 
@@ -345,12 +351,13 @@ async fn create_collection(
     let store = require_store(&settings)?;
     let name = body.name.trim();
     if name.is_empty() || name.len() > 120 {
-        return Err(ApiError::bad_request("Invalid collection name."));
+        return Err(NetRailError::InvalidConfig {
+            code: "COLLECTION_NAME_INVALID",
+            message: "Collection name must be 1-120 characters.".into(),
+        }
+        .into());
     }
-    store
-        .create_collection(name)
-        .map(Json)
-        .map_err(ApiError::bad_request)
+    Ok(Json(store.create_collection(name)?))
 }
 
 #[derive(Deserialize)]
@@ -367,26 +374,18 @@ async fn add_collection_item(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let settings = (state.settings_fn)();
     let store = require_store(&settings)?;
-    let safe_url = validate_open_url(&body.url).map_err(ApiError::bad_request)?;
+    let safe_url = validate_open_url(&body.url)?;
     let title = body.title.trim();
     if title.is_empty() || title.len() > 500 {
-        return Err(ApiError::bad_request("Invalid title."));
+        return Err(NetRailError::InvalidConfig {
+            code: "COLLECTION_ITEM_TITLE_INVALID",
+            message: "Title must be 1-500 characters.".into(),
+        }
+        .into());
     }
-    store
-        .add_collection_item(
-            collection_id,
-            &safe_url,
-            title,
-            body.notes.as_deref(),
-        )
-        .map(Json)
-        .map_err(|e| {
-            if e.contains("not found") {
-                ApiError::not_found(e)
-            } else {
-                ApiError::bad_request(e)
-            }
-        })
+    Ok(Json(
+        store.add_collection_item(collection_id, &safe_url, title, body.notes.as_deref())?,
+    ))
 }
 
 #[derive(Deserialize)]
@@ -400,18 +399,22 @@ fn default_export_fmt() -> String {
 }
 
 async fn get_doc(Path(slug): Path<String>) -> Result<Json<serde_json::Value>, ApiError> {
-    docs::load_doc(&slug)
-        .map(Json)
-        .map_err(ApiError::not_found)
+    docs::load_doc(&slug).map(Json).map_err(Into::into)
 }
 
 async fn get_doc_asset(Path(filename): Path<String>) -> Result<Response, ApiError> {
     let path = docs::asset_path(&filename).ok_or_else(|| {
-        ApiError::not_found("Document asset not found.")
+        ApiError::from(NetRailError::NotFound {
+            code: "DOC_ASSET_NOT_FOUND",
+            entity: filename.clone(),
+        })
     })?;
-    let bytes = tokio::fs::read(&path)
-        .await
-        .map_err(|e| ApiError::not_found(e.to_string()))?;
+    let bytes = tokio::fs::read(&path).await.map_err(|e| {
+        ApiError::from(NetRailError::NotFound {
+            code: "DOC_ASSET_NOT_FOUND",
+            entity: format!("{filename}: {e}"),
+        })
+    })?;
     let media = match filename.rsplit('.').next() {
         Some("png") => "image/png",
         Some("jpg") | Some("jpeg") => "image/jpeg",
@@ -436,9 +439,7 @@ async fn export_collection(
     let settings = (state.settings_fn)();
     let store = require_store(&settings)?;
     let fmt = if params.fmt == "csv" { "csv" } else { "json" };
-    let content = store
-        .export_collection(collection_id, fmt)
-        .map_err(ApiError::not_found)?;
+    let content = store.export_collection(collection_id, fmt)?;
     let media = if fmt == "csv" {
         "text/csv"
     } else {
@@ -454,48 +455,37 @@ async fn export_collection(
 
 fn require_store(settings: &Settings) -> Result<HistoryStore, ApiError> {
     get_store(settings).ok_or_else(|| {
-        ApiError::bad_request("History is disabled in settings.")
+        NetRailError::InvalidConfig {
+            code: "HISTORY_DISABLED",
+            message: "History is disabled in settings.".into(),
+        }
+        .into()
     })
 }
 
 struct ApiError {
     status: StatusCode,
+    code: &'static str,
     detail: String,
 }
 
-impl ApiError {
-    fn bad_request(detail: impl Into<String>) -> Self {
+impl From<NetRailError> for ApiError {
+    fn from(err: NetRailError) -> Self {
         Self {
-            status: StatusCode::BAD_REQUEST,
-            detail: detail.into(),
-        }
-    }
-
-    fn not_found(detail: impl Into<String>) -> Self {
-        Self {
-            status: StatusCode::NOT_FOUND,
-            detail: detail.into(),
-        }
-    }
-
-    fn bad_gateway(detail: impl Into<String>) -> Self {
-        Self {
-            status: StatusCode::BAD_GATEWAY,
-            detail: detail.into(),
-        }
-    }
-
-    fn internal(detail: impl Into<String>) -> Self {
-        Self {
-            status: StatusCode::INTERNAL_SERVER_ERROR,
-            detail: detail.into(),
+            status: err.status_code(),
+            code: err.error_code(),
+            detail: err.to_string(),
         }
     }
 }
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        let body = serde_json::json!({ "detail": self.detail });
+        let body = serde_json::json!({
+            "code": self.code,
+            "detail": self.detail,
+            "status": self.status.as_u16(),
+        });
         (self.status, Json(body)).into_response()
     }
 }

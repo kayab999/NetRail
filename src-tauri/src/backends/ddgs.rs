@@ -1,6 +1,8 @@
 use super::types::{SearchMode, SearchResult};
+use crate::error::{NetRailError, NetRailResult};
 use reqwest::Client;
 use scraper::{Html, Selector};
+
 pub const PROVENANCE: &str = "ddgs → DuckDuckGo metasearch → primarily Bing index";
 
 pub struct DdgsBackend {
@@ -29,32 +31,37 @@ impl DdgsBackend {
         query: &str,
         mode: SearchMode,
         max_results: usize,
-    ) -> Result<Vec<SearchResult>, String> {
+    ) -> NetRailResult<Vec<SearchResult>> {
         match mode {
             SearchMode::Images => self.search_images(query, max_results).await,
             SearchMode::Web => self.search_text(query, max_results).await,
         }
     }
 
-    async fn search_text(&self, query: &str, max_results: usize) -> Result<Vec<SearchResult>, String> {
+    async fn search_text(
+        &self,
+        query: &str,
+        max_results: usize,
+    ) -> NetRailResult<Vec<SearchResult>> {
         let url = format!(
             "https://html.duckduckgo.com/html/?q={}",
             urlencoding::encode(query)
         );
-        let body = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?
-            .text()
-            .await
-            .map_err(|e| e.to_string())?;
+        let body = self.client.get(&url).send().await?.text().await?;
 
         let document = Html::parse_document(&body);
-        let result_sel = Selector::parse(".result").map_err(|e| format!("{e:?}"))?;
-        let link_sel = Selector::parse(".result__a").map_err(|e| format!("{e:?}"))?;
-        let snippet_sel = Selector::parse(".result__snippet").map_err(|e| format!("{e:?}"))?;
+        let result_sel = Selector::parse(".result").map_err(|e| NetRailError::Internal {
+            code: "DDGS_SELECTOR",
+            message: format!("{e:?}"),
+        })?;
+        let link_sel = Selector::parse(".result__a").map_err(|e| NetRailError::Internal {
+            code: "DDGS_SELECTOR",
+            message: format!("{e:?}"),
+        })?;
+        let snippet_sel = Selector::parse(".result__snippet").map_err(|e| NetRailError::Internal {
+            code: "DDGS_SELECTOR",
+            message: format!("{e:?}"),
+        })?;
 
         let mut results = Vec::new();
         for block in document.select(&result_sel) {
@@ -92,7 +99,11 @@ impl DdgsBackend {
         Ok(results)
     }
 
-    async fn search_images(&self, query: &str, max_results: usize) -> Result<Vec<SearchResult>, String> {
+    async fn search_images(
+        &self,
+        query: &str,
+        max_results: usize,
+    ) -> NetRailResult<Vec<SearchResult>> {
         let vqd = self.fetch_vqd(query).await?;
         let url = format!(
             "https://duckduckgo.com/i.js?o=json&q={}&vqd={}",
@@ -104,14 +115,16 @@ impl DdgsBackend {
             .get(&url)
             .header("Referer", "https://duckduckgo.com/")
             .send()
-            .await
-            .map_err(|e| e.to_string())?
+            .await?
             .text()
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
-        let payload: serde_json::Value =
-            serde_json::from_str(&body).map_err(|e| format!("ddgs images parse: {e}"))?;
+        let payload: serde_json::Value = serde_json::from_str(&body).map_err(|e| {
+            NetRailError::Parse {
+                code: "DDGS_IMAGES_PARSE",
+                message: format!("ddgs images parse: {e}"),
+            }
+        })?;
 
         let mut results = Vec::new();
         if let Some(items) = payload.get("results").and_then(|v| v.as_array()) {
@@ -157,17 +170,9 @@ impl DdgsBackend {
         Ok(results)
     }
 
-    async fn fetch_vqd(&self, query: &str) -> Result<String, String> {
+    async fn fetch_vqd(&self, query: &str) -> NetRailResult<String> {
         let url = format!("https://duckduckgo.com/?q={}", urlencoding::encode(query));
-        let body = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| e.to_string())?
-            .text()
-            .await
-            .map_err(|e| e.to_string())?;
+        let body = self.client.get(&url).send().await?.text().await?;
 
         for token in ["vqd=", "vqd='", "vqd=\""] {
             if let Some(start) = body.find(token) {
@@ -181,7 +186,10 @@ impl DdgsBackend {
                 }
             }
         }
-        Err("ddgs: could not obtain image search token".into())
+        Err(NetRailError::BackendFailure {
+            code: "DDGS_VQD_TOKEN_MISSING",
+            backend: "ddgs".into(),
+            message: "could not obtain image search token".into(),
+        })
     }
 }
-

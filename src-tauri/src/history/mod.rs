@@ -1,5 +1,6 @@
 use crate::backends::types::SearchResult;
 use crate::config::Settings;
+use crate::error::{NetRailError, NetRailResult};
 use crate::crypto::{decrypt_text, encrypt_text, ensure_encryption_key, encryption_active};
 use chrono::Utc;
 use once_cell::sync::OnceCell;
@@ -121,7 +122,7 @@ pub struct HistoryStore {
 }
 
 impl HistoryStore {
-    pub fn open(settings: &Settings) -> Result<Self, String> {
+    pub fn open(settings: &Settings) -> NetRailResult<Self> {
         let want_encrypt = settings.history_encrypt;
         let mut use_encrypt = false;
         if want_encrypt {
@@ -136,7 +137,7 @@ impl HistoryStore {
             }
         }
         let store = Self {
-            conn: connect().map_err(|e| e.to_string())?,
+            conn: connect()?,
             encrypt: use_encrypt,
         };
         let ttl = settings.history_ttl_days;
@@ -152,28 +153,24 @@ impl HistoryStore {
         decrypt_text(blob.unwrap_or_default(), self.encrypt)
     }
 
-    pub fn purge_expired(&self, ttl_days: u32) -> Result<usize, String> {
+    pub fn purge_expired(&self, ttl_days: u32) -> NetRailResult<usize> {
         if ttl_days == 0 {
             return Ok(0);
         }
         let offset = format!("-{ttl_days} days");
         let mut stmt = self
             .conn
-            .prepare("SELECT id FROM queries WHERE timestamp < datetime('now', ?1)")
-            .map_err(|e| e.to_string())?;
+            .prepare("SELECT id FROM queries WHERE timestamp < datetime('now', ?1)")?;
         let ids: Vec<i64> = stmt
-            .query_map(params![offset], |row| row.get(0))
-            .map_err(|e| e.to_string())?
+            .query_map(params![offset], |row| row.get(0))?
             .filter_map(Result::ok)
             .collect();
 
         for id in &ids {
             self.conn
-                .execute("DELETE FROM queries_fts WHERE rowid = ?1", params![id])
-                .map_err(|e| e.to_string())?;
+                .execute("DELETE FROM queries_fts WHERE rowid = ?1", params![id])?;
             self.conn
-                .execute("DELETE FROM queries WHERE id = ?1", params![id])
-                .map_err(|e| e.to_string())?;
+                .execute("DELETE FROM queries WHERE id = ?1", params![id])?;
         }
         Ok(ids.len())
     }
@@ -184,23 +181,20 @@ impl HistoryStore {
         mode: &str,
         backends_used: &[String],
         results: &[SearchResult],
-    ) -> Result<(i64, HashMap<String, i64>), String> {
-        let backends_json =
-            serde_json::to_string(backends_used).map_err(|e| e.to_string())?;
+    ) -> NetRailResult<(i64, HashMap<String, i64>)> {
+        let backends_json = serde_json::to_string(backends_used)?;
         self.conn
             .execute(
                 "INSERT INTO queries (query_text_enc, mode, backends_used) VALUES (?1, ?2, ?3)",
                 params![self.enc(query), mode, backends_json],
-            )
-            .map_err(|e| e.to_string())?;
+            )?;
         let query_id = self.conn.last_insert_rowid();
 
         self.conn
             .execute(
                 "INSERT INTO queries_fts(rowid, query_text) VALUES (?1, ?2)",
                 params![query_id, query],
-            )
-            .map_err(|e| e.to_string())?;
+            )?;
 
         let mut url_to_result_id = HashMap::new();
         for item in results {
@@ -221,8 +215,7 @@ impl HistoryStore {
                         },
                         item.backend,
                     ],
-                )
-                .map_err(|e| e.to_string())?;
+                )?;
             url_to_result_id.insert(item.url.clone(), self.conn.last_insert_rowid());
         }
         Ok((query_id, url_to_result_id))
@@ -231,7 +224,7 @@ impl HistoryStore {
     pub fn get_visit_metadata(
         &self,
         urls: &[String],
-    ) -> Result<HashMap<String, serde_json::Value>, String> {
+    ) -> NetRailResult<HashMap<String, serde_json::Value>> {
         if urls.is_empty() {
             return Ok(HashMap::new());
         }
@@ -241,7 +234,7 @@ impl HistoryStore {
             "SELECT url_norm, MAX(timestamp) AS last_visited, COUNT(*) AS visit_count
              FROM visits WHERE url_norm IN ({placeholders}) GROUP BY url_norm"
         );
-        let mut stmt = self.conn.prepare(&sql).map_err(|e| e.to_string())?;
+        let mut stmt = self.conn.prepare(&sql)?;
         let params: Vec<&dyn rusqlite::ToSql> = norms
             .iter()
             .map(|n| n as &dyn rusqlite::ToSql)
@@ -253,8 +246,7 @@ impl HistoryStore {
                     row.get::<_, String>(1)?,
                     row.get::<_, i64>(2)?,
                 ))
-            })
-            .map_err(|e| e.to_string())?;
+            })?;
 
         let mut norm_to_meta = HashMap::new();
         for row in rows.flatten() {
@@ -282,7 +274,7 @@ impl HistoryStore {
         result_id: Option<i64>,
         browser_id: Option<&str>,
         private_mode: bool,
-    ) -> Result<(), String> {
+    ) -> NetRailResult<()> {
         let url_norm = normalize_url(url);
         self.conn
             .execute(
@@ -295,8 +287,7 @@ impl HistoryStore {
                     browser_id,
                     i64::from(private_mode)
                 ],
-            )
-            .map_err(|e| e.to_string())?;
+            )?;
         Ok(())
     }
 
@@ -305,7 +296,7 @@ impl HistoryStore {
         q: Option<&str>,
         limit: u32,
         offset: u32,
-    ) -> Result<serde_json::Value, String> {
+    ) -> NetRailResult<serde_json::Value> {
         let rows: Vec<(i64, String, Vec<u8>, String, String, i64)> = if let Some(fts_q) = q {
             let mut stmt = self
                 .conn
@@ -317,8 +308,7 @@ impl HistoryStore {
                      WHERE fts.query_text MATCH ?1
                      ORDER BY q.timestamp DESC
                      LIMIT ?2 OFFSET ?3",
-                )
-                .map_err(|e| e.to_string())?;
+                )?;
             let mapped = stmt
                 .query_map(params![fts_q, limit, offset], |row| {
                     Ok((
@@ -329,8 +319,7 @@ impl HistoryStore {
                         row.get(4)?,
                         row.get(5)?,
                     ))
-                })
-                .map_err(|e| e.to_string())?;
+                })?;
             mapped.filter_map(Result::ok).collect()
         } else {
             let mut stmt = self
@@ -341,8 +330,7 @@ impl HistoryStore {
                      FROM queries q
                      ORDER BY q.timestamp DESC
                      LIMIT ?1 OFFSET ?2",
-                )
-                .map_err(|e| e.to_string())?;
+                )?;
             let mapped = stmt
                 .query_map(params![limit, offset], |row| {
                     Ok((
@@ -353,8 +341,7 @@ impl HistoryStore {
                         row.get(4)?,
                         row.get(5)?,
                     ))
-                })
-                .map_err(|e| e.to_string())?;
+                })?;
             mapped.filter_map(Result::ok).collect()
         };
 
@@ -374,8 +361,7 @@ impl HistoryStore {
 
         let total: i64 = self
             .conn
-            .query_row("SELECT COUNT(*) FROM queries", [], |row| row.get(0))
-            .map_err(|e| e.to_string())?;
+            .query_row("SELECT COUNT(*) FROM queries", [], |row| row.get(0))?;
 
         Ok(serde_json::json!({
             "items": items,
@@ -385,7 +371,7 @@ impl HistoryStore {
         }))
     }
 
-    pub fn delete_history_entry(&self, query_id: i64) -> Result<bool, String> {
+    pub fn delete_history_entry(&self, query_id: i64) -> NetRailResult<bool> {
         let exists: Option<i64> = self
             .conn
             .query_row(
@@ -393,35 +379,29 @@ impl HistoryStore {
                 params![query_id],
                 |row| row.get(0),
             )
-            .optional()
-            .map_err(|e| e.to_string())?;
+            .optional()?;
         if exists.is_none() {
             return Ok(false);
         }
         self.conn
-            .execute("DELETE FROM queries_fts WHERE rowid = ?1", params![query_id])
-            .map_err(|e| e.to_string())?;
+            .execute("DELETE FROM queries_fts WHERE rowid = ?1", params![query_id])?;
         self.conn
-            .execute("DELETE FROM queries WHERE id = ?1", params![query_id])
-            .map_err(|e| e.to_string())?;
+            .execute("DELETE FROM queries WHERE id = ?1", params![query_id])?;
         Ok(true)
     }
 
-    pub fn purge_all_history(&self) -> Result<i64, String> {
+    pub fn purge_all_history(&self) -> NetRailResult<i64> {
         let count: i64 = self
             .conn
-            .query_row("SELECT COUNT(*) FROM queries", [], |row| row.get(0))
-            .map_err(|e| e.to_string())?;
+            .query_row("SELECT COUNT(*) FROM queries", [], |row| row.get(0))?;
         self.conn
-            .execute("DELETE FROM queries_fts", [])
-            .map_err(|e| e.to_string())?;
+            .execute("DELETE FROM queries_fts", [])?;
         self.conn
-            .execute("DELETE FROM queries", [])
-            .map_err(|e| e.to_string())?;
+            .execute("DELETE FROM queries", [])?;
         Ok(count)
     }
 
-    pub fn list_collections(&self) -> Result<Vec<serde_json::Value>, String> {
+    pub fn list_collections(&self) -> NetRailResult<Vec<serde_json::Value>> {
         let mut stmt = self
             .conn
             .prepare(
@@ -429,8 +409,7 @@ impl HistoryStore {
                         (SELECT COUNT(*) FROM collection_items ci WHERE ci.collection_id = c.id) AS item_count
                  FROM collections c
                  ORDER BY c.name COLLATE NOCASE",
-            )
-            .map_err(|e| e.to_string())?;
+            )?;
         let rows = stmt
             .query_map([], |row| {
                 Ok(serde_json::json!({
@@ -439,25 +418,30 @@ impl HistoryStore {
                     "created_at": row.get::<_, String>(2)?,
                     "item_count": row.get::<_, i64>(3)?,
                 }))
-            })
-            .map_err(|e| e.to_string())?
+            })?
             .filter_map(Result::ok)
             .collect();
         Ok(rows)
     }
 
-    pub fn create_collection(&self, name: &str) -> Result<serde_json::Value, String> {
+    pub fn create_collection(&self, name: &str) -> NetRailResult<serde_json::Value> {
         let name = name.trim();
         if name.is_empty() {
-            return Err("Collection name is required.".into());
+            return Err(NetRailError::MissingField {
+                code: "COLLECTION_NAME_REQUIRED",
+                field: "name".into(),
+            });
         }
         self.conn
             .execute("INSERT INTO collections (name) VALUES (?1)", params![name])
             .map_err(|e| {
                 if e.to_string().contains("UNIQUE") {
-                    format!("Collection '{name}' already exists.")
+                    NetRailError::InvalidConfig {
+                        code: "COLLECTION_EXISTS",
+                        message: format!("Collection '{name}' already exists."),
+                    }
                 } else {
-                    e.to_string()
+                    NetRailError::from(e)
                 }
             })?;
         let id = self.conn.last_insert_rowid();
@@ -475,7 +459,7 @@ impl HistoryStore {
         url: &str,
         title: &str,
         notes: Option<&str>,
-    ) -> Result<serde_json::Value, String> {
+    ) -> NetRailResult<serde_json::Value> {
         let exists: Option<i64> = self
             .conn
             .query_row(
@@ -483,10 +467,12 @@ impl HistoryStore {
                 params![collection_id],
                 |row| row.get(0),
             )
-            .optional()
-            .map_err(|e| e.to_string())?;
+            .optional()?;
         if exists.is_none() {
-            return Err("Collection not found.".into());
+            return Err(NetRailError::NotFound {
+                code: "COLLECTION_NOT_FOUND",
+                entity: format!("collection {collection_id}"),
+            });
         }
 
         self.conn
@@ -498,8 +484,7 @@ impl HistoryStore {
                      notes = COALESCE(excluded.notes, collection_items.notes),
                      saved_at = datetime('now')",
                 params![collection_id, url, title, notes],
-            )
-            .map_err(|e| e.to_string())?;
+            )?;
 
         Ok(serde_json::json!({
             "collection_id": collection_id,
@@ -509,7 +494,7 @@ impl HistoryStore {
         }))
     }
 
-    pub fn export_collection(&self, collection_id: i64, fmt: &str) -> Result<String, String> {
+    pub fn export_collection(&self, collection_id: i64, fmt: &str) -> NetRailResult<String> {
         let collection: Option<(i64, String, String)> = self
             .conn
             .query_row(
@@ -517,10 +502,12 @@ impl HistoryStore {
                 params![collection_id],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
-            .optional()
-            .map_err(|e| e.to_string())?;
+            .optional()?;
         let Some((id, name, created_at)) = collection else {
-            return Err("Collection not found.".into());
+            return Err(NetRailError::NotFound {
+                code: "COLLECTION_NOT_FOUND",
+                entity: format!("collection {collection_id}"),
+            });
         };
 
         let mut stmt = self
@@ -530,8 +517,7 @@ impl HistoryStore {
                  FROM collection_items
                  WHERE collection_id = ?1
                  ORDER BY saved_at DESC",
-            )
-            .map_err(|e| e.to_string())?;
+            )?;
         let items: Vec<serde_json::Value> = stmt
             .query_map(params![collection_id], |row| {
                 Ok(serde_json::json!({
@@ -540,8 +526,7 @@ impl HistoryStore {
                     "notes": row.get::<_, Option<String>>(2)?,
                     "saved_at": row.get::<_, String>(3)?,
                 }))
-            })
-            .map_err(|e| e.to_string())?
+            })?
             .filter_map(Result::ok)
             .collect();
 
@@ -563,7 +548,7 @@ impl HistoryStore {
             return Ok(out);
         }
 
-        serde_json::to_string_pretty(&serde_json::json!({
+        Ok(serde_json::to_string_pretty(&serde_json::json!({
             "collection": {
                 "id": id,
                 "name": name,
@@ -571,8 +556,7 @@ impl HistoryStore {
             },
             "items": items,
             "exported_at": Utc::now().to_rfc3339(),
-        }))
-        .map_err(|e| e.to_string())
+        }))?)
     }
 
     pub fn stats(&self) -> serde_json::Value {

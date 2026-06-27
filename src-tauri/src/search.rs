@@ -1,6 +1,7 @@
 use crate::backends::types::{SearchMode, SearchResponse};
 use crate::backends::search_with_fallback;
 use crate::config::{load_settings, Settings};
+use crate::error::{NetRailError, NetRailResult};
 use crate::history::{get_store, HistoryStore};
 use reqwest::Client;
 
@@ -9,7 +10,7 @@ pub async fn search(
     query: &str,
     mode: &str,
     max_results: u32,
-) -> Result<serde_json::Value, String> {
+) -> NetRailResult<serde_json::Value> {
     let settings = load_settings();
     let mode = match mode.trim().to_lowercase().as_str() {
         "web" => SearchMode::Web,
@@ -22,7 +23,10 @@ pub async fn search(
     let response = search_with_fallback(client, query, mode, max_results, &settings).await;
 
     if response.results.is_empty() && !response.errors.is_empty() {
-        return Err(response.errors.join("; "));
+        return Err(NetRailError::FanoutFailure {
+            code: "FANOUT_TOTAL_FAILURE",
+            message: response.errors.join("; "),
+        });
     }
 
     let mut payload = response.to_json();
@@ -64,11 +68,14 @@ fn enrich_with_history(
     response: &crate::backends::types::SearchResponse,
     mode: SearchMode,
     backends_used: Vec<String>,
-) -> Result<(), String> {
+) -> NetRailResult<()> {
     let results_array = payload
         .get_mut("results")
         .and_then(|v| v.as_array_mut())
-        .ok_or_else(|| "missing results".to_string())?;
+        .ok_or_else(|| NetRailError::Internal {
+            code: "SEARCH_PAYLOAD",
+            message: "missing results".into(),
+        })?;
 
     if !response.results.is_empty() {
         let (query_id, url_to_result_id) = store.record_search(

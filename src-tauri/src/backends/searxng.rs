@@ -1,4 +1,5 @@
 use super::types::{SearchMode, SearchResult};
+use crate::error::{NetRailError, NetRailResult};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use reqwest::Client;
@@ -96,7 +97,7 @@ impl SearxngBackend {
         query: &str,
         mode: SearchMode,
         max_results: usize,
-    ) -> Result<Vec<SearchResult>, String> {
+    ) -> NetRailResult<Vec<SearchResult>> {
         let category = match mode {
             SearchMode::Images => "images",
             SearchMode::Web => "general",
@@ -111,14 +112,17 @@ impl SearxngBackend {
                 ("categories", category),
             ])
             .send()
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         if !response.status().is_success() {
-            return Err(format!("searxng: HTTP {}", response.status()));
+            return Err(NetRailError::BackendHttp {
+                code: "SEARXNG_HTTP_ERROR",
+                backend: "searxng".into(),
+                status: response.status().as_u16(),
+            });
         }
 
-        let payload: serde_json::Value = response.json().await.map_err(|e| e.to_string())?;
+        let payload: serde_json::Value = response.json().await?;
         let provenance = self.provenance();
         let mut results = Vec::new();
 

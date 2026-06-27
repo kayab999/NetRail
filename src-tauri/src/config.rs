@@ -1,3 +1,4 @@
+use crate::error::{NetRailError, NetRailResult};
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::fs;
@@ -116,17 +117,26 @@ pub fn load_settings() -> Settings {
     settings
 }
 
-pub fn validate_settings(settings: &Settings) -> Result<(), String> {
+pub fn validate_settings(settings: &Settings) -> NetRailResult<()> {
     use crate::security::validate_backend_url;
 
     if settings.max_results < 1 || settings.max_results > 50 {
-        return Err("max_results must be between 1 and 50.".into());
+        return Err(NetRailError::InvalidConfig {
+            code: "CONFIG_MAX_RESULTS",
+            message: "max_results must be between 1 and 50.".into(),
+        });
     }
     if settings.history_ttl_days > 3650 {
-        return Err("history_ttl_days must be at most 3650.".into());
+        return Err(NetRailError::InvalidConfig {
+            code: "CONFIG_HISTORY_TTL",
+            message: "history_ttl_days must be at most 3650.".into(),
+        });
     }
     if settings.search_strategy != "fanout" && settings.search_strategy != "fallback" {
-        return Err("search_strategy must be 'fanout' or 'fallback'.".into());
+        return Err(NetRailError::InvalidConfig {
+            code: "CONFIG_SEARCH_STRATEGY",
+            message: "search_strategy must be 'fanout' or 'fallback'.".into(),
+        });
     }
     if let Some(ref url) = settings.searxng_url {
         validate_backend_url(url)?;
@@ -139,11 +149,11 @@ pub fn validate_settings(settings: &Settings) -> Result<(), String> {
     Ok(())
 }
 
-pub fn save_settings(settings: &Settings) -> Result<Settings, String> {
+pub fn save_settings(settings: &Settings) -> NetRailResult<Settings> {
     validate_settings(settings)?;
     let dir = config_dir();
     let _ = fs::create_dir_all(&dir);
-    let payload = serde_json::to_string_pretty(settings).unwrap_or_default();
+    let payload = serde_json::to_string_pretty(settings)?;
     let _ = fs::write(config_file(), format!("{payload}\n"));
     Ok(load_settings())
 }

@@ -76,7 +76,10 @@ async function api(path, options = {}) {
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.detail || `Request failed (${response.status})`);
+    const detail = payload.detail || payload.message || `Request failed (${response.status})`;
+    const err = new Error(detail);
+    if (payload.code) err.code = payload.code;
+    throw err;
   }
   return response.json();
 }

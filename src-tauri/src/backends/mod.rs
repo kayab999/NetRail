@@ -5,6 +5,7 @@ pub mod searxng;
 pub mod types;
 
 use crate::config::Settings;
+use crate::error::{NetRailError, NetRailResult};
 use futures::future::join_all;
 use reqwest::Client;
 use std::time::Duration;
@@ -50,7 +51,7 @@ impl BackendKind {
         query: &str,
         mode: SearchMode,
         max_results: usize,
-    ) -> Result<Vec<SearchResult>, String> {
+    ) -> NetRailResult<Vec<SearchResult>> {
         match self {
             Self::Ddgs => DdgsBackend::new(client.clone()).search(query, mode, max_results).await,
             Self::Searxng(url) => {
@@ -60,7 +61,11 @@ impl BackendKind {
             }
             Self::Brave(env) => {
                 let backend = BraveBackend::from_env_var(client.clone(), env.as_deref())
-                    .ok_or_else(|| "brave: API key not set".to_string())?;
+                    .ok_or_else(|| NetRailError::BackendFailure {
+                        code: "BRAVE_API_KEY_MISSING",
+                        backend: "brave".into(),
+                        message: "API key not set".into(),
+                    })?;
                 backend.search(query, mode, max_results).await
             }
         }
@@ -178,7 +183,8 @@ async fn query_backend(
     let provenance = backend.provenance();
     let results = backend
         .search(client, query, mode, max_results)
-        .await?;
+        .await
+        .map_err(|e| format!("{name}: {e}"))?;
     Ok(BackendBatch {
         name,
         provenance,
