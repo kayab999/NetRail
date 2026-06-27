@@ -46,6 +46,8 @@ install -Dm644 "${ROOT}/assets/netrail.desktop" "${APP_DIR}/netrail.desktop"
 sed -i "s|Exec=netrail-launch|Exec=${BIN_DIR}/netrail-launch|" "${APP_DIR}/netrail.desktop"
 
 install -Dm644 "${ROOT}/assets/netrail.svg" "${ICON_DIR}/netrail.svg"
+mkdir -p "${PREFIX}/share/icons/hicolor/128x128/apps"
+install -Dm644 "${ROOT}/assets/netrail.png" "${PREFIX}/share/icons/hicolor/128x128/apps/netrail.png"
 
 if command -v update-desktop-database >/dev/null 2>&1; then
   update-desktop-database "${APP_DIR}" 2>/dev/null || true

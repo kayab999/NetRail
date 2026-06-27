@@ -530,6 +530,13 @@ function handleKeyboard(event) {
   }
 }
 
+function dismissSplash() {
+  const splash = document.getElementById("splash");
+  if (!splash) return;
+  splash.classList.add("splash-hidden");
+  splash.setAttribute("aria-hidden", "true");
+}
+
 async function bootstrap() {
   try {
     const [browsers, settings, health] = await Promise.all([
@@ -548,6 +555,8 @@ async function bootstrap() {
     await loadCollections();
   } catch (error) {
     showState("NetRail offline", error.message, true);
+  } finally {
+    window.setTimeout(dismissSplash, 420);
   }
 }
 
