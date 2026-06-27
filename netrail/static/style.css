@@ -304,6 +304,20 @@ select {
   color: var(--accent);
 }
 
+.provenance-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
 .result-url {
   display: block;
   font-family: var(--mono);

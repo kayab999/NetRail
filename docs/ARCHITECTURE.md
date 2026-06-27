@@ -130,21 +130,32 @@ Returning a stable shape:
 
 ## Privacy & Trust Architecture
 
-### Threat model (v0.1)
+### Threat model (v0.2)
 
 | Threat | Mitigation |
 |--------|------------|
 | NetRail exfiltrating queries | No telemetry code; localhost-only bind; open source |
 | LAN snooping on NetRail API | `127.0.0.1` bind, not `0.0.0.0` |
 | Provider tracking | No NetRail cookies; user may choose privacy DNS/VPN externally |
-| Malicious URL open | Only `http://` and `https://` accepted; no `file://` or `javascript:` |
+| Malicious URL open | `validate_open_url()` rejects `javascript:`, `data:`, credentials, localhost |
+| UI injection via results | Content-Security-Policy on all HTTP responses |
 | Settings tampering | User-owned `~/.config/netrail/`; no cloud sync |
 
-### What we explicitly do not promise in v0.1
+### What we explicitly do not promise in v0.2
 
+- A Google-free or Bing-free index unless you configure your own backend (e.g. SearXNG)
 - Anonymity against metasearch providers (use VPN/Tor at system level)
-- Google-equivalent index coverage
-- Query result consistency across time (providers change)
+- Google-equivalent index coverage on the default `ddgs` path
+- Query result consistency across time (providers change HTML/APIs without notice)
+
+### Default discovery chain (disclosed)
+
+```
+User query → NetRail (127.0.0.1) → SearchBackend registry
+    → [searxng if configured] → else ddgs → DuckDuckGo → primarily Bing
+```
+
+Provenance is returned in API responses and shown in the UI. See [VIABILITY.md](VIABILITY.md) for product risk analysis.
 
 ### Future: local history encryption
 
@@ -164,6 +175,7 @@ NetRail and tools like **NetMedic** (network diagnostics) remain **separate repo
 | `POST /api/search` | Programmatic research queries |
 | `POST /api/open` | Open evidence links in controlled browser |
 | `GET /api/browsers` | Display browser capabilities in host app |
+| `GET /api/backends` | List configured search backends and provenance |
 
 ### What integrators must not do
 
@@ -189,10 +201,10 @@ NetMedic IPC, MCP servers, or desktop launchers can wrap these calls in ~50 line
 |-------|-------------|-----------|
 | Language | Python 3.10+ | Fast iteration, ddgs ecosystem |
 | HTTP | FastAPI + Uvicorn | Typed API, auto-validation, scriptable |
-| Search | `ddgs` | Metasearch without API keys; operator passthrough |
+| Search | `SearchBackend` protocol | `ddgs` default; `searxng` optional; fallback chain |
 | UI | Static HTML/CSS/JS | No build chain; auditable; offline-capable assets |
 | Config | JSON in XDG | Standard Linux convention |
-| Desktop (planned) | Tauri 2 | Small binary, native webview, no Electron telemetry |
+| Desktop (planned) | Tauri 2 + **Rust port** | Single binary; avoid Python sidecar (see VIABILITY.md) |
 | Local AI (planned) | llama.cpp / GGUF | Aligns with local-model patterns used in adjacent tools |
 
 ---
@@ -222,87 +234,97 @@ The roadmap is organized into **phases** with explicit goals, deliverables, exit
 
 ---
 
-### Phase 1 — Foundation Hardening
+### Phase 1 — Credibility + Reliability (in progress)
 
-**Target versions:** 0.2 – 0.5  
-**Theme:** Make v0.1 trustworthy for daily professional use
+**Version:** 0.2.0  
+**Theme:** Close the manifesto–reality gap; survive `ddgs` breakage
 
-| Item | Description |
-|------|-------------|
-| Search history (opt-in) | Local SQLite, encrypted at rest, user purge control |
-| Export | CSV/JSON export of result sets |
-| Backend abstraction | `SearchBackend` protocol; ddgs as default plugin |
-| Error UX | Distinguish network errors vs provider errors vs empty results |
-| Connectivity hint | Document/manual link to external network tools (modular) |
-| Packaging | `.desktop` entry, systemd user service template |
-| Test suite | API tests, browser discovery mocks, search adapter mocks |
-| CHANGELOG + CONTRIBUTING | Release discipline |
+| Deliverable | State |
+|-------------|-------|
+| `SearchBackend` protocol | ✅ |
+| SearXNG backend (configure `searxng_url`) | ✅ |
+| Fallback chaining across backends | ✅ |
+| Backend provenance in API + UI | ✅ |
+| Sovereignty step indicator | ✅ |
+| CSP + stricter URL validation | ✅ |
+| Test suite (API, backends, security) | ✅ |
+| Open Letter honesty rewrite | ✅ |
+| Result caching | 🔲 v0.2.1 |
+| Async multi-backend fanout | 🔲 v0.2.1 |
+| Brave Search API (BYO key) | 🔲 v0.2.2 |
 
-**Exit criteria:** Reproducible installs, documented errors, export for research workflows.
-
-**Risks:** Provider breakage — mitigate with backend plugin system early.
+**Exit criteria:** User sees where results come from; SearXNG works when configured; tests gate releases.
 
 ---
 
-### Phase 2 — Native Shell
+### Phase 2 — Retention + Utility
+
+**Target version:** 0.3  
+**Theme:** NetRail remembers — switching cost emerges
+
+| Item | Description |
+|------|-------------|
+| Search history (opt-in) | Encrypted SQLite + FTS5 over past queries |
+| Revisit badges | `[opened 3d ago]` from local open log |
+| Result collections | Named sets — "OSINT 2026", exportable |
+| CSV/JSON export | Research deliverables |
+
+**Exit criteria:** Daily users accumulate state they will not casually abandon.
+
+---
+
+### Phase 3 — Distribution
+
+**Target version:** 0.4  
+**Theme:** Install friction kills adoption — fix before more features
+
+| Item | Description |
+|------|-------------|
+| Flatpak | Primary Linux consumer path |
+| AppImage | Zero-install option |
+| Docker image | Headless/API deployment |
+| One-line installer | Verified curl script |
+| `.desktop` + systemd user unit | Background daemon option |
+
+**Exit criteria:** Non-git-clone install works on major distros.
+
+---
+
+### Phase 4 — Native Shell (Rust)
+
+**Target version:** 0.5  
+**Theme:** End the "open Chrome to use privacy search" paradox
+
+| Item | Description |
+|------|-------------|
+| Rust port of search + browser modules | ~500 LOC Python → Rust; no Python sidecar |
+| Tauri 2 shell | System webview, single ~8MB binary |
+| System tray + global hotkey | Always-available research console |
+| Python variant retained | Headless/API-only lightweight install |
+
+**Architecture decision:** Full Rust port preferred over Python sidecar. Python codebase is small enough for a focused sprint; eliminates distribution and cold-start problems permanently.
+
+**Exit criteria:** Double-click launch with no browser and no venv required.
+
+---
+
+### Phase 5 — Public Launch
 
 **Target version:** 1.0  
-**Theme:** NetRail without needing a browser to run NetRail
+**Theme:** Multi-backend merge as technical moat
 
 | Item | Description |
 |------|-------------|
-| Tauri desktop app | Wrap existing UI in system webview |
-| System tray | Background mode, quick-search palette |
-| Global hotkey | Summon search from anywhere (optional) |
-| Single-instance lock | PID/lock file pattern (similar to mature Linux tools) |
-| Cross-platform builds | Linux first; macOS/Windows experimental |
+| Async fanout + dedupe merge | Parallel backends; interleaved results |
+| Brave/Bing BYO-key backends | Stable API contracts for professionals |
+| Polished onboarding | Sovereignty wizard; SearXNG setup guide |
+| Institutional license tier | Newsrooms, legal, government (open core) |
 
-**Architecture shift:**
-
-```
-┌─────────────────────────────────────┐
-│  Tauri shell (Rust)                 │
-│  ├── WebView → existing static UI   │
-│  ├── spawn Python sidecar OR        │
-│  │   port search to Rust httpx      │
-│  └── browsers.rs (ported launcher)  │
-└─────────────────────────────────────┘
-```
-
-**Exit criteria:** AppImage or native package runs without manual `python -m netrail`.
+**Exit criteria:** Reliability and coverage justify recommendation to non-hobbyist professionals.
 
 ---
 
-### Phase 3 — Pluggable Discovery
-
-**Target versions:** 1.1 – 1.4  
-**Theme:** Choose your index; reduce single-provider dependency
-
-| Backend | Role |
-|---------|------|
-| `ddgs` (default) | Broad metasearch, zero config |
-| SearXNG (local) | Self-hosted aggregator; user owns instance |
-| Brave Search API | BYO API key; stable JSON |
-| Bing Web API | Enterprise/research BYO key |
-| Custom HTTP | User-defined endpoint |
-
-**Config example (planned):**
-
-```json
-{
-  "backends": [
-    { "id": "ddgs", "enabled": true },
-    { "id": "searxng", "enabled": true, "url": "http://127.0.0.1:8080" }
-  ],
-  "merge_strategy": "dedupe_interleave"
-}
-```
-
-**Exit criteria:** User can run NetRail with zero commercial search accounts, or with paid APIs they control.
-
----
-
-### Phase 4 — Owned Corpus
+### Phase 6 — Owned Corpus
 
 **Target versions:** 2.0 – 2.4  
 **Theme:** Discovery without borrowing planetary indexes
@@ -336,9 +358,9 @@ The roadmap is organized into **phases** with explicit goals, deliverables, exit
 
 ---
 
-### Phase 5 — Local Intelligence
+### Phase 7 — Local Intelligence
 
-**Target versions:** 2.5 – 2.9  
+**Target versions:** 2.5 – 2.9
 **Theme:** AI as judgment layer, not replacement for fetch
 
 | Item | Description |
@@ -364,9 +386,9 @@ User intent  →  Local LLM (GBNF-constrained)
 
 ---
 
-### Phase 6 — Ecosystem & Long-Term Lifecycle
+### Phase 8 — Ecosystem & Long-Term Lifecycle
 
-**Target versions:** 3.0+  
+**Target versions:** 3.0+
 **Theme:** NetRail as a platform others can orbit
 
 | Item | Description |

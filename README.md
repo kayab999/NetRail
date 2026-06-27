@@ -7,20 +7,25 @@ NetRail is a privacy-first search front-end that runs entirely on your machine. 
 > This is an open letter in code: you do not need a surveillance company to find things on the internet.  
 > Read the full manifesto in [OPEN_LETTER.md](OPEN_LETTER.md).
 
-**Version:** 0.1.0 · **License:** [AGPL-3.0](LICENSE)
+**Version:** 0.2.0 · **License:** [AGPL-3.0](LICENSE)
+
+**Tagline:** *Search first. Browse second. On your terms.*
 
 ---
 
-## Features (v0.1)
+## Features (v0.2)
 
 | Area | Capabilities |
 |------|-------------|
 | **Web search** | Metasearch with operator passthrough (`site:`, `filetype:`, `intitle:`, `"phrase"`, `-exclude`) |
 | **Image search** | Separate image tab with thumbnail previews |
 | **Link rail** | Results in-app; you decide what to open |
+| **Backend provenance** | Every result shows `via ddgs` / `via searxng` — we disclose the index chain |
+| **Pluggable backends** | `SearchBackend` protocol; `ddgs` default + optional self-hosted SearXNG |
+| **Fallback chaining** | If one backend fails, the next is tried automatically |
 | **Browser control** | Detect installed browsers; per-session private/incognito mode |
 | **Privacy** | Binds to `127.0.0.1` only; no telemetry SDKs; settings in XDG config |
-| **API** | Local REST API for scripting and future modular integrations |
+| **API** | Local REST API for scripting and modular integrations |
 
 ---
 
@@ -77,7 +82,8 @@ NetRail/
 |----------|-------------|
 | [User Manual](docs/MANUAL.md) | How to search, use operators, configure browsers, troubleshoot |
 | [Architecture & Roadmap](docs/ARCHITECTURE.md) | System design, privacy model, modular boundaries, long-term lifecycle |
-| [Open Letter](OPEN_LETTER.md) | Philosophy and motivation |
+| [Viability Assessment](docs/VIABILITY.md) | Product risks, competitive position, business model, strategic responses |
+| [Open Letter](OPEN_LETTER.md) | Philosophy and motivation (includes v0.2 honesty about index chain) |
 
 ---
 
@@ -89,7 +95,13 @@ The internet is a network of direct connections. Search indexes are **optional s
 2. **Results render locally** in the link rail.
 3. **You choose** the link, browser, and whether to go private.
 
-In v0.1, broad discovery uses open metasearch providers via the `ddgs` library — not Google accounts, Chrome sync, or proprietary apps. Future versions add pluggable backends and local indexes you control. See [ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full technical path.
+**Default discovery chain (disclosed, not hidden):**
+
+```
+Your query → NetRail → ddgs → DuckDuckGo metasearch → primarily Bing's index
+```
+
+Configure `searxng_url` in `~/.config/netrail/settings.json` to use an instance you control. No Google accounts. No Chrome sync. No NetRail telemetry. See [OPEN_LETTER.md](OPEN_LETTER.md) and [VIABILITY.md](docs/VIABILITY.md).
 
 ---
 
@@ -103,6 +115,7 @@ All endpoints bind to `127.0.0.1:7421` only.
 | `/api/search` | POST | `{ "query", "mode": "web"\|"images", "max_results" }` |
 | `/api/open` | POST | `{ "url", "browser_id", "private_mode" }` |
 | `/api/browsers` | GET | List detected browsers |
+| `/api/backends` | GET | List search backends and provenance |
 | `/api/settings` | GET/PUT | Read/write user preferences |
 
 Example:
@@ -148,13 +161,13 @@ Configuration is stored at `~/.config/netrail/settings.json`.
 
 | Phase | Focus |
 |-------|-------|
-| **v0.1** *(current)* | Web + image search, link rail, browser picker, zero telemetry |
-| **v0.2–v0.5** | History, export, backend plugins, connectivity UX |
-| **v1.0** | Native desktop shell (Tauri), no browser required to use NetRail |
-| **v1.x** | Self-hosted backends (SearXNG), BYO API keys |
-| **v2.x** | Local crawl cache, trusted-domain indexes |
-| **v2.x+** | Local AI reranking and query assistance |
-| **v3.x** | Optional modular integrations (IPC bridges, MCP tools) |
+| **v0.2** *(current)* | SearchBackend protocol, SearXNG, provenance UI, tests |
+| **v0.3** | Search history, collections, export |
+| **v0.4** | Flatpak, AppImage, Docker, installers |
+| **v0.5** | Tauri + Rust port (no Python sidecar) |
+| **v1.0** | Multi-backend fanout, BYO API keys, public launch |
+| **v2.x** | Local crawl cache, owned indexes |
+| **v3.x** | Local AI reranking, MCP, modular integrations |
 
 Full lifecycle detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#lifecycle-roadmap)
 

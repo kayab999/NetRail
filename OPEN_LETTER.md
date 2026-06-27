@@ -1,6 +1,6 @@
 # An Open Letter Against Big-Tech Dependency
 
-*NetRail, 2026*
+*NetRail — June 2026*
 
 ---
 
@@ -12,7 +12,36 @@ A handful of companies built the maps we use to navigate a decentralized web. Th
 
 You have an ISP. You have a computer. That is enough to request any page on the open web. What you lack is not permission from Silicon Valley — it is a **console** that respects you: local, operator-aware, link-first, silent.
 
-NetRail is that console. A love letter to Web Ferret and the early web, when power users ran metasearch from the desktop and decided for themselves what to open.
+NetRail is that console — a desktop search workflow that shows you links and lets you choose **before** you ever open a browser.
+
+## Radical honesty about v0.2
+
+We will not pretend independence we have not built yet.
+
+**Today, unless you configure your own SearXNG instance**, NetRail's default path is:
+
+```
+Your query → NetRail (localhost) → ddgs library → DuckDuckGo metasearch → primarily Bing's index
+```
+
+That is borrowed infrastructure. We do not call it sovereign. We call it **Step 1 of 5** on a visible gradient toward control you own.
+
+What *is* sovereign today:
+
+- NetRail sends **zero analytics** — audit `netrail/main.py`, `netrail/search.py`, and `netrail/backends/`
+- Results render locally; **nothing opens until you click**
+- Settings stay in `~/.config/netrail/` — no account, no sync
+- Backend provenance is **shown on every result** — we do not hide the chain
+
+What becomes sovereign next (and in what order):
+
+1. **Local console** — no NetRail telemetry *(now)*
+2. **Pluggable backends + fallback** — not one fragile provider *(now)*
+3. **Self-hosted SearXNG** — your instance, your engines *(configure `searxng_url`)*
+4. **Local history and corpus** — your research accumulates on your machine
+5. **Owned index** — crawl allowlists you define; search without borrowed maps
+
+Independence is incremental. Honesty is not optional.
 
 ## What we believe
 
@@ -24,18 +53,18 @@ NetRail is that console. A love letter to Web Ferret and the early web, when pow
 
 ## What NetRail is not
 
-- Not a Google replacement built on Google's index.
+- Not a claim of a Google-free index in v0.2 (unless you bring your own backend).
 - Not a venture-backed "AI search" with a chatbox and a billing page.
 - Not a product that phones home.
 
 ## What you can do
 
 - Run it. Break it. Fix it. Fork it.
-- Add backends that align with your ethics.
+- Point `searxng_url` at an instance you control.
 - Tell others that **dependency is a choice**.
 
 The web is still out there — messy, magnificent, bigger than any single company. We intend to look at it on our terms.
 
-**Install NetRail. Take back the rail.**
+**Search first. Browse second. Take back the rail.**
 
 — The NetRail contributors

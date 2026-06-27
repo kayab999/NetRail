@@ -82,10 +82,20 @@ function showState(title, message, isError = false) {
   els.results.classList.add("hidden");
 }
 
+function updateSovereignty(payload) {
+  const pill = document.getElementById("sovereignty-pill");
+  const label = document.getElementById("sovereignty-label");
+  if (!pill || !label || !payload.sovereignty) return;
+  const { step, total, label: text } = payload.sovereignty;
+  label.textContent = `Step ${step}/${total} · ${text.toLowerCase()}`;
+  pill.title = (payload.provenance_chain || []).join("\n");
+}
+
 function renderResults(payload) {
   els.state.hidden = true;
   els.results.innerHTML = "";
   els.results.classList.remove("hidden");
+  updateSovereignty(payload);
 
   if (!payload.results.length) {
     showState("No results", `Nothing came back for “${payload.query}”. Try different operators.`);
@@ -107,8 +117,11 @@ function renderResults(payload) {
 
     const body = document.createElement("div");
     body.className = "result-body";
+    const provenance = item.provenance
+      ? `<span class="provenance-badge" title="${escapeHtml(item.provenance)}">via ${escapeHtml(item.backend || "unknown")}</span>`
+      : "";
     body.innerHTML = `
-      <h3><a href="#" data-url="${encodeURIComponent(item.url)}">${escapeHtml(item.title)}</a></h3>
+      <h3><a href="#" data-url="${encodeURIComponent(item.url)}">${escapeHtml(item.title)}</a> ${provenance}</h3>
       <span class="result-url">${escapeHtml(item.url)}</span>
       ${item.snippet ? `<p class="result-snippet">${escapeHtml(item.snippet)}</p>` : ""}
     `;

@@ -2,6 +2,27 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.2.0] — 2026-06-27
+
+### Added
+
+- `SearchBackend` protocol and `netrail/backends/` package
+- SearXNG backend (configure `searxng_url` in settings)
+- Backend fallback chaining and result deduplication
+- Backend provenance in API responses and UI badges
+- Sovereignty step indicator (1–5) in header
+- `GET /api/backends` endpoint
+- Content-Security-Policy and security headers
+- Stricter URL validation (`netrail/security.py`)
+- Test suite: API, backends, security
+- [docs/VIABILITY.md](docs/VIABILITY.md) — product assessment and strategic response
+
+### Changed
+
+- Open Letter rewritten for radical honesty about default index chain
+- Architecture roadmap restructured (credibility → retention → distribution → Rust shell)
+- Tagline: *Search first. Browse second. On your terms.*
+
 ## [0.1.0] — 2026-06-27
 
 ### Added

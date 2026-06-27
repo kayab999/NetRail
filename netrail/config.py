@@ -11,6 +11,9 @@ DEFAULTS: dict[str, Any] = {
     "browser_id": None,
     "private_mode": False,
     "max_results": 25,
+    "backend_order": ["searxng", "ddgs"],
+    "ddgs_enabled": True,
+    "searxng_url": None,
 }
 
 
