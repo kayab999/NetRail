@@ -1,3 +1,5 @@
+const RESULTS_PAGE_SIZE = 10;
+
 const state = {
   view: "search",
   mode: "web",
@@ -23,7 +25,6 @@ const BACKEND_LABELS = {
 };
 
 const DONATE_URL = "https://buymeacoffee.com/kayabsoftware";
-const RESULTS_PAGE_SIZE = 10;
 
 const els = {
   form: document.getElementById("search-form"),

@@ -150,6 +150,18 @@
       <article id="doc-body" class="doc-body"></article>
     </dialog>
 
+    <script>
+      // Failsafe: never block the UI if app.js throws before bootstrap()
+      window.addEventListener("DOMContentLoaded", function () {
+        window.setTimeout(function () {
+          var splash = document.getElementById("splash");
+          if (splash && !splash.classList.contains("splash-hidden")) {
+            splash.classList.add("splash-hidden");
+            splash.setAttribute("aria-hidden", "true");
+          }
+        }, 2500);
+      });
+    </script>
     <script src="/static/markdown.js"></script>
     <script src="/static/app.js"></script>
   </body>
