@@ -4,6 +4,26 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-06-27
+
+### Added
+
+- **`url_resolve.rs`** — unwrap DuckDuckGo redirect URLs (`uddg`) for clean results and fanout dedupe
+- **Search result UX** — snippets (3 lines), result counter, pagination (10 + “Show more”)
+- **`docs/RELEASE_v1.2.0.md`** — release notes for packaging workflow
+
+### Changed
+
+- **Frontend** — decoded/truncated display URLs (~72 chars), improved result card CSS
+- **Version** — 1.2.0 across Rust, Tauri, npm, and Python
+
+### Fixed
+
+- **DDGS backend** — resolve redirect hrefs to destination URLs; cleaner titles from `.result__url`
+- **Fanout dedupe** — normalize resolved URLs before deduplication (Python + Rust)
+- **Packaged UI** — bundle `netrail/static/` in `.deb` / AppImage; runtime `static_dir` (fixes `index.html not found`)
+- **Tray menu** — Show / Quit on Linux; remove duplicate config tray icon; drop `prevent_exit()` blocking quit
+
 ## [1.1.1] — 2026-06-27
 
 ### Added
@@ -173,6 +193,7 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 - URL open restricted to `http://` and `https://` schemes
 - Localhost-only server bind in v0.1
 
+[1.2.0]: https://github.com/kayab999/NetRail/releases/tag/v1.2.0
 [1.1.1]: https://github.com/kayab999/NetRail/releases/tag/v1.1.1
 [1.1.0]: https://github.com/kayab999/NetRail/releases/tag/v1.1.0
 [1.0.1]: https://github.com/kayab999/NetRail/releases/tag/v1.0.1

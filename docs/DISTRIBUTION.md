@@ -168,4 +168,4 @@ Flatpak uses XDG paths under `~/.var/app/io.netrail.NetRail/`.
 
 ---
 
-*NetRail v1.1.1 — The Sovereign Search Console*
+*NetRail v1.2.0 — The Sovereign Search Console*

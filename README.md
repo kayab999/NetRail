@@ -8,12 +8,12 @@ Download the **AppImage** or **.deb** from the [latest release](https://github.c
 
 ```bash
 # Desktop app (AppImage)
-chmod +x NetRail_1.1.1_amd64.AppImage
-# Ubuntu 24.04+ without FUSE: APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.1.1_amd64.AppImage
-./NetRail_1.1.1_amd64.AppImage
+chmod +x NetRail_1.2.0_amd64.AppImage
+# Ubuntu 24.04+ without FUSE: APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.2.0_amd64.AppImage
+./NetRail_1.2.0_amd64.AppImage
 
 # Or Debian/Ubuntu package
-sudo dpkg -i NetRail_1.1.1_amd64.deb
+sudo dpkg -i NetRail_1.2.0_amd64.deb
 ```
 
 **Headless API** (homelabs, scripting, Docker):
@@ -32,7 +32,7 @@ Build from source: see [Development](#development) below.
 
 *Fanout search across SearXNG and DDGS. Results stay in the link rail until you open them.*
 
-**Version:** 1.1.1 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
+**Version:** 1.2.0 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
 
 ---
 
@@ -147,7 +147,7 @@ Full API: [docs/MANUAL.md](docs/MANUAL.md)
 | [Distribution](docs/DISTRIBUTION.md) | Flatpak, Docker, AppImage, install |
 | [Open Letter](OPEN_LETTER.md) | Philosophy and the v1.0 postscript |
 | [API error codes](docs/API_ERRORS.md) | Stable `code` / `detail` / `status` reference |
-| [Release notes](docs/RELEASE_v1.1.1.md) | v1.1.1 tests & audit fixes |
+| [Release notes](docs/RELEASE_v1.2.0.md) | v1.2.0 search results UX |
 
 ---
 

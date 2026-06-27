@@ -26,7 +26,7 @@ The Tauri shell embeds the UI and starts the Rust API on `127.0.0.1:7421`. Use t
 On Ubuntu 24.04 without FUSE:
 
 ```bash
-APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.1.1_amd64.AppImage
+APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.2.0_amd64.AppImage
 ```
 
 ### Headless API
