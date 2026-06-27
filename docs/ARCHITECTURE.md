@@ -257,19 +257,22 @@ The roadmap is organized into **phases** with explicit goals, deliverables, exit
 
 ---
 
-### Phase 2 — Retention + Utility
+### Phase 2 — Retention + Utility (complete)
 
-**Target version:** 0.3  
-**Theme:** NetRail remembers — switching cost emerges
+**Version:** 0.3.0  
+**Status:** Released
 
-| Item | Description |
-|------|-------------|
-| Search history (opt-in) | Encrypted SQLite + FTS5 over past queries |
-| Revisit badges | `[opened 3d ago]` from local open log |
-| Result collections | Named sets — "OSINT 2026", exportable |
-| CSV/JSON export | Research deliverables |
+| Deliverable | State |
+|-------------|-------|
+| SQLite schema (`queries`, `results`, `visits`, `collections`) | ✅ |
+| Fernet field encryption + keyring / `NETRAIL_DB_KEY` | ✅ |
+| FTS5 local history search | ✅ |
+| Revisit badges + visit metadata in search API | ✅ |
+| Collections + CSV/JSON export | ✅ |
+| `history_ttl_days` auto-purge | ✅ |
+| History tab UI | ✅ |
 
-**Exit criteria:** Daily users accumulate state they will not casually abandon.
+**Exit criteria:** User can search past queries faster than re-Googling them. ✅
 
 ---
 

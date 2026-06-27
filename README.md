@@ -7,13 +7,13 @@ NetRail is a privacy-first search front-end that runs entirely on your machine. 
 > This is an open letter in code: you do not need a surveillance company to find things on the internet.  
 > Read the full manifesto in [OPEN_LETTER.md](OPEN_LETTER.md).
 
-**Version:** 0.2.0 · **License:** [AGPL-3.0](LICENSE)
+**Version:** 0.3.0 · **License:** [AGPL-3.0](LICENSE)
 
 **Tagline:** *Search first. Browse second. On your terms.*
 
 ---
 
-## Features (v0.2)
+## Features (v0.3)
 
 | Area | Capabilities |
 |------|-------------|
@@ -25,6 +25,9 @@ NetRail is a privacy-first search front-end that runs entirely on your machine. 
 | **Fallback chaining** | If one backend fails, the next is tried automatically |
 | **Browser control** | Detect installed browsers; per-session private/incognito mode |
 | **Privacy** | Binds to `127.0.0.1` only; no telemetry SDKs; settings in XDG config |
+| **Local history** | Encrypted SQLite + FTS5; search your past queries locally |
+| **Collections** | Save links to named research sets; export CSV/JSON |
+| **Revisit signals** | `visited 3d ago` badges from local open log |
 | **API** | Local REST API for scripting and modular integrations |
 
 ---
@@ -161,8 +164,8 @@ Configuration is stored at `~/.config/netrail/settings.json`.
 
 | Phase | Focus |
 |-------|-------|
-| **v0.2** *(current)* | SearchBackend protocol, SearXNG, provenance UI, tests |
-| **v0.3** | Search history, collections, export |
+| **v0.3** *(current)* | History, collections, revisit badges, FTS5 local search |
+| **v0.2** | SearchBackend protocol, SearXNG, provenance UI, tests |
 | **v0.4** | Flatpak, AppImage, Docker, installers |
 | **v0.5** | Tauri + Rust port (no Python sidecar) |
 | **v1.0** | Multi-backend fanout, BYO API keys, public launch |

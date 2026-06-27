@@ -35,8 +35,9 @@
           </div>
           <div class="controls-row">
             <div class="tabs" role="tablist">
-              <button type="button" class="tab active" data-mode="web">Web</button>
-              <button type="button" class="tab" data-mode="images">Images</button>
+              <button type="button" class="tab active" data-view="search" data-mode="web">Web</button>
+              <button type="button" class="tab" data-view="search" data-mode="images">Images</button>
+              <button type="button" class="tab" data-view="history">History</button>
             </div>
             <div class="prefs">
               <label class="select-wrap">
@@ -52,7 +53,7 @@
             </div>
           </div>
         </form>
-        <p class="operator-hint">
+        <p class="operator-hint" id="operator-hint">
           Operators:
           <code>site:</code>
           <code>filetype:</code>
@@ -72,13 +73,44 @@
           </p>
         </div>
         <ul id="results" class="results hidden" aria-live="polite"></ul>
+        <div id="history-panel" class="history-panel hidden">
+          <div class="history-toolbar">
+            <input id="history-query" type="search" placeholder="Search your local history…" />
+            <button type="button" id="history-search-btn" class="ghost-btn">Find</button>
+            <button type="button" id="history-purge-btn" class="ghost-btn danger">Purge all</button>
+          </div>
+          <ul id="history-list" class="history-list"></ul>
+        </div>
       </main>
 
       <footer class="footer">
-        <span>NetRail v0.1 — an open letter against big-tech dependency</span>
-        <a href="https://github.com/" id="source-link" hidden>Source</a>
+        <span>NetRail v0.3 — local history · zero telemetry</span>
       </footer>
     </div>
+
+    <dialog id="save-dialog" class="save-dialog">
+      <form method="dialog" id="save-form">
+        <h3>Save to collection</h3>
+        <p id="save-target-url" class="save-url"></p>
+        <label>
+          Collection
+          <select id="save-collection-select"></select>
+        </label>
+        <label>
+          Or new collection
+          <input id="save-new-collection" type="text" placeholder="OSINT Ukraine 2026" />
+        </label>
+        <label>
+          Notes (optional)
+          <input id="save-notes" type="text" placeholder="Why this link matters" />
+        </label>
+        <div class="dialog-actions">
+          <button type="button" id="save-cancel" class="ghost-btn">Cancel</button>
+          <button type="submit" id="save-confirm" class="open-btn">Save</button>
+        </div>
+      </form>
+    </dialog>
+
     <script src="/static/app.js"></script>
   </body>
 </html>

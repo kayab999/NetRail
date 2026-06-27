@@ -14,6 +14,9 @@ DEFAULTS: dict[str, Any] = {
     "backend_order": ["searxng", "ddgs"],
     "ddgs_enabled": True,
     "searxng_url": None,
+    "history_enabled": True,
+    "history_encrypt": True,
+    "history_ttl_days": 90,
 }
 
 

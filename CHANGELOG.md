@@ -2,6 +2,27 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] — 2026-06-27
+
+### Added
+
+- Local SQLite history at `~/.local/share/netrail/netrail.db`
+- Field-level Fernet encryption (OS keyring or `NETRAIL_DB_KEY` env)
+- FTS5 full-text search over past queries
+- Visit tracking with revisit metadata on search results
+- Research collections with save-to-collection UI and CSV/JSON export
+- History tab: local search, re-run, per-entry delete, purge all
+- Auto-purge via `history_ttl_days` (default 90)
+- API: `/api/history`, `/api/collections`, collection items and export
+- `result_id` on search results; visits recorded on `/api/open`
+- Sovereignty step 4 when local history is active
+
+### Settings
+
+- `history_enabled` (default `true`)
+- `history_encrypt` (default `true`)
+- `history_ttl_days` (default `90`)
+
 ## [0.2.0] — 2026-06-27
 
 ### Added

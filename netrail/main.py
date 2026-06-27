@@ -1,12 +1,14 @@
 from __future__ import annotations
 
+import re
 import webbrowser
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, Literal
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -14,6 +16,7 @@ from netrail import __version__
 from netrail.backends.registry import get_enabled_backends
 from netrail.browsers import discover_browsers, open_url
 from netrail.config import load_settings, save_settings
+from netrail.history.store import get_store, init_history_on_startup
 from netrail.search import search
 from netrail.security import validate_open_url
 
@@ -30,10 +33,18 @@ CSP = (
     "form-action 'self'"
 )
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    init_history_on_startup()
+    yield
+
+
 app = FastAPI(
     title="NetRail",
     description="Local research console. No telemetry. No accounts.",
     version=__version__,
+    lifespan=lifespan,
 )
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -58,6 +69,7 @@ class OpenRequest(BaseModel):
     url: str = Field(min_length=1)
     browser_id: str | None = None
     private_mode: bool = False
+    result_id: int | None = None
 
 
 class SettingsModel(BaseModel):
@@ -67,6 +79,33 @@ class SettingsModel(BaseModel):
     backend_order: list[str] = Field(default_factory=lambda: ["searxng", "ddgs"])
     ddgs_enabled: bool = True
     searxng_url: str | None = None
+    history_enabled: bool = True
+    history_encrypt: bool = True
+    history_ttl_days: int = Field(default=90, ge=0, le=3650)
+
+
+class CollectionCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class CollectionItemCreate(BaseModel):
+    url: str = Field(min_length=1)
+    title: str = Field(min_length=1, max_length=500)
+    notes: str | None = Field(default=None, max_length=2000)
+
+
+def _require_store():
+    store = get_store()
+    if store is None:
+        raise HTTPException(status_code=400, detail="History is disabled in settings.")
+    return store
+
+
+def _fts_query(q: str) -> str:
+    cleaned = re.sub(r"[^\w\s-]", " ", q, flags=re.UNICODE).strip()
+    if not cleaned:
+        return '""'
+    return " ".join(f'"{part}"' for part in cleaned.split())
 
 
 @app.get("/")
@@ -78,12 +117,14 @@ async def index() -> FileResponse:
 async def health() -> dict[str, Any]:
     settings = load_settings()
     backends = get_enabled_backends(settings)
+    store = get_store()
     return {
         "status": "ok",
         "version": __version__,
         "telemetry": "none",
         "backends_configured": [b.name for b in backends],
         "default_provenance": "ddgs → DuckDuckGo metasearch → primarily Bing index",
+        "history": store.stats() if store else {"enabled": False},
     }
 
 
@@ -132,7 +173,7 @@ async def run_search(request: SearchRequest) -> dict[str, Any]:
             mode=request.mode,
             max_results=request.max_results,
         )
-    except Exception as exc:  # noqa: BLE001 — surface provider errors to UI
+    except Exception as exc:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
@@ -148,13 +189,98 @@ async def open_link(request: OpenRequest) -> dict[str, str]:
     private_mode = request.private_mode or bool(settings.get("private_mode"))
 
     try:
-        return open_url(safe_url, browser_id=browser_id, private_mode=private_mode)
+        result = open_url(safe_url, browser_id=browser_id, private_mode=private_mode)
     except RuntimeError as exc:
         try:
             webbrowser.open(safe_url)
-            return {"browser": "system default", "mode": "normal", "url": safe_url}
+            result = {"browser": "system default", "mode": "normal", "url": safe_url}
         except Exception as fallback_exc:  # noqa: BLE001
             raise HTTPException(status_code=500, detail=str(exc)) from fallback_exc
+
+    store = get_store()
+    if store:
+        store.record_visit(
+            safe_url,
+            result_id=request.result_id,
+            browser_id=browser_id,
+            private_mode=private_mode,
+        )
+
+    return result
+
+
+@app.get("/api/history")
+async def get_history(
+    q: str | None = None,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    store = _require_store()
+    fts_q = _fts_query(q) if q else None
+    return store.list_history(q=fts_q, limit=limit, offset=offset)
+
+
+@app.delete("/api/history/{query_id}")
+async def delete_history_entry(query_id: int) -> dict[str, Any]:
+    store = _require_store()
+    if not store.delete_history_entry(query_id):
+        raise HTTPException(status_code=404, detail="History entry not found.")
+    return {"status": "ok", "deleted_id": query_id}
+
+
+@app.delete("/api/history")
+async def purge_history() -> dict[str, Any]:
+    store = _require_store()
+    count = store.purge_all_history()
+    return {"status": "ok", "purged": count}
+
+
+@app.get("/api/collections")
+async def list_collections() -> list[dict[str, Any]]:
+    store = _require_store()
+    return store.list_collections()
+
+
+@app.post("/api/collections")
+async def create_collection(body: CollectionCreate) -> dict[str, Any]:
+    store = _require_store()
+    try:
+        return store.create_collection(body.name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/collections/{collection_id}/items")
+async def add_collection_item(collection_id: int, body: CollectionItemCreate) -> dict[str, Any]:
+    store = _require_store()
+    try:
+        safe_url = validate_open_url(body.url)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        return store.add_collection_item(
+            collection_id,
+            url=safe_url,
+            title=body.title,
+            notes=body.notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/collections/{collection_id}/export")
+async def export_collection(
+    collection_id: int,
+    fmt: Literal["json", "csv"] = Query(default="json"),
+) -> Response:
+    store = _require_store()
+    try:
+        content = store.export_collection(collection_id, fmt=fmt)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    media = "application/json" if fmt == "json" else "text/csv"
+    return PlainTextResponse(content=content, media_type=media)
 
 
 def main() -> None:
