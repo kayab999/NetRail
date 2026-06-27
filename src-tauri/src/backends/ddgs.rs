@@ -44,11 +44,27 @@ impl DdgsBackend {
         query: &str,
         max_results: usize,
     ) -> NetRailResult<Vec<SearchResult>> {
-        let url = format!(
-            "https://html.duckduckgo.com/html/?q={}",
-            urlencoding::encode(query)
-        );
-        let body = self.client.get(&url).send().await?.text().await?;
+        let body = self
+            .client
+            .post("https://html.duckduckgo.com/html/")
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .header("Accept", "text/html,application/xhtml+xml")
+            .header("Accept-Language", "en-US,en;q=0.9")
+            .body(format!("q={}&b=&l=us-en", urlencoding::encode(query)))
+            .send()
+            .await?
+            .text()
+            .await?;
+
+        if Self::is_ddg_bot_challenge(&body) {
+            return Err(NetRailError::BackendFailure {
+                code: "DDGS_BOT_CHALLENGE",
+                backend: self.name().into(),
+                message:
+                    "DuckDuckGo blocked automated HTML search (bot challenge). Try again later or enable Brave/SearXNG."
+                        .into(),
+            });
+        }
 
         let document = Html::parse_document(&body);
         let result_sel = Selector::parse(".result").map_err(|e| NetRailError::Internal {
@@ -178,6 +194,10 @@ impl DdgsBackend {
         Ok(results)
     }
 
+    fn is_ddg_bot_challenge(body: &str) -> bool {
+        body.contains("anomaly-modal") || body.contains("bots use DuckDuckGo")
+    }
+
     async fn fetch_vqd(&self, query: &str) -> NetRailResult<String> {
         let url = format!("https://duckduckgo.com/?q={}", urlencoding::encode(query));
         let body = self.client.get(&url).send().await?.text().await?;
@@ -199,5 +219,22 @@ impl DdgsBackend {
             backend: "ddgs".into(),
             message: "could not obtain image search token".into(),
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DdgsBackend;
+
+    #[test]
+    fn detects_ddg_bot_challenge_page() {
+        let html = r#"<div class="anomaly-modal__title">Unfortunately, bots use DuckDuckGo too.</div>"#;
+        assert!(DdgsBackend::is_ddg_bot_challenge(html));
+    }
+
+    #[test]
+    fn normal_result_html_is_not_challenge() {
+        let html = r#"<div class="result"><a class="result__a" href="https://example.com">Example</a></div>"#;
+        assert!(!DdgsBackend::is_ddg_bot_challenge(html));
     }
 }

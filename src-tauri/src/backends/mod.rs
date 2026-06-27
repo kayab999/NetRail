@@ -4,6 +4,7 @@ pub mod merge;
 pub mod searxng;
 pub mod types;
 pub mod url_resolve;
+pub mod wikipedia;
 
 use crate::config::Settings;
 use crate::error::{NetRailError, NetRailResult};
@@ -80,6 +81,7 @@ impl BackendKind {
 use ddgs::DdgsBackend;
 use searxng::SearxngBackend;
 use brave::BraveBackend;
+use wikipedia::WikipediaBackend;
 
 pub fn get_enabled_backends(settings: &Settings, client: &Client) -> Vec<BackendKind> {
     let mut backends = Vec::new();
@@ -185,7 +187,7 @@ async fn query_backend(
     let results = backend
         .search(client, query, mode, max_results)
         .await
-        .map_err(|e| format!("{name}: {e}"))?;
+        .map_err(|e| e.to_string())?;
     Ok(BackendBatch {
         name,
         provenance,
@@ -288,12 +290,18 @@ async fn search_with_fanout_inner(
                 provenance_chain.push(batch.provenance.clone());
                 batches.push((batch.name, batch.results));
             }
-            Ok(_) => {}
-            Err(err) => errors.push(err),
+            Ok(batch) => {
+                tracing::warn!(backend = %batch.name, "backend returned zero parseable results");
+                errors.push(format!("{}: returned no results", batch.name));
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "backend search failed");
+                errors.push(err);
+            }
         }
     }
 
-    let results = if settings.search_strategy == "fallback" {
+    let mut results = if settings.search_strategy == "fallback" {
         let flat: Vec<SearchResult> = batches.iter().flat_map(|(_, r)| r.clone()).collect();
         merge::dedupe_results(flat)
             .into_iter()
@@ -302,6 +310,27 @@ async fn search_with_fanout_inner(
     } else {
         merge::merge_fanout(batches, max_results)
     };
+
+    if results.is_empty() && mode == SearchMode::Web {
+        tracing::info!(query = %query, "fanout empty — activating wikipedia fallback");
+        let wiki = WikipediaBackend::new(client.clone());
+        match wiki.search(query, mode, max_results).await {
+            Ok(wiki_results) if !wiki_results.is_empty() => {
+                tracing::info!(count = wiki_results.len(), "wikipedia fallback succeeded");
+                backends_used.push(wiki.name().into());
+                provenance_chain.push(wiki.provenance().into());
+                results = wiki_results;
+            }
+            Ok(_) => {
+                tracing::warn!("wikipedia fallback returned no results");
+                errors.push("wikipedia: returned no results".into());
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "wikipedia fallback failed");
+                errors.push(format!("wikipedia: {err}"));
+            }
+        }
+    }
 
     let step = sovereignty_step(&backends_used);
     let backends_used = if backends_used.is_empty() {

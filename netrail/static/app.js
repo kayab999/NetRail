@@ -19,6 +19,7 @@ const BACKEND_LABELS = {
   ddgs: "DDGS",
   searxng: "SearXNG",
   brave: "Brave",
+  wikipedia: "Wikipedia",
 };
 
 const DONATE_URL = "https://buymeacoffee.com/kayabsoftware";

@@ -16,8 +16,13 @@ pub fn resolve_result_url(raw: &str, depth: u8) -> String {
     }
 
     let trimmed = raw.trim();
-    let Ok(parsed) = Url::parse(trimmed) else {
-        return trimmed.to_string();
+    let absolute = if trimmed.starts_with("//") {
+        format!("https:{trimmed}")
+    } else {
+        trimmed.to_string()
+    };
+    let Ok(parsed) = Url::parse(&absolute) else {
+        return absolute;
     };
 
     if let Some(host) = parsed.host_str() {
@@ -28,7 +33,7 @@ pub fn resolve_result_url(raw: &str, depth: u8) -> String {
         }
     }
 
-    trimmed.to_string()
+    absolute
 }
 
 /// Heuristic: title is useless when it mirrors a raw/encoded redirect URL.
@@ -89,5 +94,11 @@ mod tests {
         let raw = "https://duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2Fdoc";
         let title = clean_result_title(raw, raw, Some("example.com › doc"));
         assert_eq!(title, "example.com › doc");
+    }
+
+    #[test]
+    fn unwraps_protocol_relative_ddg_redirect() {
+        let raw = "//duckduckgo.com/l/?uddg=https%3A%2F%2Fexample.com%2F";
+        assert_eq!(resolve_result_url(raw, 0), "https://example.com/");
     }
 }
