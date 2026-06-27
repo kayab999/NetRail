@@ -216,8 +216,78 @@ pub fn is_flatpak() -> bool {
     PathBuf::from("/.flatpak-info").exists()
 }
 
+/// Resolve the web UI directory at runtime (dev checkout, deb, AppImage, or override).
 pub fn static_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../netrail/static")
+    use std::sync::OnceLock;
+    static RESOLVED: OnceLock<PathBuf> = OnceLock::new();
+    RESOLVED
+        .get_or_init(resolve_static_dir)
+        .clone()
+}
+
+fn resolve_static_dir() -> PathBuf {
+    if let Ok(dir) = env::var("NETRAIL_STATIC_DIR") {
+        let path = PathBuf::from(dir);
+        if path.join("index.html").is_file() {
+            return path;
+        }
+        tracing::warn!(
+            path = %path.display(),
+            "NETRAIL_STATIC_DIR is set but index.html is missing"
+        );
+    }
+
+    if let Ok(exe) = env::current_exe() {
+        if let Some(bin_dir) = exe.parent() {
+            let candidates = [
+                bin_dir.join("../share/netrail/static"),
+                bin_dir.join("../../share/netrail/static"),
+                // AppImage / some bundles place resources next to the binary.
+                bin_dir.join("netrail/static"),
+            ];
+            for candidate in candidates {
+                if candidate.join("index.html").is_file() {
+                    return candidate
+                        .canonicalize()
+                        .unwrap_or_else(|_| candidate.clone());
+                }
+            }
+        }
+    }
+
+    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../netrail/static");
+    if dev.join("index.html").is_file() {
+        return dev;
+    }
+
+    tracing::error!(
+        "NetRail UI assets not found. Set NETRAIL_STATIC_DIR to the directory containing index.html."
+    );
+    dev
+}
+
+#[cfg(test)]
+mod static_dir_tests {
+    use super::*;
+
+    #[test]
+    fn dev_static_dir_contains_index_html() {
+        let dir = resolve_static_dir();
+        assert!(
+            dir.join("index.html").is_file(),
+            "expected index.html under {}",
+            dir.display()
+        );
+    }
+
+    #[test]
+    fn netrail_static_dir_override() {
+        let dir = static_dir();
+        std::env::set_var("NETRAIL_STATIC_DIR", dir.as_os_str());
+        let resolved = resolve_static_dir();
+        assert!(resolved.join("index.html").is_file());
+        std::env::remove_var("NETRAIL_STATIC_DIR");
+    }
 }
 
 #[cfg(test)]

@@ -71,7 +71,10 @@ pub async fn start() -> Result<(), String> {
         .await
         .map_err(|e| format!("bind {HOST}:{PORT}: {e}"))?;
 
-    tracing::info!("NetRail API listening on http://{HOST}:{PORT}");
+    tracing::info!(
+        static_dir = %static_dir().display(),
+        "NetRail API listening on http://{HOST}:{PORT}"
+    );
     axum::serve(listener, app)
         .await
         .map_err(|e| e.to_string())
@@ -107,7 +110,28 @@ async fn index() -> impl IntoResponse {
             bytes,
         )
             .into_response(),
-        Err(_) => (StatusCode::NOT_FOUND, "index.html not found").into_response(),
+        Err(err) => {
+            tracing::error!(
+                path = %path.display(),
+                error = %err,
+                "index.html not found — UI assets missing from install"
+            );
+            (
+                StatusCode::NOT_FOUND,
+                [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                format!(
+                    r#"<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"/><title>NetRail</title>
+<style>body{{font-family:system-ui,sans-serif;max-width:42rem;margin:3rem auto;padding:0 1rem;color:#e8e8e8;background:#12141a}}
+h1{{font-size:1.25rem}}code{{background:#1e2230;padding:.15rem .35rem;border-radius:.25rem}}</style></head>
+<body><h1>NetRail UI assets missing</h1>
+<p>The API is running but <code>index.html</code> was not found at <code>{}</code>.</p>
+<p>Reinstall from a current release, or set <code>NETRAIL_STATIC_DIR</code> to the folder containing the web UI.</p>
+<p>Developer checkout: <code>export NETRAIL_STATIC_DIR=/path/to/NetRail/netrail/static</code></p></body></html>"#,
+                    path.display()
+                ),
+            )
+                .into_response()
+        }
     }
 }
 

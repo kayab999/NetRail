@@ -42,8 +42,16 @@
       "icons/icon.ico"
     ],
     "linux": {
+      "deb": {
+        "files": {
+          "/usr/share/netrail/static/": "../netrail/static/"
+        }
+      },
       "appimage": {
-        "bundleMediaFramework": false
+        "bundleMediaFramework": false,
+        "files": {
+          "usr/share/netrail/static/": "../netrail/static/"
+        }
       }
     }
   },

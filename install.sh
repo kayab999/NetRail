@@ -42,6 +42,10 @@ EOF
 fi
 chmod +x "${BIN_DIR}/netrail-launch"
 
+STATIC_INSTALL="${PREFIX}/share/netrail/static"
+mkdir -p "${STATIC_INSTALL}"
+cp -a "${ROOT}/netrail/static/." "${STATIC_INSTALL}/"
+
 install -Dm644 "${ROOT}/assets/netrail.desktop" "${APP_DIR}/netrail.desktop"
 sed -i "s|Exec=netrail-launch|Exec=${BIN_DIR}/netrail-launch|" "${APP_DIR}/netrail.desktop"
 
