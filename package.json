@@ -2,6 +2,12 @@
   "name": "netrail",
   "version": "1.0.0",
   "private": true,
+  "description": "Local research console — search first, browse second",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kayab999/netrail.git"
+  },
+  "author": "Carlos Hernández <https://github.com/kayab999>",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev -- --bin netrail",

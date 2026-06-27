@@ -8,6 +8,45 @@ NetRail does not try to rebuild Google's data centers on a laptop. It tries to p
 
 ---
 
+## High-Level Design (v1.0 — current)
+
+Production v1.0 runs a **Rust Axum API** on `127.0.0.1:7421`, shared with a static web UI (`netrail/static/`). The Tauri desktop shell (`src-tauri/`) embeds that UI and spawns the API in-process. A headless `netrail-api` binary ships the same engine without GTK/Tauri. Python (`netrail/main.py`) remains for tests, Docker, Flatpak, and `install.sh` fallback.
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│  ENTRY: Tauri netrail │ netrail-api │ python -m netrail │ Docker/Flatpak │
+└───────────────────────────────┬─────────────────────────────────────────┘
+                                ▼
+┌─────────────────────────────────────────────────────────────────────────┐
+│  Axum (Rust) or FastAPI (Python) @ 127.0.0.1:7421                       │
+│  /api/search  /api/open  /api/settings  /api/history  /api/collections   │
+│  /api/docs/{manual,about}  /static/*                                   │
+└───────┬─────────────────┬──────────────────────┬──────────────────────┘
+        ▼                 ▼                      ▼
+   static UI         backends fanout         ~/.config/netrail/
+   (link rail)       ddgs │ searxng │ brave   settings.json
+                     merge + dedupe            ~/.local/share/netrail/
+                     20s deadline              netrail.db (SQLite + FTS5)
+        │                 │
+        └────────┬────────┘
+                 ▼
+        browsers.rs / browsers.py → subprocess (flatpak-spawn on Flatpak)
+                 ▼
+        External: metasearch providers + user-chosen desktop browser
+```
+
+| Component | Primary implementation | Notes |
+|-----------|------------------------|-------|
+| Search fanout | `src-tauri/src/backends/mod.rs` | `join_all`, merge, 20s timeout |
+| History | `src-tauri/src/history/mod.rs` | Fernet encryption, FTS5 |
+| URL safety | `src-tauri/src/security.rs` | Open vs backend URL policies |
+| UI | `netrail/static/app.js` | Shared across all modes |
+| Python parity | `netrail/` package | Kept for CI and legacy packaging |
+
+Repository: [github.com/kayab999/netrail](https://github.com/kayab999/netrail)
+
+---
+
 ## Design Principles
 
 | Principle | Implementation |
@@ -18,11 +57,11 @@ NetRail does not try to rebuild Google's data centers on a laptop. It tries to p
 | **Operator-native** | Power-user syntax passthrough, not dumbed-down queries |
 | **Modular** | Standalone product; optional integration via HTTP API only |
 | **Inspectable** | AGPL-3.0; behavior auditable; no hidden network calls beyond search |
-| **Incremental sovereignty** | v0.1 uses metasearch; later phases add owned indexes and local AI |
+| **Incremental sovereignty** | v1.0 fanout metasearch; later phases add owned indexes and local AI |
 
 ---
 
-## High-Level Design (v0.1)
+## High-Level Design (v0.1 — historical Python baseline)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -509,7 +548,7 @@ The **workflow** is the inheritance. The **infrastructure** is modernized for a 
 
 ## Summary
 
-NetRail v0.1 is a **modular research console**: localhost API, metasearch adapter, browser launcher, zero telemetry. The long-term blueprint moves sovereignty forward in four dimensions:
+NetRail v1.0 is a **modular research console**: localhost API (Rust-primary), multi-backend fanout, encrypted history, browser launcher, zero telemetry. Python and Docker paths remain for packaging parity. The long-term blueprint moves sovereignty forward in four dimensions:
 
 1. **Shell** — from browser-hosted UI to native app  
 2. **Discovery** — from borrowed indexes to chosen backends to owned corpora  
@@ -520,4 +559,4 @@ Each phase is shippable alone. No phase requires merging with external projects.
 
 ---
 
-*NetRail Architecture Working Document — v0.1.0 baseline — 2026*
+*NetRail Architecture Working Document — v1.0.0 (Rust-primary) — maintained by [kayab999](https://github.com/kayab999) — 2026*

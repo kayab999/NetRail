@@ -14,7 +14,7 @@ NetRail does not replace your browser. It sits in front of it. Results appear in
 
 ### Desktop app (v1.0 — recommended)
 
-Download the AppImage or `.deb` from [GitHub Releases](https://github.com/netrail/netrail/releases/latest), or build from source:
+Download the AppImage or `.deb` from [GitHub Releases](https://github.com/kayab999/netrail/releases/latest), or build from source:
 
 ```bash
 npm install && npm run build
@@ -44,9 +44,19 @@ Open **http://127.0.0.1:7421** in any browser if you prefer the web UI without t
 # or: python -m netrail
 ```
 
+### Help, About, and Donate
+
+From the desktop app or web UI header:
+
+- **Help → User Manual** — this document, rendered in-app
+- **Help → About NetRail** — project README and version highlights
+- **☕ Donate** — opens [buymeacoffee.com/kayabsoftware](https://buymeacoffee.com/kayabsoftware) in your configured browser
+
+The native Tauri menu bar also exposes **Help** and **Donate…** with the same actions.
+
 ### Stopping NetRail
 
-Close the Tauri window (API stops with the app), or press **Ctrl+C** in the terminal for headless/Python mode.
+Close the Tauri window (it hides to the tray; API keeps running), use **Quit** from the tray menu to exit fully, or press **Ctrl+C** in the terminal for headless/Python mode.
 
 ### Headless / scripting use
 
@@ -188,7 +198,7 @@ NetRail protects you from **cloud surveillance**, not from malware or untrusted 
 - No crash reporters that phone home
 - No accounts or cloud history
 - No ads
-- No binding to `0.0.0.0` (LAN exposure) in v0.1
+- No binding to `0.0.0.0` (LAN exposure) in v1.0
 
 The health endpoint explicitly reports `"telemetry": "none"`.
 
@@ -243,7 +253,35 @@ curl -s -X PUT http://127.0.0.1:7421/api/settings \
   -d '{"browser_id":"brave-browser","private_mode":true,"max_results":25}'
 ```
 
-> **Modular integrations:** External tools (e.g. network diagnostics suites) may call this API without importing NetRail code. See [ARCHITECTURE.md](ARCHITECTURE.md#modular-integration-boundary).
+### History
+
+```bash
+curl -s 'http://127.0.0.1:7421/api/history?limit=50'
+curl -s 'http://127.0.0.1:7421/api/history?q=battery&limit=20'
+curl -s -X DELETE http://127.0.0.1:7421/api/history/42
+curl -s -X DELETE http://127.0.0.1:7421/api/history
+```
+
+### Collections
+
+```bash
+curl -s http://127.0.0.1:7421/api/collections
+curl -s -X POST http://127.0.0.1:7421/api/collections \
+  -H 'Content-Type: application/json' \
+  -d '{"name":"OSINT corpus"}'
+curl -s -X POST http://127.0.0.1:7421/api/collections/1/items \
+  -H 'Content-Type: application/json' \
+  -d '{"url":"https://example.com","title":"Example","notes":"why it matters"}'
+```
+
+### In-app documentation
+
+```bash
+curl -s http://127.0.0.1:7421/api/docs/manual
+curl -s http://127.0.0.1:7421/api/docs/about
+```
+
+> **Modular integrations:** External tools may call this API without importing NetRail code. See [ARCHITECTURE.md](ARCHITECTURE.md#modular-integration-boundary).
 
 ---
 
@@ -251,13 +289,13 @@ curl -s -X PUT http://127.0.0.1:7421/api/settings \
 
 | Symptom | Likely cause | Solution |
 |---------|--------------|----------|
-| **Page won't load** | Server not running | Run `./run.sh` or `python -m netrail` |
+| **Page won't load** | Server not running | Launch the Tauri app, run `./netrail-api`, or use `./run.sh` / `python -m netrail` |
 | **Search failed (502)** | Network/DNS issue or provider timeout | Check internet connectivity; retry. If using NetMedic or similar tools, run network diagnostics separately. |
 | **No browsers listed** | No `.desktop` browser entries found | Install a browser; ensure it has a Freedesktop entry |
 | **Open does nothing** | Browser binary moved or permissions | Re-select browser in dropdown; verify `which firefox` (or your browser) works |
 | **Private mode ignored** | Browser lacks known private flag | Browser opens in normal mode; try Firefox or Chromium |
 | **Few or no results** | Provider rate limit or query too narrow | Simplify query; wait and retry |
-| **Port already in use** | Another NetRail instance on 7421 | Stop the other process or change port in `netrail/main.py` (advanced) |
+| **Port already in use** | Another NetRail instance on 7421 | Stop the other process (`ss -tlnp | grep 7421`) |
 
 ### Search failed and your network
 
@@ -276,11 +314,14 @@ NetRail is intentionally modular: network repair tools are a separate concern. O
 
 | Action | Shortcut |
 |--------|----------|
-| Focus search bar | Click or tab to `#query` (browser-dependent) |
+| Focus NetRail window (Tauri) | **Ctrl+Shift+S** |
 | Submit search | **Enter** in the search field |
-| Switch mode | Click **Web** or **Images** tab |
-
-Native keyboard shortcuts (Ctrl+K focus, Ctrl+Enter open, etc.) are planned for the Tauri desktop shell.
+| Move through results | **↑** / **↓** (when results are shown) |
+| Open highlighted result | **Enter** (with result highlighted) |
+| Open highlighted in private mode | **Shift+Enter** |
+| Copy highlighted URL | **Ctrl+Shift+C** (with search field focused) |
+| Export results | **Export** button (JSON); **Shift+click** for CSV |
+| Switch mode | Click **Web**, **Images**, or **History** tab |
 
 ---
 
@@ -289,20 +330,32 @@ Native keyboard shortcuts (Ctrl+K focus, Ctrl+Enter open, etc.) are planned for 
 ```bash
 cd NetRail
 git pull
-source .venv/bin/activate   # if using venv
+
+# Desktop (recommended)
+npm ci && npm run build
+
+# Headless API
+cd src-tauri && cargo build --release --bin netrail-api --no-default-features
+
+# Python fallback / tests
+source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Review [CHANGELOG.md](../CHANGELOG.md) when available for breaking changes.
+Review [CHANGELOG.md](../CHANGELOG.md) for breaking changes.
 
 ---
 
 ## Getting Help & Contributing
 
+- **In-app:** **Help → User Manual** / **About NetRail**
+- **Repository:** [github.com/kayab999/netrail](https://github.com/kayab999/netrail)
+- **Security:** [SECURITY.md](../SECURITY.md)
 - **Manifesto:** [OPEN_LETTER.md](../OPEN_LETTER.md)
 - **Architecture:** [ARCHITECTURE.md](ARCHITECTURE.md)
+- **Support development:** [buymeacoffee.com/kayabsoftware](https://buymeacoffee.com/kayabsoftware)
 - **License:** AGPL-3.0 — contributions welcome; fork-friendly by design
 
 ---
 
-*NetRail contributors — 2026*
+*NetRail — maintained by [kayab999](https://github.com/kayab999) — 2026*

@@ -66,11 +66,21 @@ jobs:
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
 
+      - name: Resolve release notes path
+        id: notes
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ -f "docs/RELEASE_${TAG}.md" ]; then
+            echo "path=docs/RELEASE_${TAG}.md" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=docs/RELEASE_v1.0.0.md" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Upload GitHub Release assets
         uses: softprops/action-gh-release@v2
         with:
           draft: true
           name: NetRail ${{ github.ref_name }} — The Sovereign Search Console
-          body_path: docs/RELEASE_v1.0.0.md
+          body_path: ${{ steps.notes.outputs.path }}
           files: dist/release/*
-          generate_release_notes: false
+          generate_release_notes: true

@@ -4,7 +4,7 @@
 
 ## Install (Linux)
 
-Download the **AppImage** or **.deb** from the [latest release](https://github.com/netrail/netrail/releases/latest).
+Download the **AppImage** or **.deb** from the [latest release](https://github.com/kayab999/netrail/releases/latest).
 
 ```bash
 # Desktop app (AppImage)
@@ -153,7 +153,7 @@ Full API: [docs/MANUAL.md](docs/MANUAL.md)
 ## Development
 
 ```bash
-git clone https://github.com/netrail/netrail.git && cd NetRail
+git clone https://github.com/kayab999/netrail.git && cd NetRail
 
 # Native desktop (Tauri)
 npm install && npm run build
@@ -183,6 +183,10 @@ NetRail/
 ```
 
 ---
+
+## Maintainer
+
+Developed by [Carlos Hernández (@kayab999)](https://github.com/kayab999). Support development via [Buy Me a Coffee](https://buymeacoffee.com/kayabsoftware) (also in the app **Help → Donate** menu).
 
 ## License
 
