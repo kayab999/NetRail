@@ -4,6 +4,8 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 
 ## [Unreleased]
 
+## [1.1.1] — 2026-06-27
+
 ### Added
 
 - **Error-code regression tests** — 8 HTTP integration tests (`tests/api_error_codes.rs`) plus unit coverage for `error`, `config`, and fanout total failure
@@ -15,12 +17,12 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 ### Changed
 
 - **`search::search`** — accepts injected `Settings` from `AppState` (testable fanout total failure)
-- **Docs sync** — `MANUAL.md`, `DISTRIBUTION.md`, `ARCHITECTURE.md` aligned to v1.1.0
+- **Docs sync** — `MANUAL.md`, `DISTRIBUTION.md`, `ARCHITECTURE.md` aligned to current release
 
 ### Fixed
 
 - **CI clippy** — `unnecessary_sort_by` in `browsers.rs` (Rust 1.96)
-- **README / package-lock** — install artifact names aligned to v1.1.0 artifacts
+- **README / package-lock** — install artifact names aligned to release version
 - **GitHub** — v1.0.0 draft release published as historical release
 
 ## [1.1.0] — 2026-06-27
@@ -171,5 +173,8 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 - URL open restricted to `http://` and `https://` schemes
 - Localhost-only server bind in v0.1
 
+[1.1.1]: https://github.com/kayab999/NetRail/releases/tag/v1.1.1
+[1.1.0]: https://github.com/kayab999/NetRail/releases/tag/v1.1.0
+[1.0.1]: https://github.com/kayab999/NetRail/releases/tag/v1.0.1
 [1.0.0]: https://github.com/kayab999/NetRail/releases/tag/v1.0.0
 [0.1.0]: https://github.com/kayab999/NetRail/releases/tag/v0.1.0

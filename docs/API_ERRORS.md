@@ -75,4 +75,4 @@ Python API tests: `tests/test_api.py`, `tests/test_security.py`
 
 ---
 
-*NetRail v1.1.0 — maintained by [kayab999](https://github.com/kayab999)*
+*NetRail v1.1.1 — maintained by [kayab999](https://github.com/kayab999)*

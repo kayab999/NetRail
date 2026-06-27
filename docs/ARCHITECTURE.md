@@ -463,7 +463,7 @@ User intent  →  Local LLM (GBNF-constrained)
 | Channel | Audience |
 |---------|----------|
 | `main` | Development; may break |
-| Tagged releases | General users (`v1.0.0`, `v1.1.0`, …) |
+| Tagged releases | General users (`v1.0.0`, `v1.1.1`, …) |
 | LTS (future) | Enterprise/stable after v1.0; security backports |
 
 ### Deprecation rules
