@@ -4,7 +4,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-pub const VERSION: &str = "1.0.0";
+pub const VERSION: &str = "1.1.0";
 pub const HOST: &str = "127.0.0.1";
 pub const PORT: u16 = 7421;
 

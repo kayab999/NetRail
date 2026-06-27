@@ -32,7 +32,7 @@ Build from source: see [Development](#development) below.
 
 *Fanout search across SearXNG and DDGS. Results stay in the link rail until you open them.*
 
-**Version:** 1.0.0 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
+**Version:** 1.1.0 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
 
 ---
 
