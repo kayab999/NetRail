@@ -1,23 +1,14 @@
 use super::types::{SearchMode, SearchResult};
 use reqwest::Client;
 use scraper::{Html, Selector};
-
 pub const PROVENANCE: &str = "ddgs → DuckDuckGo metasearch → primarily Bing index";
-
-const USER_AGENT: &str =
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 pub struct DdgsBackend {
     client: Client,
 }
 
 impl DdgsBackend {
-    pub fn new() -> Self {
-        let client = Client::builder()
-            .user_agent(USER_AGENT)
-            .timeout(std::time::Duration::from_secs(15))
-            .build()
-            .unwrap_or_default();
+    pub fn new(client: Client) -> Self {
         Self { client }
     }
 
@@ -194,8 +185,3 @@ impl DdgsBackend {
     }
 }
 
-impl Default for DdgsBackend {
-    fn default() -> Self {
-        Self::new()
-    }
-}

@@ -366,6 +366,21 @@ select {
   display: none;
 }
 
+.security-banner {
+  margin: 0 0 0.75rem;
+  padding: 0.7rem 0.9rem;
+  border-radius: var(--radius);
+  border: 1px solid rgba(255, 193, 7, 0.45);
+  background: rgba(255, 193, 7, 0.1);
+  color: #ffe08a;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.security-banner.hidden {
+  display: none;
+}
+
 .result-card {
   display: grid;
   grid-template-columns: auto 1fr auto;

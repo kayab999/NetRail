@@ -52,7 +52,22 @@ const els = {
   docTitle: document.getElementById("doc-title"),
   docBody: document.getElementById("doc-body"),
   docClose: document.getElementById("doc-close"),
+  securityBanner: document.getElementById("security-banner"),
 };
+
+function showSecurityBanner(message) {
+  if (!els.securityBanner || !message) return;
+  els.securityBanner.textContent = message;
+  els.securityBanner.classList.remove("hidden");
+}
+
+function applyHealthSecurity(health) {
+  const message =
+    health.history?.encryption_degraded_message ||
+    health.history?.encryption_warning ||
+    null;
+  if (message) showSecurityBanner(message);
+}
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -614,6 +629,7 @@ async function bootstrap() {
     state.settings = settings;
     els.privateMode.checked = Boolean(settings.private_mode);
     renderBrowsers();
+    applyHealthSecurity(health);
     if (health.history?.queries > 0) {
       const label = document.getElementById("sovereignty-label");
       if (label) label.textContent = "Step 4/5 · local history and corpus";
@@ -685,5 +701,13 @@ document.addEventListener("click", (event) => {
 window.addEventListener("hashchange", handleDocHash);
 window.netrailOpenDoc = openDocView;
 window.netrailDonate = openDonate;
+
+if (window.__TAURI__?.event?.listen) {
+  window.__TAURI__.event
+    .listen("security:encryption-degraded", (event) => {
+      showSecurityBanner(event.payload);
+    })
+    .catch(() => {});
+}
 
 bootstrap().then(handleDocHash);

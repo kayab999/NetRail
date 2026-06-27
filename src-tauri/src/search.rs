@@ -2,15 +2,24 @@ use crate::backends::types::{SearchMode, SearchResponse};
 use crate::backends::search_with_fallback;
 use crate::config::{load_settings, Settings};
 use crate::history::{get_store, HistoryStore};
+use reqwest::Client;
 
 pub async fn search(
+    client: &Client,
     query: &str,
     mode: &str,
     max_results: u32,
 ) -> Result<serde_json::Value, String> {
     let settings = load_settings();
-    let mode = mode.parse().unwrap_or(SearchMode::Web);
-    let response = search_with_fallback(query, mode, max_results, &settings).await;
+    let mode = match mode.trim().to_lowercase().as_str() {
+        "web" => SearchMode::Web,
+        "images" => SearchMode::Images,
+        other => {
+            tracing::warn!(mode = %other, "invalid search mode; defaulting to web");
+            SearchMode::Web
+        }
+    };
+    let response = search_with_fallback(client, query, mode, max_results, &settings).await;
 
     if response.results.is_empty() && !response.errors.is_empty() {
         return Err(response.errors.join("; "));

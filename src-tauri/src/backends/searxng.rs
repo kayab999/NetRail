@@ -65,13 +65,10 @@ pub struct SearxngBackend {
 }
 
 impl SearxngBackend {
-    pub fn new(base_url: &str) -> Self {
+    pub fn new(client: Client, base_url: &str) -> Self {
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
-            client: Client::builder()
-                .timeout(std::time::Duration::from_secs(12))
-                .build()
-                .unwrap_or_default(),
+            client,
         }
     }
 

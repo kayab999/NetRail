@@ -2,6 +2,19 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] — 2026-06-27
+
+### Added
+
+- **Shared HTTP client** — single pooled `reqwest::Client` in API state for fanout backends
+- **Keyring degradation** — history opens unencrypted when Secret Service is unavailable (WSL/i3/headless), with UI banner and Tauri event
+- **Native Tauri CSP** — aligned with Axum `security::CSP` in `tauri.conf.json`
+- **Wiremock test** — documents partial fanout (results + backend errors)
+
+### Changed
+
+- Invalid search `mode` values log `tracing::warn!` before defaulting to web
+
 ## [1.0.0] — 2026-06-27
 
 ### Added

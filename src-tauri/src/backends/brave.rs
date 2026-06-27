@@ -2,6 +2,7 @@ use super::types::{SearchMode, SearchResult};
 use reqwest::Client;
 use std::env;
 
+
 pub const PROVENANCE: &str = "Brave Search API (your key, your quota)";
 
 pub struct BraveBackend {
@@ -10,11 +11,11 @@ pub struct BraveBackend {
 }
 
 impl BraveBackend {
-    pub fn from_env() -> Option<Self> {
-        Self::from_env_var(None)
+    pub fn from_env(client: Client) -> Option<Self> {
+        Self::from_env_var(client, None)
     }
 
-    pub fn from_env_var(env_name: Option<&str>) -> Option<Self> {
+    pub fn from_env_var(client: Client, env_name: Option<&str>) -> Option<Self> {
         let primary = env_name.unwrap_or("BRAVE_SEARCH_API_KEY");
         let key = env::var(primary)
             .or_else(|_| {
@@ -37,10 +38,7 @@ impl BraveBackend {
         }
         Some(Self {
             api_key: key,
-            client: Client::builder()
-                .timeout(std::time::Duration::from_secs(12))
-                .build()
-                .unwrap_or_default(),
+            client,
         })
     }
 

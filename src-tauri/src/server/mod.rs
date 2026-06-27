@@ -4,8 +4,10 @@ use crate::config::{is_flatpak, load_settings, save_settings, static_dir, Settin
 use crate::crypto::{encryption_active, ensure_encryption_key};
 use crate::docs;
 use crate::history::{get_store, init_history_on_startup, HistoryStore};
+use crate::http_client::build_http_client;
 use crate::search;
 use crate::security::{validate_open_url, CSP};
+use reqwest::Client;
 use axum::{
     extract::{Path, Query, State},
     http::{header, HeaderValue, StatusCode},
@@ -21,6 +23,7 @@ use tower_http::services::ServeDir;
 
 #[derive(Clone)]
 pub struct AppState {
+    pub http_client: Client,
     pub settings_fn: Arc<dyn Fn() -> Settings + Send + Sync>,
 }
 
@@ -28,6 +31,7 @@ pub async fn start() -> Result<(), String> {
     init_history_on_startup(&load_settings());
 
     let state = AppState {
+        http_client: build_http_client(),
         settings_fn: Arc::new(load_settings),
     };
 
@@ -104,7 +108,7 @@ async fn index() -> impl IntoResponse {
 
 async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
     let settings = (state.settings_fn)();
-    let backends = get_enabled_backends(&settings);
+    let backends = get_enabled_backends(&settings, &state.http_client);
     let encrypt_requested = settings.history_encrypt;
     if encrypt_requested {
         ensure_encryption_key();
@@ -124,6 +128,13 @@ async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
                 "History encryption is enabled but no key is available.".into(),
             );
         }
+        if crate::history::encryption_degraded() {
+            map.insert("encryption_degraded".into(), true.into());
+            map.insert(
+                "encryption_degraded_message".into(),
+                crate::history::encryption_degraded_message().into(),
+            );
+        }
     }
 
     Json(serde_json::json!({
@@ -139,13 +150,13 @@ async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
 
 async fn list_backends(State(state): State<AppState>) -> Json<Vec<serde_json::Value>> {
     let settings = (state.settings_fn)();
-    let backends = get_enabled_backends(&settings)
+    let backends = get_enabled_backends(&settings, &state.http_client)
         .into_iter()
         .map(|b| {
             serde_json::json!({
                 "name": b.name(),
                 "provenance": b.provenance(),
-                "available": b.is_available(),
+                "available": b.is_available(&state.http_client),
                 "supports_operators": b.supports_operators(),
             })
         })
@@ -199,14 +210,22 @@ fn default_max_results() -> u32 {
     25
 }
 
-async fn run_search(Json(body): Json<SearchRequest>) -> Result<Json<serde_json::Value>, ApiError> {
+async fn run_search(
+    State(state): State<AppState>,
+    Json(body): Json<SearchRequest>,
+) -> Result<Json<serde_json::Value>, ApiError> {
     let query = body.query.trim();
     if query.is_empty() || query.len() > 500 {
         return Err(ApiError::bad_request("Invalid query."));
     }
-    let payload = search::search(query, &body.mode, body.max_results.clamp(1, 50))
-        .await
-        .map_err(ApiError::bad_gateway)?;
+    let payload = search::search(
+        &state.http_client,
+        query,
+        &body.mode,
+        body.max_results.clamp(1, 50),
+    )
+    .await
+    .map_err(ApiError::bad_gateway)?;
     Ok(Json(payload))
 }
 

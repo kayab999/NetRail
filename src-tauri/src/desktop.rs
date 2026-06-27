@@ -1,8 +1,9 @@
+use crate::history;
 use crate::server;
 use tauri::{
     menu::{MenuBuilder, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Manager, RunEvent,
+    Emitter, Manager, RunEvent,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
@@ -34,7 +35,15 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            let handle = app.handle().clone();
+            let settings = crate::config::load_settings();
+            history::init_history_on_startup(&settings);
+            if history::encryption_degraded() {
+                let _ = app.handle().emit(
+                    "security:encryption-degraded",
+                    history::encryption_degraded_message(),
+                );
+            }
+
             tauri::async_runtime::spawn(async move {
                 if let Err(err) = server::start().await {
                     tracing::error!("API server failed: {err}");
@@ -93,11 +102,6 @@ pub fn run() {
             let shortcut =
                 Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::KeyS);
             app.global_shortcut().register(shortcut)?;
-
-            std::thread::spawn(move || {
-                std::thread::sleep(std::time::Duration::from_millis(800));
-                let _ = handle;
-            });
 
             Ok(())
         })

@@ -1,3 +1,3 @@
 """NetRail — local research console. No telemetry. No accounts."""
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"

@@ -8,6 +8,24 @@ use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::HashMap;
 use std::env;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static ENCRYPTION_DEGRADED: AtomicBool = AtomicBool::new(false);
+
+pub const ENCRYPTION_DEGRADED_MESSAGE: &str =
+    "System keyring unavailable (common on WSL, i3, or headless). History is stored unencrypted this session.";
+
+pub fn encryption_degraded() -> bool {
+    ENCRYPTION_DEGRADED.load(Ordering::Relaxed)
+}
+
+pub fn encryption_degraded_message() -> &'static str {
+    ENCRYPTION_DEGRADED_MESSAGE
+}
+
+fn mark_encryption_degraded() {
+    ENCRYPTION_DEGRADED.store(true, Ordering::Relaxed);
+}
 
 static STORE: OnceCell<Mutex<Option<HistoryStore>>> = OnceCell::new();
 
@@ -105,15 +123,18 @@ pub struct HistoryStore {
 impl HistoryStore {
     pub fn open(settings: &Settings) -> Result<Self, String> {
         let want_encrypt = settings.history_encrypt;
+        let mut use_encrypt = false;
         if want_encrypt {
             ensure_encryption_key();
-            if !encryption_active() {
-                return Err(
-                    "History encryption is enabled but no encryption key is available.".into(),
+            if encryption_active() {
+                use_encrypt = true;
+            } else {
+                tracing::warn!(
+                    "keyring unavailable; degrading history encryption for this session"
                 );
+                mark_encryption_degraded();
             }
         }
-        let use_encrypt = want_encrypt && encryption_active();
         let store = Self {
             conn: connect().map_err(|e| e.to_string())?,
             encrypt: use_encrypt,

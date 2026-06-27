@@ -4,6 +4,7 @@ pub mod config;
 pub mod crypto;
 pub mod docs;
 pub mod history;
+pub mod http_client;
 pub mod search;
 pub mod security;
 pub mod server;

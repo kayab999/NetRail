@@ -7,7 +7,6 @@ pub mod types;
 use crate::config::Settings;
 use futures::future::join_all;
 use reqwest::Client;
-use std::sync::OnceLock;
 use std::time::Duration;
 use types::{SearchMode, SearchResponse, SearchResult};
 
@@ -35,29 +34,32 @@ impl BackendKind {
         }
     }
 
-    pub fn is_available(&self) -> bool {
+    pub fn is_available(&self, client: &Client) -> bool {
         match self {
-            Self::Ddgs => DdgsBackend::new().is_available(),
-            Self::Searxng(url) => SearxngBackend::new(url).is_available(),
-            Self::Brave(env) => BraveBackend::from_env_var(env.as_deref()).is_some(),
+            Self::Ddgs => DdgsBackend::new(client.clone()).is_available(),
+            Self::Searxng(url) => SearxngBackend::new(client.clone(), url).is_available(),
+            Self::Brave(env) => {
+                BraveBackend::from_env_var(client.clone(), env.as_deref()).is_some()
+            }
         }
     }
 
     pub async fn search(
         &self,
+        client: &Client,
         query: &str,
         mode: SearchMode,
         max_results: usize,
     ) -> Result<Vec<SearchResult>, String> {
         match self {
-            Self::Ddgs => DdgsBackend::new().search(query, mode, max_results).await,
+            Self::Ddgs => DdgsBackend::new(client.clone()).search(query, mode, max_results).await,
             Self::Searxng(url) => {
-                SearxngBackend::new(url)
+                SearxngBackend::new(client.clone(), url)
                     .search(query, mode, max_results)
                     .await
             }
             Self::Brave(env) => {
-                let backend = BraveBackend::from_env_var(env.as_deref())
+                let backend = BraveBackend::from_env_var(client.clone(), env.as_deref())
                     .ok_or_else(|| "brave: API key not set".to_string())?;
                 backend.search(query, mode, max_results).await
             }
@@ -73,17 +75,7 @@ use ddgs::DdgsBackend;
 use searxng::SearxngBackend;
 use brave::BraveBackend;
 
-fn health_client() -> &'static Client {
-    static CLIENT: OnceLock<Client> = OnceLock::new();
-    CLIENT.get_or_init(|| {
-        Client::builder()
-            .timeout(Duration::from_secs(3))
-            .build()
-            .unwrap_or_default()
-    })
-}
-
-pub fn get_enabled_backends(settings: &Settings) -> Vec<BackendKind> {
+pub fn get_enabled_backends(settings: &Settings, client: &Client) -> Vec<BackendKind> {
     let mut backends = Vec::new();
 
     if !settings.backends.is_empty() {
@@ -99,7 +91,13 @@ pub fn get_enabled_backends(settings: &Settings) -> Vec<BackendKind> {
                         backends.push(BackendKind::Searxng(url));
                     }
                 }
-                "brave" if BraveBackend::from_env_var(entry.api_key_env.as_deref()).is_some() => {
+                "brave"
+                    if BraveBackend::from_env_var(
+                        client.clone(),
+                        entry.api_key_env.as_deref(),
+                    )
+                    .is_some() =>
+                {
                     backends.push(BackendKind::Brave(entry.api_key_env.clone()));
                 }
                 _ => {}
@@ -116,7 +114,9 @@ pub fn get_enabled_backends(settings: &Settings) -> Vec<BackendKind> {
             "searxng" if settings.searxng_url.is_some() => {
                 backends.push(BackendKind::Searxng(settings.searxng_url.clone().unwrap()));
             }
-            "brave" if settings.brave_enabled && BraveBackend::from_env().is_some() => {
+            "brave" if settings.brave_enabled && BraveBackend::from_env(client.clone()).is_some()
+            =>
+            {
                 backends.push(BackendKind::Brave(None));
             }
             _ => {}
@@ -128,16 +128,18 @@ pub fn get_enabled_backends(settings: &Settings) -> Vec<BackendKind> {
     backends
 }
 
-async fn backend_available(backend: &BackendKind) -> bool {
+async fn backend_available(backend: &BackendKind, client: &Client) -> bool {
     match backend {
-        BackendKind::Ddgs => DdgsBackend::new().is_available(),
+        BackendKind::Ddgs => DdgsBackend::new(client.clone()).is_available(),
         BackendKind::Searxng(url) => {
             if let Some(cached) = searxng::cached_health(url) {
                 return cached;
             }
-            searxng::check_health(health_client(), url).await
+            searxng::check_health(client, url).await
         }
-        BackendKind::Brave(env) => BraveBackend::from_env_var(env.as_deref()).is_some(),
+        BackendKind::Brave(env) => {
+            BraveBackend::from_env_var(client.clone(), env.as_deref()).is_some()
+        }
     }
 }
 
@@ -166,6 +168,7 @@ struct BackendBatch {
 }
 
 async fn query_backend(
+    client: &Client,
     backend: BackendKind,
     query: &str,
     mode: SearchMode,
@@ -173,7 +176,9 @@ async fn query_backend(
 ) -> Result<BackendBatch, String> {
     let name = backend.name().to_string();
     let provenance = backend.provenance();
-    let results = backend.search(query, mode, max_results).await?;
+    let results = backend
+        .search(client, query, mode, max_results)
+        .await?;
     Ok(BackendBatch {
         name,
         provenance,
@@ -184,6 +189,7 @@ async fn query_backend(
 const FANOUT_DEADLINE: Duration = Duration::from_secs(20);
 
 pub async fn search_with_fanout(
+    client: &Client,
     query: &str,
     mode: SearchMode,
     max_results: u32,
@@ -198,16 +204,16 @@ pub async fn search_with_fanout(
 
     match tokio::time::timeout(
         FANOUT_DEADLINE,
-        search_with_fanout_inner(query, mode, max_results, settings),
+        search_with_fanout_inner(client, query, mode, max_results, settings),
     )
     .await
     {
         Ok(response) => response,
         Err(_) => {
             let mut errors = vec!["fanout: timed out after 20 seconds".into()];
-            let unavailable: Vec<String> = get_enabled_backends(settings)
+            let unavailable: Vec<String> = get_enabled_backends(settings, client)
                 .into_iter()
-                .filter(|b| !b.is_available())
+                .filter(|b| !b.is_available(client))
                 .map(|b| format!("{}: unavailable", b.name()))
                 .collect();
             errors.extend(unavailable);
@@ -226,13 +232,14 @@ pub async fn search_with_fanout(
 }
 
 async fn search_with_fanout_inner(
+    client: &Client,
     query: &str,
     mode: SearchMode,
     max_results: usize,
     settings: &Settings,
 ) -> SearchResponse {
-    let enabled = get_enabled_backends(settings);
-    let availability = join_all(enabled.iter().map(backend_available)).await;
+    let enabled = get_enabled_backends(settings, client);
+    let availability = join_all(enabled.iter().map(|b| backend_available(b, client))).await;
 
     let mut backends = Vec::new();
     let mut unavailable = Vec::new();
@@ -257,9 +264,9 @@ async fn search_with_fanout_inner(
         };
     }
 
-    let tasks = backends
-        .iter()
-        .map(|backend| query_backend(backend.clone(), query, mode, max_results));
+    let tasks = backends.iter().map(|backend| {
+        query_backend(client, backend.clone(), query, mode, max_results)
+    });
     let outcomes = join_all(tasks).await;
 
     let mut errors = unavailable;
@@ -327,12 +334,13 @@ fn empty_response(query: &str, mode: SearchMode) -> SearchResponse {
 
 /// Backward-compatible alias used by search module.
 pub async fn search_with_fallback(
+    client: &Client,
     query: &str,
     mode: SearchMode,
     max_results: u32,
     settings: &Settings,
 ) -> SearchResponse {
-    search_with_fanout(query, mode, max_results, settings).await
+    search_with_fanout(client, query, mode, max_results, settings).await
 }
 
 #[cfg(test)]
@@ -352,7 +360,8 @@ mod backend_selection_tests {
             ddgs_enabled: true,
             ..Settings::default()
         };
-        let enabled = get_enabled_backends(&settings);
+        let client = crate::http_client::build_http_client();
+        let enabled = get_enabled_backends(&settings, &client);
         let names: Vec<_> = enabled.iter().map(|b| b.name()).collect();
         assert_eq!(names, vec!["ddgs"]);
     }
@@ -370,8 +379,71 @@ mod backend_selection_tests {
         };
         std::env::remove_var("BRAVE_SEARCH_API_KEY");
         std::env::remove_var("NETRAIL_BRAVE_API_KEY");
-        let enabled = get_enabled_backends(&settings);
+        let client = crate::http_client::build_http_client();
+        let enabled = get_enabled_backends(&settings, &client);
         let names: Vec<_> = enabled.iter().map(|b| b.name()).collect();
         assert!(names.iter().all(|n| *n != "brave"));
+    }
+}
+
+#[cfg(test)]
+mod fanout_wiremock_tests {
+    use super::*;
+    use crate::config::{BackendConfig, Settings};
+    use wiremock::matchers::{method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    #[tokio::test]
+    async fn fanout_partial_failure_merges_results_and_errors() {
+        let mock_server = MockServer::start().await;
+        Mock::given(method("GET"))
+            .and(path("/search"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "results": [{
+                    "title": "Rust",
+                    "url": "https://www.rust-lang.org",
+                    "content": "systems programming"
+                }]
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let settings = Settings {
+            backends: vec![
+                BackendConfig {
+                    id: "searxng".into(),
+                    enabled: true,
+                    url: Some(mock_server.uri()),
+                    api_key_env: None,
+                },
+                BackendConfig {
+                    id: "searxng".into(),
+                    enabled: true,
+                    url: Some("http://127.0.0.1:9".into()),
+                    api_key_env: None,
+                },
+            ],
+            search_strategy: "fanout".into(),
+            ddgs_enabled: false,
+            ..Settings::default()
+        };
+
+        let client = crate::http_client::build_http_client();
+        let response =
+            search_with_fanout(&client, "rust", SearchMode::Web, 10, &settings).await;
+
+        assert!(
+            !response.results.is_empty(),
+            "expected SearXNG results from wiremock"
+        );
+        assert!(
+            !response.errors.is_empty(),
+            "expected unavailable backend error in partial fanout"
+        );
+        assert!(
+            response.errors.iter().any(|e| e.contains("searxng")),
+            "errors should mention searxng: {:?}",
+            response.errors
+        );
     }
 }

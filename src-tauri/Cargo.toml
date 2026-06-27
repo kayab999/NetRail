@@ -1,6 +1,6 @@
 [package]
 name = "netrail"
-version = "1.0.0"
+version = "1.0.1"
 default-run = "netrail"
 description = "Local research console — search first, browse second"
 authors = ["Carlos Hernández <https://github.com/kayab999>"]
@@ -71,3 +71,5 @@ opt-level = "z"
 [dev-dependencies]
 tempfile = "3"
 serial_test = "3"
+wiremock = "0.6"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
