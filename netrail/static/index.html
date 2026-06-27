@@ -98,7 +98,12 @@
             NetRail does not phone home — no analytics, no accounts, no ads.
           </p>
         </div>
+        <div id="results-meta" class="results-meta hidden" aria-live="polite">
+          <span id="results-count"></span>
+          <span id="results-backends" class="results-backends"></span>
+        </div>
         <ul id="results" class="results hidden" aria-live="polite"></ul>
+        <button type="button" id="load-more-btn" class="load-more-btn hidden">Show more results</button>
         <div id="history-panel" class="history-panel hidden">
           <div class="history-toolbar">
             <input id="history-query" type="search" placeholder="Search your local history…" />

@@ -4,6 +4,7 @@ const state = {
   searching: false,
   highlightIndex: -1,
   lastPayload: null,
+  visibleResultCount: RESULTS_PAGE_SIZE,
   settings: {
     browser_id: null,
     private_mode: false,
@@ -21,6 +22,7 @@ const BACKEND_LABELS = {
 };
 
 const DONATE_URL = "https://buymeacoffee.com/kayabsoftware";
+const RESULTS_PAGE_SIZE = 10;
 
 const els = {
   form: document.getElementById("search-form"),
@@ -32,6 +34,10 @@ const els = {
   privateMode: document.getElementById("private-mode"),
   state: document.getElementById("state"),
   results: document.getElementById("results"),
+  resultsMeta: document.getElementById("results-meta"),
+  resultsCount: document.getElementById("results-count"),
+  resultsBackends: document.getElementById("results-backends"),
+  loadMoreBtn: document.getElementById("load-more-btn"),
   historyPanel: document.getElementById("history-panel"),
   historyList: document.getElementById("history-list"),
   historyQuery: document.getElementById("history-query"),
@@ -160,6 +166,8 @@ function showState(title, message, isError = false) {
   els.state.append(h2, p);
   els.state.hidden = false;
   els.results.classList.add("hidden");
+  if (els.resultsMeta) els.resultsMeta.classList.add("hidden");
+  if (els.loadMoreBtn) els.loadMoreBtn.classList.add("hidden");
   state.highlightIndex = -1;
   if (els.exportBtn) els.exportBtn.disabled = true;
 }
@@ -245,64 +253,36 @@ function renderResults(payload) {
   }
 
   if (!payload.results.length) {
+    if (els.resultsMeta) els.resultsMeta.classList.add("hidden");
+    if (els.loadMoreBtn) els.loadMoreBtn.classList.add("hidden");
     showState("No results", `Nothing came back for “${payload.query}”. Try different operators.`);
     return;
   }
 
-  payload.results.forEach((item, index) => {
-    const li = document.createElement("li");
-    li.className = `result-card${state.mode === "images" ? " image-card" : ""}${index === 0 ? " highlighted" : ""}`;
-    li.dataset.index = String(index);
+  state.visibleResultCount = Math.min(RESULTS_PAGE_SIZE, payload.results.length);
+  updateResultsMeta(payload, state.visibleResultCount);
 
-    if (state.mode === "images" && item.image) {
-      const img = document.createElement("img");
-      img.className = "thumb";
-      img.src = item.image;
-      img.alt = item.title;
-      img.loading = "lazy";
-      li.appendChild(img);
-    }
-
-    const body = document.createElement("div");
-    body.className = "result-body";
-    const pill = backendPill(item.backend, item.provenance);
-    const revisit = visitBadge(item.visit_metadata);
-    body.innerHTML = `
-      <h3><a href="#" data-url="${encodeURIComponent(item.url)}">${escapeHtml(item.title)}</a> ${pill}</h3>
-      <span class="result-url">${escapeHtml(item.url)} ${revisit}</span>
-      ${item.snippet ? `<p class="result-snippet">${escapeHtml(item.snippet)}</p>` : ""}
-    `;
-    li.appendChild(body);
-
-    const actions = document.createElement("div");
-    actions.className = "result-actions";
-
-    const saveBtn = document.createElement("button");
-    saveBtn.className = "icon-btn";
-    saveBtn.type = "button";
-    saveBtn.title = "Save to collection";
-    saveBtn.textContent = "★";
-    saveBtn.addEventListener("click", () => openSaveDialog(item));
-    actions.appendChild(saveBtn);
-
-    const openBtn = document.createElement("button");
-    openBtn.className = "open-btn";
-    openBtn.type = "button";
-    openBtn.textContent = state.settings.private_mode ? "Open private" : "Open";
-    openBtn.addEventListener("click", () => openLink(item.url, item.result_id));
-    actions.appendChild(openBtn);
-
-    li.appendChild(actions);
-
-    body.querySelector("a").addEventListener("click", (event) => {
-      event.preventDefault();
-      openLink(item.url, item.result_id);
-    });
-
-    li.addEventListener("mouseenter", () => setHighlight(index));
-
-    els.results.appendChild(li);
+  const slice = payload.results.slice(0, state.visibleResultCount);
+  slice.forEach((item, index) => {
+    els.results.appendChild(buildResultCard(item, index));
   });
+
+  updateLoadMoreButton(payload.results.length, state.visibleResultCount);
+}
+
+function loadMoreResults() {
+  if (!state.lastPayload?.results?.length) return;
+  const total = state.lastPayload.results.length;
+  const nextCount = Math.min(total, state.visibleResultCount + RESULTS_PAGE_SIZE);
+  const existing = state.visibleResultCount;
+
+  for (let index = existing; index < nextCount; index += 1) {
+    els.results.appendChild(buildResultCard(state.lastPayload.results[index], index));
+  }
+
+  state.visibleResultCount = nextCount;
+  updateResultsMeta(state.lastPayload, nextCount);
+  updateLoadMoreButton(total, nextCount);
 }
 
 function escapeHtml(value) {
@@ -311,6 +291,173 @@ function escapeHtml(value) {
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;");
+}
+
+function resolveDisplayUrl(raw) {
+  if (!raw) return "";
+  let url = String(raw).trim();
+  try {
+    const parsed = new URL(url);
+    const host = (parsed.hostname || "").toLowerCase();
+    if (host === "duckduckgo.com" || host.endsWith(".duckduckgo.com") || host === "duck.com") {
+      const inner = parsed.searchParams.get("uddg");
+      if (inner) return resolveDisplayUrl(inner);
+    }
+    return parsed.href;
+  } catch {
+    try {
+      return decodeURIComponent(url);
+    } catch {
+      return url;
+    }
+  }
+}
+
+function decodeForDisplay(value) {
+  if (!value) return "";
+  let text = String(value);
+  for (let i = 0; i < 3; i += 1) {
+    if (!/%[0-9A-Fa-f]{2}/.test(text)) break;
+    try {
+      const next = decodeURIComponent(text);
+      if (next === text) break;
+      text = next;
+    } catch {
+      break;
+    }
+  }
+  return text;
+}
+
+function truncateText(text, maxLen = 88) {
+  const clean = decodeForDisplay(text).replace(/\s+/g, " ").trim();
+  if (clean.length <= maxLen) return clean;
+  return `${clean.slice(0, maxLen - 1)}…`;
+}
+
+function formatDisplayUrl(raw, maxLen = 72) {
+  const resolved = resolveDisplayUrl(raw);
+  try {
+    const parsed = new URL(resolved);
+    const host = parsed.hostname.replace(/^www\./i, "");
+    const path = decodeForDisplay(parsed.pathname + parsed.search);
+    const suffix = path && path !== "/" ? path : "";
+    const full = host + suffix;
+    if (full.length <= maxLen) return full;
+    if (suffix.length > maxLen - host.length - 4) {
+      return `${host}${truncateText(suffix, maxLen - host.length)}`;
+    }
+    return truncateText(full, maxLen);
+  } catch {
+    return truncateText(resolved, maxLen);
+  }
+}
+
+function formatResultTitle(item) {
+  const title = decodeForDisplay(item.title || "").trim();
+  const url = resolveDisplayUrl(item.url);
+  if (!title || title === item.url || title === url || /%2f|%3a|uddg=/i.test(title)) {
+    return formatDisplayUrl(url, 96) || "Untitled result";
+  }
+  return truncateText(title, 140);
+}
+
+function formatSnippet(item) {
+  const snippet = decodeForDisplay(item.snippet || "").trim();
+  if (snippet) return truncateText(snippet, 320);
+  return "";
+}
+
+function updateResultsMeta(payload, visibleCount) {
+  if (!els.resultsMeta || !els.resultsCount) return;
+  const total = payload.results.length;
+  if (!total) {
+    els.resultsMeta.classList.add("hidden");
+    return;
+  }
+  const shown = Math.min(visibleCount, total);
+  const backends = (payload.backends_used || [])
+    .map((b) => BACKEND_LABELS[b] || b)
+    .join(", ");
+  els.resultsCount.textContent =
+    shown < total
+      ? `Showing ${shown} of ${total} results for “${payload.query}”`
+      : `${total} result${total === 1 ? "" : "s"} for “${payload.query}”`;
+  if (els.resultsBackends) {
+    els.resultsBackends.textContent = backends ? `via ${backends}` : "";
+  }
+  els.resultsMeta.classList.remove("hidden");
+}
+
+function updateLoadMoreButton(total, visibleCount) {
+  if (!els.loadMoreBtn) return;
+  if (visibleCount < total) {
+    const remaining = Math.min(RESULTS_PAGE_SIZE, total - visibleCount);
+    els.loadMoreBtn.textContent = `Show ${remaining} more`;
+    els.loadMoreBtn.classList.remove("hidden");
+  } else {
+    els.loadMoreBtn.classList.add("hidden");
+  }
+}
+
+function buildResultCard(item, index) {
+  const li = document.createElement("li");
+  li.className = `result-card${state.mode === "images" ? " image-card" : ""}${index === state.highlightIndex ? " highlighted" : ""}`;
+  li.dataset.index = String(index);
+
+  if (state.mode === "images" && item.image) {
+    const img = document.createElement("img");
+    img.className = "thumb";
+    img.src = item.image;
+    img.alt = formatResultTitle(item);
+    img.loading = "lazy";
+    li.appendChild(img);
+  }
+
+  const body = document.createElement("div");
+  body.className = "result-body";
+  const pill = backendPill(item.backend, item.provenance);
+  const revisit = visitBadge(item.visit_metadata);
+  const title = formatResultTitle(item);
+  const displayUrl = formatDisplayUrl(item.url);
+  const snippet = formatSnippet(item);
+  const resolvedUrl = resolveDisplayUrl(item.url);
+
+  body.innerHTML = `
+    <h3><a href="#" data-url="${encodeURIComponent(resolvedUrl)}" title="${escapeHtml(resolvedUrl)}">${escapeHtml(title)}</a> ${pill}</h3>
+    <span class="result-url" title="${escapeHtml(resolvedUrl)}">${escapeHtml(displayUrl)} ${revisit}</span>
+    ${snippet ? `<p class="result-snippet">${escapeHtml(snippet)}</p>` : '<p class="result-snippet result-snippet--empty">No description available.</p>'}
+  `;
+  li.appendChild(body);
+
+  const actions = document.createElement("div");
+  actions.className = "result-actions";
+
+  const saveBtn = document.createElement("button");
+  saveBtn.className = "icon-btn";
+  saveBtn.type = "button";
+  saveBtn.title = "Save to collection";
+  saveBtn.textContent = "★";
+  saveBtn.addEventListener("click", () => openSaveDialog(item));
+  actions.appendChild(saveBtn);
+
+  const openBtn = document.createElement("button");
+  openBtn.className = "open-btn";
+  openBtn.type = "button";
+  openBtn.textContent = state.settings.private_mode ? "Open private" : "Open";
+  openBtn.addEventListener("click", () => openLink(resolvedUrl, item.result_id));
+  actions.appendChild(openBtn);
+
+  li.appendChild(actions);
+
+  body.querySelector("a").addEventListener("click", (event) => {
+    event.preventDefault();
+    openLink(resolvedUrl, item.result_id);
+  });
+
+  li.addEventListener("mouseenter", () => setHighlight(index));
+
+  return li;
 }
 
 async function openLink(url, resultId = null, forcePrivate = null) {
@@ -669,6 +816,10 @@ if (els.exportBtn) {
   els.exportBtn.addEventListener("click", (event) => {
     exportResults(event.shiftKey ? "csv" : "json");
   });
+}
+
+if (els.loadMoreBtn) {
+  els.loadMoreBtn.addEventListener("click", loadMoreResults);
 }
 
 document.addEventListener("keydown", handleKeyboard);

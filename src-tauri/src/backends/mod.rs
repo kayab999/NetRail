@@ -3,6 +3,7 @@ pub mod ddgs;
 pub mod merge;
 pub mod searxng;
 pub mod types;
+pub mod url_resolve;
 
 use crate::config::Settings;
 use crate::error::{NetRailError, NetRailResult};

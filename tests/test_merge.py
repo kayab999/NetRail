@@ -1,9 +1,20 @@
-from netrail.backends.merge import dedupe_results, interleave_batches, merge_fanout, normalize_url_key
+from netrail.backends.merge import (
+    dedupe_results,
+    interleave_batches,
+    merge_fanout,
+    normalize_url_key,
+    resolve_result_url,
+)
 from netrail.backends.types import SearchResult
 
 
 def _result(url: str, snippet: str, backend: str) -> SearchResult:
     return SearchResult(title="T", url=url, snippet=snippet, backend=backend, provenance="")
+
+
+def test_resolve_ddg_redirect():
+    raw = "https://duckduckgo.com/l/?uddg=https%3A%2F%2Frust-lang.org%2F"
+    assert resolve_result_url(raw) == "https://rust-lang.org/"
 
 
 def test_normalize_strips_tracking():

@@ -1,4 +1,5 @@
 use super::types::SearchResult;
+use super::url_resolve::resolve_result_url;
 use std::collections::HashMap;
 use url::Url;
 
@@ -20,8 +21,8 @@ const TRACKING_PARAMS: &[&str] = &[
 
 /// Normalize a URL for deduplication: lowercase host without www, strip tracking params.
 pub fn normalize_url_key(raw: &str) -> String {
-    let trimmed = raw.trim();
-    if let Ok(mut parsed) = Url::parse(trimmed) {
+    let trimmed = resolve_result_url(raw, 0);
+    if let Ok(mut parsed) = Url::parse(&trimmed) {
         if let Some(host) = parsed.host_str() {
             let host = host.strip_prefix("www.").unwrap_or(host).to_lowercase();
             let _ = parsed.set_host(Some(&host));

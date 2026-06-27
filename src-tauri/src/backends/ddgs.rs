@@ -1,4 +1,5 @@
 use super::types::{SearchMode, SearchResult};
+use super::url_resolve::{clean_result_title, resolve_result_url};
 use crate::error::{NetRailError, NetRailResult};
 use reqwest::Client;
 use scraper::{Html, Selector};
@@ -62,6 +63,7 @@ impl DdgsBackend {
             code: "DDGS_SELECTOR",
             message: format!("{e:?}"),
         })?;
+        let display_url_sel = Selector::parse(".result__url").ok();
 
         let mut results = Vec::new();
         for block in document.select(&result_sel) {
@@ -72,7 +74,13 @@ impl DdgsBackend {
             if href.is_empty() {
                 continue;
             }
-            let title = link.text().collect::<String>().trim().to_string();
+            let resolved_url = resolve_result_url(&href, 0);
+            let display_hint = display_url_sel
+                .as_ref()
+                .and_then(|sel| block.select(sel).next())
+                .map(|el| el.text().collect::<String>());
+            let raw_title = link.text().collect::<String>().trim().to_string();
+            let title = clean_result_title(&raw_title, &href, display_hint.as_deref());
             let snippet = block
                 .select(&snippet_sel)
                 .next()
@@ -81,11 +89,11 @@ impl DdgsBackend {
 
             results.push(SearchResult {
                 title: if title.is_empty() {
-                    href.clone()
+                    resolved_url.clone()
                 } else {
                     title
                 },
-                url: href,
+                url: resolved_url,
                 snippet,
                 image: None,
                 source: String::new(),

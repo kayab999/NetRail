@@ -1,8 +1,23 @@
 from __future__ import annotations
 
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from netrail.backends.types import SearchResult
+
+DDG_HOSTS = frozenset({"duckduckgo.com", "duck.com"})
+
+
+def resolve_result_url(raw: str, depth: int = 0) -> str:
+    if depth > 4:
+        return raw.strip()
+    trimmed = raw.strip()
+    parsed = urlparse(trimmed)
+    host = (parsed.hostname or "").lower()
+    if host in DDG_HOSTS or any(host.endswith(f".{h}") for h in DDG_HOSTS):
+        for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+            if key == "uddg" and value:
+                return resolve_result_url(unquote(value), depth + 1)
+    return trimmed
 
 TRACKING_PARAMS = frozenset(
     {
@@ -24,7 +39,7 @@ TRACKING_PARAMS = frozenset(
 
 
 def normalize_url_key(raw: str) -> str:
-    trimmed = raw.strip()
+    trimmed = resolve_result_url(raw)
     try:
         parsed = urlparse(trimmed)
         host = (parsed.hostname or "").lower().removeprefix("www.")
