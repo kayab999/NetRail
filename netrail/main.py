@@ -17,6 +17,7 @@ from netrail import __version__
 from netrail.backends.registry import get_enabled_backends
 from netrail.browsers import discover_browsers, open_url
 from netrail.config import load_settings, save_settings
+from netrail.docs_content import asset_path, load_doc
 from netrail.history.store import get_store, init_history_on_startup
 from netrail.runtime import is_flatpak, static_dir
 from netrail.search import search
@@ -202,6 +203,22 @@ async def put_settings(settings: SettingsModel) -> dict[str, Any]:
         return save_settings(settings.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.get("/api/docs/{slug}")
+async def get_doc(slug: str) -> dict[str, str]:
+    try:
+        return load_doc(slug)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@app.get("/api/docs/assets/{filename}")
+async def get_doc_asset(filename: str) -> FileResponse:
+    path = asset_path(filename)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Document asset not found.")
+    return FileResponse(path)
 
 
 @app.post("/api/search")

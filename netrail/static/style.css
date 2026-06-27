@@ -44,6 +44,66 @@ body {
   gap: 1rem;
 }
 
+.app-menu {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.menu-group {
+  position: relative;
+}
+
+.menu-btn,
+.donate-btn {
+  font-size: 0.82rem;
+}
+
+.donate-btn {
+  color: #f5c26b;
+  border-color: rgba(245, 194, 107, 0.35);
+}
+
+.donate-btn:hover {
+  color: #ffd88a;
+  border-color: rgba(245, 194, 107, 0.65);
+}
+
+.menu-dropdown {
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  left: 0;
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  z-index: 50;
+}
+
+.menu-dropdown[hidden] {
+  display: none;
+}
+
+.menu-item {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 0.45rem 0.6rem;
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.menu-item:hover {
+  background: var(--surface-2);
+}
+
 .topbar-actions {
   display: flex;
   align-items: center;
@@ -596,7 +656,148 @@ select {
   color: var(--accent-dim);
 }
 
+.doc-dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0;
+  width: min(920px, calc(100vw - 2rem));
+  max-height: calc(100vh - 3rem);
+}
+
+.doc-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.doc-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--surface);
+  z-index: 1;
+}
+
+.doc-dialog-header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.doc-body {
+  padding: 1.25rem 1.5rem 1.5rem;
+  overflow: auto;
+  max-height: calc(100vh - 8rem);
+  line-height: 1.55;
+  font-size: 0.92rem;
+}
+
+.doc-body h1,
+.doc-body h2,
+.doc-body h3,
+.doc-body h4 {
+  margin: 1.4rem 0 0.65rem;
+  line-height: 1.25;
+}
+
+.doc-body h1 {
+  font-size: 1.45rem;
+  margin-top: 0;
+}
+
+.doc-body h2 {
+  font-size: 1.2rem;
+}
+
+.doc-body h3 {
+  font-size: 1.05rem;
+}
+
+.doc-body p,
+.doc-body ul,
+.doc-body ol,
+.doc-body pre,
+.doc-body table,
+.doc-body blockquote {
+  margin: 0 0 0.85rem;
+}
+
+.doc-body ul,
+.doc-body ol {
+  padding-left: 1.35rem;
+}
+
+.doc-body code {
+  font-family: var(--mono);
+  font-size: 0.84em;
+  background: var(--surface-2);
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+.doc-body pre {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem;
+  overflow: auto;
+}
+
+.doc-body pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.doc-body a {
+  color: var(--accent);
+}
+
+.doc-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.doc-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.doc-body th,
+.doc-body td {
+  border: 1px solid var(--border);
+  padding: 0.45rem 0.55rem;
+  text-align: left;
+}
+
+.doc-body blockquote {
+  border-left: 3px solid var(--accent-dim);
+  padding-left: 0.85rem;
+  color: var(--muted);
+}
+
+.doc-body hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1.25rem 0;
+}
+
 @media (max-width: 720px) {
+  .topbar {
+    flex-wrap: wrap;
+  }
+
+  .app-menu {
+    order: 3;
+    width: 100%;
+    justify-content: flex-start;
+  }
   .result-card,
   .result-card.image-card {
     grid-template-columns: 1fr;

@@ -1,6 +1,6 @@
 use crate::server;
 use tauri::{
-    menu::{Menu, MenuItem},
+    menu::{MenuBuilder, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Manager, RunEvent,
 };
@@ -41,9 +41,28 @@ pub fn run() {
                 }
             });
 
-            let show = MenuItem::with_id(app, "show", "Show NetRail", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &quit])?;
+            let help_menu = SubmenuBuilder::new(app, "Help")
+                .text("doc-manual", "User Manual")
+                .text("doc-about", "About NetRail")
+                .build()?;
+
+            let app_menu = MenuBuilder::new(app)
+                .items(&[&help_menu])
+                .text("donate", "Donate…")
+                .build()?;
+
+            app.set_menu(app_menu)?;
+
+            app.on_menu_event(|app, event| match event.id().0.as_str() {
+                "doc-manual" => trigger_doc_view(app, "manual"),
+                "doc-about" => trigger_doc_view(app, "about"),
+                "donate" => trigger_donate(app),
+                _ => {}
+            });
+
+            let show = tauri::menu::MenuItem::with_id(app, "show", "Show NetRail", true, None::<&str>)?;
+            let quit = tauri::menu::MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let tray_menu = tauri::menu::Menu::with_items(app, &[&show, &quit])?;
 
             let mut tray_builder = TrayIconBuilder::new();
             if let Some(icon) = app.default_window_icon().cloned() {
@@ -51,7 +70,7 @@ pub fn run() {
             }
 
             let _tray = tray_builder
-                .menu(&menu)
+                .menu(&tray_menu)
                 .tooltip("NetRail — search first, browse second")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => focus_main_window(app),
@@ -103,5 +122,20 @@ fn focus_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
+    }
+}
+
+fn trigger_doc_view<R: tauri::Runtime>(app: &tauri::AppHandle<R>, slug: &str) {
+    focus_main_window(app);
+    if let Some(window) = app.get_webview_window("main") {
+        let script = format!("window.netrailOpenDoc('{slug}')");
+        let _ = window.eval(&script);
+    }
+}
+
+fn trigger_donate<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    focus_main_window(app);
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.eval("window.netrailDonate()");
     }
 }

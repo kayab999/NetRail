@@ -2,6 +2,7 @@ pub mod backends;
 pub mod browsers;
 pub mod config;
 pub mod crypto;
+pub mod docs;
 pub mod history;
 pub mod search;
 pub mod security;

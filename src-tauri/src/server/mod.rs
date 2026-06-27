@@ -2,6 +2,7 @@ use crate::backends::get_enabled_backends;
 use crate::browsers::{discover_browsers, open_url};
 use crate::config::{is_flatpak, load_settings, save_settings, static_dir, Settings, HOST, PORT, VERSION};
 use crate::crypto::{encryption_active, ensure_encryption_key};
+use crate::docs;
 use crate::history::{get_store, init_history_on_startup, HistoryStore};
 use crate::search;
 use crate::security::{validate_open_url, CSP};
@@ -50,6 +51,8 @@ pub async fn start() -> Result<(), String> {
             "/api/collections/{collection_id}/export",
             get(export_collection),
         )
+        .route("/api/docs/{slug}", get(get_doc))
+        .route("/api/docs/assets/{filename}", get(get_doc_asset))
         .nest_service("/static", ServeDir::new(static_path))
         .with_state(state)
         .layer(axum::middleware::from_fn(security_headers));
@@ -375,6 +378,35 @@ struct ExportQuery {
 
 fn default_export_fmt() -> String {
     "json".into()
+}
+
+async fn get_doc(Path(slug): Path<String>) -> Result<Json<serde_json::Value>, ApiError> {
+    docs::load_doc(&slug)
+        .map(Json)
+        .map_err(|e| ApiError::not_found(e))
+}
+
+async fn get_doc_asset(Path(filename): Path<String>) -> Result<Response, ApiError> {
+    let path = docs::asset_path(&filename).ok_or_else(|| {
+        ApiError::not_found("Document asset not found.")
+    })?;
+    let bytes = tokio::fs::read(&path)
+        .await
+        .map_err(|e| ApiError::not_found(e.to_string()))?;
+    let media = match filename.rsplit('.').next() {
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("svg") => "image/svg+xml",
+        Some("gif") => "image/gif",
+        Some("webp") => "image/webp",
+        _ => "application/octet-stream",
+    };
+    Ok((
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, media)],
+        bytes,
+    )
+        .into_response())
 }
 
 async fn export_collection(

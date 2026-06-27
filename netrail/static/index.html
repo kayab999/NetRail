@@ -21,6 +21,20 @@
             <p>Search first. Browse second. On your terms.</p>
           </div>
         </div>
+        <nav class="app-menu" aria-label="Application">
+          <div class="menu-group">
+            <button type="button" class="ghost-btn menu-btn" id="help-menu-btn" aria-haspopup="true" aria-expanded="false">
+              Help ▾
+            </button>
+            <div class="menu-dropdown" id="help-dropdown" hidden>
+              <button type="button" class="menu-item" data-doc="manual">User Manual</button>
+              <button type="button" class="menu-item" data-doc="about">About NetRail</button>
+            </div>
+          </div>
+          <button type="button" class="ghost-btn donate-btn" id="donate-btn" title="Support NetRail development">
+            ☕ Donate
+          </button>
+        </nav>
         <div class="topbar-actions">
           <button type="button" id="export-btn" class="ghost-btn icon-action" title="Export results (JSON). Shift+click for CSV." disabled>
             ↓ Export
@@ -121,6 +135,15 @@
       </form>
     </dialog>
 
+    <dialog id="doc-dialog" class="doc-dialog">
+      <div class="doc-dialog-header">
+        <h2 id="doc-title">Document</h2>
+        <button type="button" id="doc-close" class="ghost-btn">Close</button>
+      </div>
+      <article id="doc-body" class="doc-body"></article>
+    </dialog>
+
+    <script src="/static/markdown.js"></script>
     <script src="/static/app.js"></script>
   </body>
 </html>

@@ -20,6 +20,8 @@ const BACKEND_LABELS = {
   brave: "Brave",
 };
 
+const DONATE_URL = "https://buymeacoffee.com/kayabsoftware";
+
 const els = {
   form: document.getElementById("search-form"),
   query: document.getElementById("query"),
@@ -43,6 +45,13 @@ const els = {
   saveNotes: document.getElementById("save-notes"),
   saveTargetUrl: document.getElementById("save-target-url"),
   saveCancel: document.getElementById("save-cancel"),
+  helpMenuBtn: document.getElementById("help-menu-btn"),
+  helpDropdown: document.getElementById("help-dropdown"),
+  donateBtn: document.getElementById("donate-btn"),
+  docDialog: document.getElementById("doc-dialog"),
+  docTitle: document.getElementById("doc-title"),
+  docBody: document.getElementById("doc-body"),
+  docClose: document.getElementById("doc-close"),
 };
 
 async function api(path, options = {}) {
@@ -530,6 +539,63 @@ function handleKeyboard(event) {
   }
 }
 
+function closeHelpMenu() {
+  if (!els.helpDropdown) return;
+  els.helpDropdown.hidden = true;
+  if (els.helpMenuBtn) {
+    els.helpMenuBtn.setAttribute("aria-expanded", "false");
+  }
+}
+
+function toggleHelpMenu() {
+  if (!els.helpDropdown || !els.helpMenuBtn) return;
+  const open = els.helpDropdown.hidden;
+  els.helpDropdown.hidden = !open;
+  els.helpMenuBtn.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+async function openDocView(slug) {
+  closeHelpMenu();
+  if (!els.docDialog || !els.docTitle || !els.docBody) return;
+
+  els.docTitle.textContent = "Loading…";
+  els.docBody.innerHTML = "<p>Loading document…</p>";
+  els.docDialog.showModal();
+
+  try {
+    const payload = await api(`/api/docs/${slug}`);
+    els.docTitle.textContent = payload.title;
+    els.docBody.innerHTML = window.renderMarkdown(payload.markdown);
+  } catch (error) {
+    els.docTitle.textContent = "Document unavailable";
+    els.docBody.textContent = error.message;
+  }
+}
+
+async function openDonate() {
+  closeHelpMenu();
+  try {
+    await persistSettings();
+    await api("/api/open", {
+      method: "POST",
+      body: JSON.stringify({
+        url: DONATE_URL,
+        private_mode: false,
+      }),
+    });
+  } catch {
+    window.open(DONATE_URL, "_blank", "noopener,noreferrer");
+  }
+}
+
+function handleDocHash() {
+  const match = window.location.hash.match(/^#doc=(manual|about)$/);
+  if (match) {
+    openDocView(match[1]);
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
+}
+
 function dismissSplash() {
   const splash = document.getElementById("splash");
   if (!splash) return;
@@ -588,4 +654,36 @@ if (els.exportBtn) {
 
 document.addEventListener("keydown", handleKeyboard);
 
-bootstrap();
+if (els.helpMenuBtn) {
+  els.helpMenuBtn.addEventListener("click", (event) => {
+    event.stopPropagation();
+    toggleHelpMenu();
+  });
+}
+
+if (els.helpDropdown) {
+  els.helpDropdown.querySelectorAll("[data-doc]").forEach((button) => {
+    button.addEventListener("click", () => openDocView(button.dataset.doc));
+  });
+}
+
+if (els.donateBtn) {
+  els.donateBtn.addEventListener("click", openDonate);
+}
+
+if (els.docClose && els.docDialog) {
+  els.docClose.addEventListener("click", () => els.docDialog.close());
+}
+
+document.addEventListener("click", (event) => {
+  if (!els.helpDropdown || els.helpDropdown.hidden) return;
+  if (event.target === els.helpMenuBtn || els.helpMenuBtn?.contains(event.target)) return;
+  if (els.helpDropdown.contains(event.target)) return;
+  closeHelpMenu();
+});
+
+window.addEventListener("hashchange", handleDocHash);
+window.netrailOpenDoc = openDocView;
+window.netrailDonate = openDonate;
+
+bootstrap().then(handleDocHash);
