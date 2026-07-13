@@ -9,6 +9,7 @@
     <link rel="stylesheet" href="/static/style.css" />
   </head>
   <body>
+    <a class="skip-link" href="#query">Skip to search</a>
     <div id="splash" class="splash-screen" aria-hidden="true">
       <img src="/static/splash.png" alt="" width="320" height="180" />
     </div>
@@ -23,12 +24,12 @@
         </div>
         <nav class="app-menu" aria-label="Application">
           <div class="menu-group">
-            <button type="button" class="ghost-btn menu-btn" id="help-menu-btn" aria-haspopup="true" aria-expanded="false">
+            <button type="button" class="ghost-btn menu-btn" id="help-menu-btn" aria-haspopup="true" aria-expanded="false" aria-controls="help-dropdown">
               Help ▾
             </button>
-            <div class="menu-dropdown" id="help-dropdown" hidden>
-              <button type="button" class="menu-item" data-doc="manual">User Manual</button>
-              <button type="button" class="menu-item" data-doc="about">About NetRail</button>
+            <div class="menu-dropdown" id="help-dropdown" role="menu" hidden>
+              <button type="button" class="menu-item" role="menuitem" data-doc="manual">User Manual</button>
+              <button type="button" class="menu-item" role="menuitem" data-doc="about">About NetRail</button>
             </div>
           </div>
           <button type="button" class="ghost-btn donate-btn" id="donate-btn" title="Support NetRail development">
@@ -36,11 +37,11 @@
           </button>
         </nav>
         <div class="topbar-actions">
-          <button type="button" id="export-btn" class="ghost-btn icon-action" title="Export results (JSON). Shift+click for CSV." disabled>
+          <button type="button" id="export-btn" class="ghost-btn icon-action" title="Export results (JSON). Shift+click for CSV." aria-label="Export results" disabled>
             ↓ Export
           </button>
-          <div class="status-pill" id="sovereignty-pill" title="Sovereignty is incremental — see provenance on results">
-            <span class="dot"></span>
+          <div class="status-pill" id="sovereignty-pill" title="Sovereignty is incremental — see provenance on results" aria-live="polite">
+            <span class="dot" aria-hidden="true"></span>
             <span id="sovereignty-label">Step 1/5 · local console</span>
           </div>
         </div>
@@ -54,21 +55,24 @@
             <input
               id="query"
               type="search"
+              name="q"
               placeholder='Search the web — try site:gov filetype:pdf "exact phrase"'
+              aria-label="Search query"
+              autocomplete="off"
               autofocus
             />
             <button type="submit" id="search-btn">Search</button>
           </div>
           <div class="controls-row">
-            <div class="tabs" role="tablist">
-              <button type="button" class="tab active" data-view="search" data-mode="web">Web</button>
-              <button type="button" class="tab" data-view="search" data-mode="images">Images</button>
-              <button type="button" class="tab" data-view="history">History</button>
+            <div class="tabs" role="tablist" aria-label="View mode">
+              <button type="button" class="tab active" role="tab" aria-selected="true" data-view="search" data-mode="web">Web</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-view="search" data-mode="images">Images</button>
+              <button type="button" class="tab" role="tab" aria-selected="false" data-view="history">History</button>
             </div>
             <div class="prefs">
               <label class="select-wrap">
                 <span>Browser</span>
-                <select id="browser-select">
+                <select id="browser-select" aria-label="Preferred browser">
                   <option value="">Detecting…</option>
                 </select>
               </label>
@@ -104,9 +108,9 @@
         </div>
         <ul id="results" class="results hidden" aria-live="polite"></ul>
         <button type="button" id="load-more-btn" class="load-more-btn hidden">Show more results</button>
-        <div id="history-panel" class="history-panel hidden">
+        <div id="history-panel" class="history-panel hidden" role="region" aria-label="Local history">
           <div class="history-toolbar">
-            <input id="history-query" type="search" placeholder="Search your local history…" />
+            <input id="history-query" type="search" placeholder="Search your local history…" aria-label="Search local history" />
             <button type="button" id="history-search-btn" class="ghost-btn">Find</button>
             <button type="button" id="history-purge-btn" class="ghost-btn danger">Purge all</button>
           </div>
@@ -116,6 +120,7 @@
 
       <footer class="footer">
         <span>NetRail — fanout metasearch · encrypted history · zero telemetry</span>
+        <span id="app-version" class="app-version" aria-label="Version"></span>
       </footer>
     </div>
 

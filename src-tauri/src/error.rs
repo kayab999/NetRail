@@ -88,6 +88,12 @@ pub enum NetRailError {
         code: &'static str,
         message: String,
     },
+
+    #[error("Rate limited: {message}")]
+    RateLimited {
+        code: &'static str,
+        message: String,
+    },
 }
 
 pub type NetRailResult<T> = Result<T, NetRailError>;
@@ -103,6 +109,8 @@ impl NetRailError {
             | Self::MissingField { .. } => StatusCode::BAD_REQUEST,
 
             Self::NotFound { .. } => StatusCode::NOT_FOUND,
+
+            Self::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,
 
             Self::BackendHttp { .. }
             | Self::BackendFailure { .. }
@@ -131,7 +139,8 @@ impl NetRailError {
             | Self::Network { code, .. }
             | Self::Parse { code, .. }
             | Self::Encryption { code, .. }
-            | Self::Internal { code, .. } => code,
+            | Self::Internal { code, .. }
+            | Self::RateLimited { code, .. } => code,
         }
     }
 

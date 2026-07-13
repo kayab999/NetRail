@@ -22,6 +22,7 @@ from netrail.config import load_settings, save_settings
 from netrail.docs_content import asset_path, load_doc
 from netrail.history.store import get_store, init_history_on_startup
 from netrail.runtime import is_flatpak, static_dir
+from netrail import rate_limit
 from netrail.search import search
 from netrail.security import validate_open_url
 
@@ -239,6 +240,8 @@ async def health() -> dict[str, Any]:
         "default_provenance": "ddgs → DuckDuckGo metasearch → primarily Bing index",
         "history": history,
         "sandbox": "flatpak" if is_flatpak() else "native",
+        "api_contract": "1.2",
+        "rate_limit": rate_limit.status_dict(),
     }
 
 
@@ -294,6 +297,7 @@ async def get_doc_asset(filename: str) -> FileResponse:
 
 @app.post("/api/search")
 async def run_search(request: SearchRequest) -> dict[str, Any]:
+    rate_limit.check_search()
     return search(
         query=request.query,
         mode=request.mode,
@@ -303,6 +307,7 @@ async def run_search(request: SearchRequest) -> dict[str, Any]:
 
 @app.post("/api/open")
 async def open_link(request: OpenRequest) -> dict[str, str]:
+    rate_limit.check_open()
     safe_url = validate_open_url(request.url)
 
     settings = load_settings()

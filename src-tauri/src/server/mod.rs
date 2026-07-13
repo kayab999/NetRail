@@ -6,6 +6,7 @@ use crate::docs;
 use crate::history::{get_store, init_history_on_startup, HistoryStore};
 use crate::error::NetRailError;
 use crate::http_client::build_http_client;
+use crate::rate_limit::RateLimiter;
 use crate::search;
 use crate::security::{validate_open_url, CSP};
 use reqwest::Client;
@@ -26,6 +27,7 @@ use tower_http::services::ServeDir;
 pub struct AppState {
     pub http_client: Client,
     pub settings_fn: Arc<dyn Fn() -> Settings + Send + Sync>,
+    pub rate_limiter: RateLimiter,
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -62,6 +64,7 @@ pub async fn start() -> Result<(), String> {
     let state = AppState {
         http_client: build_http_client(),
         settings_fn: Arc::new(load_settings),
+        rate_limiter: RateLimiter::from_env(),
     };
 
     let app = build_router(state);
@@ -184,6 +187,7 @@ async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
         "status": "ok",
         "version": VERSION,
         "telemetry": "none",
+        "api_contract": "1.2",
         "backends_configured": backend_names,
         "search_recovery": {
             "searxng_configured": searxng_configured,
@@ -194,6 +198,13 @@ async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
         "default_provenance": "ddgs → DuckDuckGo metasearch → primarily Bing index",
         "history": history,
         "sandbox": if is_flatpak() { "flatpak" } else { "native" },
+        "rate_limit": {
+            "enabled": std::env::var("NETRAIL_RATE_LIMIT")
+                .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+                .unwrap_or(true),
+            "search_per_minute": 90,
+            "open_per_minute": 120,
+        },
     }))
 }
 
@@ -263,6 +274,7 @@ async fn run_search(
     State(state): State<AppState>,
     Json(body): Json<SearchRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    state.rate_limiter.check_search()?;
     let query = body.query.trim();
     if query.is_empty() || query.len() > 500 {
         return Err(NetRailError::InvalidQuery {
@@ -296,6 +308,7 @@ async fn open_link(
     State(state): State<AppState>,
     Json(body): Json<OpenRequest>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    state.rate_limiter.check_open()?;
     let safe_url = validate_open_url(&body.url)?;
     let mut settings = (state.settings_fn)();
     if let Some(id) = body.browser_id {

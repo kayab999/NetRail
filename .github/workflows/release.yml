@@ -27,6 +27,9 @@ jobs:
       - name: Install frontend tooling
         run: npm ci
 
+      - name: Version single source of truth
+        run: bash scripts/check-versions.sh
+
       - name: Install system dependencies
         run: |
           sudo apt-get update

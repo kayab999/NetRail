@@ -6,6 +6,7 @@ pub mod docs;
 pub mod error;
 pub mod history;
 pub mod http_client;
+pub mod rate_limit;
 pub mod search;
 pub mod security;
 pub mod server;

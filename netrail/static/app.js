@@ -102,6 +102,7 @@ function setView(view, mode) {
     const active =
       tabView === view && (view !== "search" || tabMode === state.mode);
     tab.classList.toggle("active", active);
+    tab.setAttribute("aria-selected", active ? "true" : "false");
   });
 
   const isHistory = view === "history";
@@ -472,6 +473,8 @@ function buildResultCard(item, index) {
     img.src = item.image;
     img.alt = formatResultTitle(item);
     img.loading = "lazy";
+    img.referrerPolicy = "no-referrer";
+    img.decoding = "async";
     li.appendChild(img);
   }
 
@@ -840,6 +843,10 @@ async function bootstrap() {
     els.privateMode.checked = Boolean(settings.private_mode);
     renderBrowsers();
     applyHealthSecurity(health);
+    const versionEl = document.getElementById("app-version");
+    if (versionEl && health.version) {
+      versionEl.textContent = `v${health.version}`;
+    }
     if (health.history?.queries > 0) {
       const label = document.getElementById("sovereignty-label");
       if (label) label.textContent = "Step 4/5 · local history and corpus";

@@ -16,3 +16,6 @@ dist/
 *.spec.bak
 node_modules/
 src-tauri/target/
+src-tauri/rust_out
+screenshot.png
+screenshot2.png

@@ -27,6 +27,11 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 - **Python `search_recovery`** — `/api/health` hints for SearXNG / Brave
 - **Empty backend errors (Python)** — zero-result batches surface in `errors[]` like Rust
 - **Local packaging** — `.deb` / `.rpm` / `netrail-api` with static UI; AppImage via CI when `patchelf` available
+- **Local rate limits** — 90 searches / 120 opens per minute (`RATE_LIMITED` 429); disable with `NETRAIL_RATE_LIMIT=0`
+- **A11y polish** — skip link, tab `aria-selected`, focus-visible, reduced-motion, labeled controls
+- **Image privacy** — `referrerpolicy=no-referrer` on result thumbnails
+- **CI version SSOT** — `scripts/check-versions.sh` fails the pipeline on drift
+- **Health** — `api_contract` + `rate_limit` status; UI footer shows app version
 
 ## [1.2.1] — 2026-06-27
 

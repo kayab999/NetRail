@@ -55,4 +55,6 @@ We aim to acknowledge reports within **72 hours** and ship fixes for confirmed i
 - URL open validation as above
 - Backend URL validation blocks cloud metadata and rebinding hostnames
 - CSP, `nosniff`, and `no-referrer` on API responses
+- Local rate limits on search/open (90 / 120 per minute); set `NETRAIL_RATE_LIMIT=0` to disable
 - Zero telemetry
+- Image result thumbnails request `referrerpolicy=no-referrer`

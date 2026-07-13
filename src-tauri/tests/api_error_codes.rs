@@ -16,6 +16,7 @@ fn test_state(settings: Settings) -> AppState {
     AppState {
         http_client: build_http_client(),
         settings_fn: Arc::new(move || settings.clone()),
+        rate_limiter: netrail_lib::rate_limit::RateLimiter::from_env(),
     }
 }
 
@@ -85,6 +86,36 @@ async fn open_localhost_returns_open_url_localhost() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_api_error(&json, "OPEN_URL_LOCALHOST", 400);
+}
+
+#[tokio::test]
+async fn open_encoded_loopback_returns_open_url_localhost() {
+    let settings = Settings::default();
+    let mut app = build_router(test_state(settings));
+    let (status, json) = request_json(
+        &mut app,
+        "POST",
+        "/api/open",
+        Some(r#"{"url":"http://2130706433/"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_api_error(&json, "OPEN_URL_LOCALHOST", 400);
+}
+
+#[tokio::test]
+async fn open_private_ip_returns_open_url_private() {
+    let settings = Settings::default();
+    let mut app = build_router(test_state(settings));
+    let (status, json) = request_json(
+        &mut app,
+        "POST",
+        "/api/open",
+        Some(r#"{"url":"http://192.168.1.1/"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_api_error(&json, "OPEN_URL_PRIVATE", 400);
 }
 
 #[tokio::test]

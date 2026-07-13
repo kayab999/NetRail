@@ -26,6 +26,7 @@ The frontend branches on `code`; `detail` is human-readable. Rust (Tauri / `netr
 | `OPEN_URL_LINK_LOCAL` | 400 | Link-local IP |
 | `OPEN_URL_PRIVATE` | 400 | Private / non-public IP (RFC1918, ULA, multicast, …) |
 | `REQUEST_INVALID` | 400 | Generic request validation failure (Python path) |
+| `RATE_LIMITED` | 429 | Too many search/open calls in a 60s window (disable with `NETRAIL_RATE_LIMIT=0`) |
 | `OPEN_URL_REDIRECT_DEPTH` | 400 | Too many DDG redirect unwraps |
 | `CONFIG_MAX_RESULTS` | 400 | `max_results` not in 1–50 |
 | `CONFIG_HISTORY_TTL` | 400 | `history_ttl_days` over 3650 |

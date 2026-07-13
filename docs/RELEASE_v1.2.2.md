@@ -8,6 +8,9 @@ Patch release for **release-candidate readiness**: restore green CI, align versi
 - **Single version** — Rust, Tauri, npm, Python, README, and MANUAL all report **1.2.2**
 - **Release gate** — `release.yml` now runs the same clippy `-D warnings` check as CI
 - **Security policy** — supported versions include 1.2.x
+- **Open-URL hardening** — encoded loopback + private IP blocks
+- **Local rate limits** — abuse protection on search/open (disable with `NETRAIL_RATE_LIMIT=0`)
+- **A11y / privacy UX** — skip link, ARIA tabs, no-referrer image thumbs, version in footer
 
 ## Downloads
 
