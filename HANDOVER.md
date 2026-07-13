@@ -154,12 +154,12 @@ Release CI: `.github/workflows/release.yml` on tag `v*` (clippy + tests + AppIma
 |----|----------|---------------------------|
 | R1 | No API auth on localhost | Design v1; optional token later |
 | R2 | DDGS HTML scrape / captcha | External; Wikipedia + recovery UX |
-| R3 | Dual Rust/Python surface | Parity improved; prefer Rust binary |
-| R4 | Public GitHub Latest may lag | **Tag + publish v1.2.2** when ready |
+| R3 | Dual Rust/Python surface | **Policy:** Rust production; Python compatibility (see DISTRIBUTION) |
+| R4 | Public GitHub Latest may lag | Closed when **v1.2.2** published as Latest |
 | R5 | Draft releases v1.2.0/1.2.1 | Close after 1.2.2 publish |
-| R6 | Local AppImage needs patchelf | Documented; use CI or `.deb` |
+| R6 | Local AppImage needs patchelf | Documented; CI **requires** AppImage on release |
 | R7 | Image CDN privacy (Images mode) | `no-referrer` set; still loads remote URLs |
-| R8 | No Tauri E2E / a11y full audit | Manual + smoke scripts |
+| R8 | No Tauri webview E2E | **API E2E smoke** in CI (`scripts/e2e-api-smoke.sh`); no GTK driver |
 | R9 | Collection add uses open-URL policy | Private LAN URLs cannot be saved via API — intentional safety |
 
 ---
@@ -214,10 +214,10 @@ Non-happy-path covered: empty query, bad mode/settings, open localhost/private/e
 - [x] Rate limits + a11y polish
 - [x] CI green on push (as of last score lift)
 - [x] HANDOVER.md written
-- [ ] Tag `v1.2.2` (operator)
-- [ ] Publish GitHub Release + SHA256SUMS (operator)
-- [ ] Close draft 1.2.0 / 1.2.1 (operator)
-- [ ] Rebuild packages after last commits if shipping offline artifacts
+- [ ] Tag `v1.2.2` (operator — this freeze cycle)
+- [ ] Publish GitHub Release + SHA256SUMS (non-draft)
+- [ ] Close draft 1.2.0 / 1.2.1
+- [ ] `bash scripts/e2e-api-smoke.sh` green in CI
 
 ---
 

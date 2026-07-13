@@ -19,6 +19,22 @@ def test_health_reports_provenance():
     assert isinstance(recovery["hints"], list)
 
 
+def test_health_parity_shape_with_rust_contract():
+    """Python health must expose the same product fields as Rust netrail-api."""
+    from netrail import __version__
+
+    payload = client.get("/api/health").json()
+    assert payload["status"] == "ok"
+    assert payload["version"] == __version__
+    assert payload.get("api_contract") == "1.2"
+    assert "rate_limit" in payload
+    assert "enabled" in payload["rate_limit"]
+    assert "search_per_minute" in payload["rate_limit"]
+    assert "open_per_minute" in payload["rate_limit"]
+    assert "search_recovery" in payload
+    assert "backends_configured" in payload
+
+
 def test_backends_endpoint():
     response = client.get("/api/backends")
     assert response.status_code == 200

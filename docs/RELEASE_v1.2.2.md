@@ -11,6 +11,8 @@ Patch release for **release-candidate readiness**: restore green CI, align versi
 - **Open-URL hardening** — encoded loopback + private IP blocks
 - **Local rate limits** — abuse protection on search/open (disable with `NETRAIL_RATE_LIMIT=0`)
 - **A11y / privacy UX** — skip link, ARIA tabs, no-referrer image thumbs, version in footer
+- **API E2E smoke** — CI + release gate (`scripts/e2e-api-smoke.sh`)
+- **AppImage required** on GitHub Release builds; dual-stack support policy documented
 
 ## Downloads
 

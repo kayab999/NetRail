@@ -1,6 +1,26 @@
 # NetRail Distribution Guide (v1.2)
 
-NetRail ships as a Rust/Tauri desktop app and a headless API binary. Python sources remain for development parity, Docker, Flatpak, and tests.
+NetRail ships as a **Rust/Tauri desktop app** and a **headless `netrail-api` binary**. Python remains for **Docker, Flatpak, tests, and install.sh fallback** — not the primary production path.
+
+## Support policy (dual-stack)
+
+| Path | Support | Notes |
+|------|---------|--------|
+| **Rust desktop** (AppImage / `.deb` / `.rpm`) | **Production** | Full UI + tray + fanout + Wikipedia fallback |
+| **`netrail-api`** (Rust headless) | **Production** | Homelab, scripting, CI smoke |
+| **Python** (`python -m netrail`, Docker, Flatpak) | **Compatibility** | API parity targeted; prefer Rust when packaging allows |
+
+### Feature parity matrix (1.2.2)
+
+| Feature | Rust | Python |
+|---------|------|--------|
+| `/api/search` fanout + merge | ✅ | ✅ |
+| Wikipedia empty-fanout fallback | ✅ | ✅ |
+| Typed `{code,detail,status}` | ✅ | ✅ |
+| Open-URL private + encoded loopback | ✅ | ✅ |
+| `search_recovery` on health | ✅ | ✅ |
+| Rate limits | ✅ | ✅ |
+| Tauri tray / global shortcut | ✅ | — |
 
 | Format | Best for | Browser open | History encryption |
 |--------|----------|--------------|-------------------|
@@ -48,6 +68,15 @@ APPIMAGE_EXTRACT_AND_RUN=1 npm run build
 Artifacts land in `src-tauri/target/release/bundle/` (`.deb`, `.rpm`, AppImage when `patchelf` is present).
 
 If AppImage fails with `Could not find patchelf`, install `patchelf` or use the **`.deb`** / CI-built AppImage from the GitHub Release.
+
+**Release CI** fails the job if AppImage or `.deb` is missing after `tauri build` (AppImage is a required ship artifact). Local machines without `patchelf` should still ship `.deb` / `netrail-api`.
+
+**Smoke / E2E (API):** after building the headless binary:
+
+```bash
+bash scripts/e2e-api-smoke.sh
+# or: bash scripts/package-smoke.sh
+```
 
 ---
 
@@ -172,4 +201,4 @@ Flatpak uses XDG paths under `~/.var/app/io.netrail.NetRail/`.
 
 ---
 
-*NetRail v1.2.2 — The Sovereign Search Console*
+*NetRail v1.2.2 — dual-stack policy: Rust production · Python compatibility*

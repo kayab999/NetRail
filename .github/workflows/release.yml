@@ -62,8 +62,19 @@ jobs:
         run: |
           mkdir -p dist/release
           cp src-tauri/target/release/netrail-api dist/release/
-          find src-tauri/target/release/bundle -type f \( -name '*.AppImage' -o -name '*.deb' \) -exec cp {} dist/release/ \;
+          find src-tauri/target/release/bundle -type f \
+            \( -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' \) \
+            -exec cp {} dist/release/ \;
           ls -lh dist/release/
+          # AppImage is a required ship artifact (patchelf is installed above)
+          test -n "$(find dist/release -maxdepth 1 -name '*.AppImage' -print -quit)" \
+            || { echo "ERROR: AppImage missing from release bundle"; exit 1; }
+          test -n "$(find dist/release -maxdepth 1 -name '*.deb' -print -quit)" \
+            || { echo "ERROR: .deb missing from release bundle"; exit 1; }
+          test -x dist/release/netrail-api
+
+      - name: E2E smoke release netrail-api
+        run: bash scripts/e2e-api-smoke.sh dist/release/netrail-api
 
       - name: Generate SHA256 checksums
         run: |
@@ -84,7 +95,7 @@ jobs:
       - name: Upload GitHub Release assets
         uses: softprops/action-gh-release@v2
         with:
-          draft: true
+          draft: false
           name: NetRail ${{ github.ref_name }} — The Sovereign Search Console
           body_path: ${{ steps.notes.outputs.path }}
           files: dist/release/*

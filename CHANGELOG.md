@@ -32,6 +32,8 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 - **Image privacy** — `referrerpolicy=no-referrer` on result thumbnails
 - **CI version SSOT** — `scripts/check-versions.sh` fails the pipeline on drift
 - **Health** — `api_contract` + `rate_limit` status; UI footer shows app version
+- **API E2E smoke** — `scripts/e2e-api-smoke.sh` (search + open-url + UI assets); run on CI and release
+- **Release** — AppImage/deb required artifacts; publish non-draft on tag; dual-stack support policy documented
 
 ## [1.2.1] — 2026-06-27
 

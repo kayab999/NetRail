@@ -176,12 +176,15 @@ pytest
 
 ```
 NetRail/
-├── src-tauri/          # Rust + Tauri (primary engine)
-├── netrail/static/     # Web UI
-├── netrail/            # Python headless fallback
-├── .github/workflows/  # Release CI (AppImage + .deb + netrail-api)
+├── src-tauri/          # Rust + Tauri (primary / production engine)
+├── netrail/static/     # Web UI (shared)
+├── netrail/            # Python: Docker, Flatpak, tests (compatibility)
+├── scripts/            # version check + API E2E smoke
+├── .github/workflows/  # CI + Release (AppImage + .deb + netrail-api)
 └── docs/
 ```
+
+**Supported production path:** Rust desktop or `netrail-api`. Python is for packaging fallbacks and CI.
 
 ---
 
