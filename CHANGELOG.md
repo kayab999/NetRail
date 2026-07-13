@@ -4,6 +4,48 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 
 ## [Unreleased]
 
+## [1.2.2] — 2026-07-12
+
+### Fixed
+
+- **CI clippy** — allow intentional `TrayState` retention of tray icon (Linux); restores green `main`
+- **Version single source of truth** — Python, README, MANUAL, and package metadata aligned to 1.2.2
+- **Open-URL encoded loopback** — block decimal/hex/octal/short IPv4 forms browsers resolve to localhost (`OPEN_URL_LOCALHOST`)
+- **Open-URL private nets** — block RFC1918 / ULA / non-public IPs from result opens (`OPEN_URL_PRIVATE`); SearXNG backends may still use LAN
+- **Python validation errors** — FastAPI 422 mapped to `{code, detail, status}` (`QUERY_INVALID`, etc.)
+
+### Changed
+
+- **Release workflow** — runs `cargo clippy --all-targets -- -D warnings` before tests (same gate as CI)
+- **SECURITY.md** — supported versions include 1.2.x; open-URL and encryption-degrade docs expanded
+- **DISTRIBUTION.md** — AppImage requires `patchelf` locally; CI already installs it
+
+### Added
+
+- **RC / adversarial audits** — `docs/AUDIT_RC_2026-07-12.md`, `AUDIT_POSTFIX_*`, `AUDIT_ADVERSARIAL_QA_*`, `docs/RELEASE_v1.2.2.md`
+- **Python Wikipedia fallback** — OpenSearch + extracts when fanout is empty (parity with Rust)
+- **Python `search_recovery`** — `/api/health` hints for SearXNG / Brave
+- **Empty backend errors (Python)** — zero-result batches surface in `errors[]` like Rust
+- **Local packaging** — `.deb` / `.rpm` / `netrail-api` with static UI; AppImage via CI when `patchelf` available
+
+## [1.2.1] — 2026-06-27
+
+### Added
+
+- **Wikipedia intro extracts** — OpenSearch + `prop=extracts` for readable fallback snippets
+- **`search_recovery` on `/api/health`** — hints for SearXNG / Brave when DDGS is blocked
+- **`docs/RELEASE_v1.2.1.md`** — patch release notes
+
+### Fixed
+
+- **Empty Wikipedia cards** — no more blank / “No description available” on Wikipedia-only results
+- **Splash / startup** — `RESULTS_PAGE_SIZE` TDZ crash; 2.5s HTML failsafe
+- **Error banner** — shorter DDGS message, dismiss control, recovery tips
+
+### Changed
+
+- **Fanout error UX** — dismissible banner; Wikipedia-only recovery messaging
+
 ## [1.2.0] — 2026-06-27
 
 ### Added
@@ -193,6 +235,8 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 - URL open restricted to `http://` and `https://` schemes
 - Localhost-only server bind in v0.1
 
+[1.2.2]: https://github.com/kayab999/NetRail/releases/tag/v1.2.2
+[1.2.1]: https://github.com/kayab999/NetRail/releases/tag/v1.2.1
 [1.2.0]: https://github.com/kayab999/NetRail/releases/tag/v1.2.0
 [1.1.1]: https://github.com/kayab999/NetRail/releases/tag/v1.1.1
 [1.1.0]: https://github.com/kayab999/NetRail/releases/tag/v1.1.0

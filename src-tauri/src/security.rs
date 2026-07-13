@@ -1,5 +1,5 @@
 use crate::error::{NetRailError, NetRailResult};
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use url::Url;
 
 const DDG_HOSTS: &[&str] = &["duckduckgo.com", "r.duckduckgo.com"];
@@ -55,7 +55,103 @@ fn validate_open_url_inner(raw: &str, depth: u8) -> NetRailResult<String> {
 }
 
 fn is_ddg_host(host: &str) -> bool {
-    DDG_HOSTS.iter().any(|&h| host == h || host.ends_with(&format!(".{h}")))
+    DDG_HOSTS
+        .iter()
+        .any(|&h| host == h || host.ends_with(&format!(".{h}")))
+}
+
+/// Parse IPv4 the way browsers often do: decimal integer, hex, octal octets,
+/// and short forms (`127.1` → `127.0.0.1`).
+fn parse_browser_ipv4(host: &str) -> Option<Ipv4Addr> {
+    let host = host.trim().trim_matches(|c| c == '[' || c == ']');
+    if host.is_empty() {
+        return None;
+    }
+
+    if let Ok(ip) = host.parse::<Ipv4Addr>() {
+        return Some(ip);
+    }
+
+    if !host.contains('.') {
+        return parse_u32_loose(host).map(Ipv4Addr::from);
+    }
+
+    let parts: Vec<&str> = host.split('.').collect();
+    match parts.len() {
+        2 => {
+            let a = parse_u32_loose(parts[0])?;
+            let b = parse_u32_loose(parts[1])?;
+            if a > 255 || b > 0x00FF_FFFF {
+                return None;
+            }
+            Some(Ipv4Addr::from((a << 24) | b))
+        }
+        3 => {
+            let a = parse_u32_loose(parts[0])?;
+            let b = parse_u32_loose(parts[1])?;
+            let c = parse_u32_loose(parts[2])?;
+            if a > 255 || b > 255 || c > 0xFFFF {
+                return None;
+            }
+            Some(Ipv4Addr::from((a << 24) | (b << 16) | c))
+        }
+        4 => {
+            let mut octets = [0u8; 4];
+            for (i, part) in parts.iter().enumerate() {
+                let n = parse_u32_loose(part)?;
+                if n > 255 {
+                    return None;
+                }
+                octets[i] = n as u8;
+            }
+            Some(Ipv4Addr::from(octets))
+        }
+        _ => None,
+    }
+}
+
+/// Decimal, `0x` hex, or leading-zero octal (browser-style).
+fn parse_u32_loose(raw: &str) -> Option<u32> {
+    let s = raw.trim();
+    if s.is_empty() {
+        return None;
+    }
+    if let Some(hex) = s
+        .strip_prefix("0x")
+        .or_else(|| s.strip_prefix("0X"))
+    {
+        return u32::from_str_radix(hex, 16).ok();
+    }
+    if s.len() > 1 && s.starts_with('0') && s.bytes().all(|b| (b'0'..=b'7').contains(&b)) {
+        return u32::from_str_radix(s, 8).ok();
+    }
+    s.parse::<u32>().ok()
+}
+
+fn parse_host_ip(host: &str) -> Option<IpAddr> {
+    let host = host.trim().trim_matches(|c| c == '[' || c == ']');
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        return Some(ip);
+    }
+    parse_browser_ipv4(host).map(IpAddr::V4)
+}
+
+fn is_non_public_v4(ip: Ipv4Addr) -> bool {
+    ip.is_loopback()
+        || ip.is_unspecified()
+        || ip.is_link_local()
+        || ip.is_private()
+        || ip.is_broadcast()
+        || ip.is_multicast()
+        || matches!(ip.octets()[0], 0 | 240..=255)
+}
+
+fn is_non_public_v6(ip: Ipv6Addr) -> bool {
+    ip.is_loopback()
+        || ip.is_unspecified()
+        || ip.is_unicast_link_local()
+        || ip.is_unique_local()
+        || ip.is_multicast()
 }
 
 fn block_unsafe_host(host: &str) -> NetRailResult<()> {
@@ -74,6 +170,7 @@ fn block_unsafe_host(host: &str) -> NetRailResult<()> {
     if host_lower.ends_with(".nip.io")
         || host_lower.ends_with(".sslip.io")
         || host_lower.ends_with(".xip.io")
+        || host_lower.ends_with(".localtest.me")
     {
         return Err(NetRailError::InvalidOpenUrl {
             code: "OPEN_URL_DNS_REBINDING",
@@ -81,25 +178,60 @@ fn block_unsafe_host(host: &str) -> NetRailResult<()> {
         });
     }
 
-    if let Ok(ip) = host_lower.parse::<IpAddr>() {
-        let link_local = match ip {
-            IpAddr::V4(v4) => v4.is_link_local(),
-            IpAddr::V6(v6) => v6.is_unicast_link_local(),
-        };
-        if ip.is_loopback() || ip.is_unspecified() || link_local {
-            return Err(NetRailError::InvalidOpenUrl {
-                code: "OPEN_URL_LINK_LOCAL",
-                message: "Local or link-local IP addresses cannot be opened from search results."
-                    .into(),
-            });
+    if let Some(ip) = parse_host_ip(&host_lower) {
+        match ip {
+            IpAddr::V4(v4) if v4.is_loopback() || v4.is_unspecified() => {
+                return Err(NetRailError::InvalidOpenUrl {
+                    code: "OPEN_URL_LOCALHOST",
+                    message: "Localhost URLs cannot be opened from search results.".into(),
+                });
+            }
+            IpAddr::V6(v6) if v6.is_loopback() || v6.is_unspecified() => {
+                return Err(NetRailError::InvalidOpenUrl {
+                    code: "OPEN_URL_LOCALHOST",
+                    message: "Localhost URLs cannot be opened from search results.".into(),
+                });
+            }
+            IpAddr::V4(v4) if v4.is_link_local() => {
+                return Err(NetRailError::InvalidOpenUrl {
+                    code: "OPEN_URL_LINK_LOCAL",
+                    message:
+                        "Local or link-local IP addresses cannot be opened from search results."
+                            .into(),
+                });
+            }
+            IpAddr::V6(v6) if v6.is_unicast_link_local() => {
+                return Err(NetRailError::InvalidOpenUrl {
+                    code: "OPEN_URL_LINK_LOCAL",
+                    message:
+                        "Local or link-local IP addresses cannot be opened from search results."
+                            .into(),
+                });
+            }
+            IpAddr::V4(v4) if is_non_public_v4(v4) => {
+                return Err(NetRailError::InvalidOpenUrl {
+                    code: "OPEN_URL_PRIVATE",
+                    message: "Private or non-public IP addresses cannot be opened from search results."
+                        .into(),
+                });
+            }
+            IpAddr::V6(v6) if is_non_public_v6(v6) => {
+                return Err(NetRailError::InvalidOpenUrl {
+                    code: "OPEN_URL_PRIVATE",
+                    message: "Private or non-public IP addresses cannot be opened from search results."
+                        .into(),
+                });
+            }
+            _ => {}
         }
     }
 
     Ok(())
 }
 
-/// Validate a user-configured backend URL (e.g. SearXNG). Localhost is allowed;
-/// cloud metadata, rebinding hostnames, and link-local addresses are blocked.
+/// Validate a user-configured backend URL (e.g. SearXNG). Localhost and private
+/// LAN hosts are allowed; cloud metadata, rebinding hostnames, and link-local
+/// addresses are blocked.
 pub fn validate_backend_url(raw: &str) -> NetRailResult<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -144,6 +276,7 @@ fn block_backend_host(host: &str) -> NetRailResult<()> {
     if host_lower.ends_with(".nip.io")
         || host_lower.ends_with(".sslip.io")
         || host_lower.ends_with(".xip.io")
+        || host_lower.ends_with(".localtest.me")
     {
         return Err(NetRailError::InvalidBackendUrl {
             code: "BACKEND_URL_DNS_REBINDING",
@@ -151,7 +284,7 @@ fn block_backend_host(host: &str) -> NetRailResult<()> {
         });
     }
 
-    if let Ok(ip) = host_lower.parse::<IpAddr>() {
+    if let Some(ip) = parse_host_ip(&host_lower) {
         if is_cloud_metadata_ip(ip) {
             return Err(NetRailError::InvalidBackendUrl {
                 code: "BACKEND_URL_CLOUD_METADATA",
@@ -214,10 +347,7 @@ mod tests {
     #[test]
     fn unwraps_ddg_redirect_to_safe_url() {
         let ddg = "https://duckduckgo.com/l/?uddg=https%3A%2F%2Frust-lang.org%2F";
-        assert_eq!(
-            validate_open_url(ddg).unwrap(),
-            "https://rust-lang.org/"
-        );
+        assert_eq!(validate_open_url(ddg).unwrap(), "https://rust-lang.org/");
     }
 
     #[test]
@@ -242,5 +372,57 @@ mod tests {
     fn open_url_errors_have_stable_codes() {
         let err = validate_open_url("http://127.0.0.1/").unwrap_err();
         assert_eq!(err.error_code(), "OPEN_URL_LOCALHOST");
+    }
+
+    #[test]
+    fn rejects_decimal_encoded_loopback() {
+        let err = validate_open_url("http://2130706433/").unwrap_err();
+        assert_eq!(err.error_code(), "OPEN_URL_LOCALHOST");
+    }
+
+    #[test]
+    fn rejects_hex_encoded_loopback() {
+        let err = validate_open_url("http://0x7f000001/").unwrap_err();
+        assert_eq!(err.error_code(), "OPEN_URL_LOCALHOST");
+    }
+
+    #[test]
+    fn rejects_octal_dotted_loopback() {
+        let err = validate_open_url("http://0177.0.0.1/").unwrap_err();
+        assert_eq!(err.error_code(), "OPEN_URL_LOCALHOST");
+    }
+
+    #[test]
+    fn rejects_short_form_loopback() {
+        let err = validate_open_url("http://127.1/").unwrap_err();
+        assert_eq!(err.error_code(), "OPEN_URL_LOCALHOST");
+    }
+
+    #[test]
+    fn rejects_private_rfc1918() {
+        for url in [
+            "http://192.168.1.1/",
+            "http://10.0.0.1/",
+            "http://172.16.0.1/",
+        ] {
+            let err = validate_open_url(url).unwrap_err();
+            assert_eq!(err.error_code(), "OPEN_URL_PRIVATE", "{url}");
+        }
+    }
+
+    #[test]
+    fn allows_private_backend_url_for_searxng() {
+        assert_eq!(
+            validate_backend_url("http://192.168.0.5:8080").unwrap(),
+            "http://192.168.0.5:8080"
+        );
+    }
+
+    #[test]
+    fn parse_browser_ipv4_decimal() {
+        assert_eq!(
+            parse_browser_ipv4("2130706433"),
+            Some(Ipv4Addr::new(127, 0, 0, 1))
+        );
     }
 }

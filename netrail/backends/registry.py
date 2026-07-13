@@ -9,6 +9,7 @@ from netrail.backends.ddgs import DDGSBackend
 from netrail.backends.merge import dedupe_results, merge_fanout
 from netrail.backends.searxng import SearXNGBackend
 from netrail.backends.types import SearchMode, SearchResponse, SearchResult
+from netrail.backends.wikipedia import WikipediaBackend
 from netrail.config import load_settings
 
 logger = logging.getLogger(__name__)
@@ -103,18 +104,39 @@ def search_with_fallback(
         for future in as_completed(futures):
             name, provenance, batch, err = future.result()
             if err:
+                logger.warning("backend search failed: %s", err)
                 errors.append(err)
                 continue
             if batch:
                 backends_used.append(name)
                 provenance_chain.append(provenance)
                 batches.append((name, batch))
+            else:
+                logger.warning("%s returned zero parseable results", name)
+                errors.append(f"{name}: returned no results")
 
     if strategy == "fallback":
         flat = [item for _, batch in batches for item in batch]
         merged = dedupe_results(flat)[:max_results]
     else:
         merged = merge_fanout(batches, max_results)
+
+    if not merged and mode == "web":
+        logger.info("fanout empty — activating wikipedia fallback for %r", query)
+        wiki = WikipediaBackend()
+        try:
+            wiki_results = wiki.search(query, mode, max_results)
+            if wiki_results:
+                logger.info("wikipedia fallback succeeded (%d results)", len(wiki_results))
+                backends_used.append(wiki.name)
+                provenance_chain.append(wiki.provenance)
+                merged = wiki_results
+            else:
+                logger.warning("wikipedia fallback returned no results")
+                errors.append("wikipedia: returned no results")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("wikipedia fallback failed: %s", exc)
+            errors.append(f"wikipedia: {exc}")
 
     return SearchResponse(
         query=query,

@@ -38,11 +38,13 @@ jobs:
             libssl-dev \
             libgtk-3-dev
 
-      - name: Run tests
+      - name: Run tests and lint
         run: |
           python -m pip install -r requirements.txt
           python -m pytest tests/ -q
-          cd src-tauri && cargo test
+          cd src-tauri
+          cargo clippy --all-targets -- -D warnings
+          cargo test
 
       - name: Build headless API binary
         working-directory: src-tauri

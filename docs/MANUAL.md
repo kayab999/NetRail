@@ -12,7 +12,7 @@ NetRail does not replace your browser. It sits in front of it. Results appear in
 
 ## Launching NetRail
 
-### Desktop app (v1.1 — recommended)
+### Desktop app (recommended)
 
 Download the AppImage or `.deb` from [GitHub Releases](https://github.com/kayab999/NetRail/releases/latest), or build from source:
 
@@ -26,7 +26,7 @@ The Tauri shell embeds the UI and starts the Rust API on `127.0.0.1:7421`. Use t
 On Ubuntu 24.04 without FUSE:
 
 ```bash
-APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.2.0_amd64.AppImage
+APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.2.2_amd64.AppImage
 ```
 
 ### Headless API

@@ -1,6 +1,6 @@
-# NetRail Distribution Guide (v1.1)
+# NetRail Distribution Guide (v1.2)
 
-NetRail ships as a Rust/Tauri desktop app and a headless API binary. Python sources remain for development parity and legacy packaging paths.
+NetRail ships as a Rust/Tauri desktop app and a headless API binary. Python sources remain for development parity, Docker, Flatpak, and tests.
 
 | Format | Best for | Browser open | History encryption |
 |--------|----------|--------------|-------------------|
@@ -38,12 +38,16 @@ APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_*_amd64.AppImage
 ### Build locally
 
 ```bash
+# AppImage bundling needs patchelf (also installed in GitHub Release CI):
+#   sudo apt install patchelf
 npm ci
 cd src-tauri && cargo build --release --bin netrail-api --no-default-features && cd ..
 APPIMAGE_EXTRACT_AND_RUN=1 npm run build
 ```
 
-Artifacts land in `src-tauri/target/release/bundle/`.
+Artifacts land in `src-tauri/target/release/bundle/` (`.deb`, `.rpm`, AppImage when `patchelf` is present).
+
+If AppImage fails with `Could not find patchelf`, install `patchelf` or use the **`.deb`** / CI-built AppImage from the GitHub Release.
 
 ---
 
@@ -168,4 +172,4 @@ Flatpak uses XDG paths under `~/.var/app/io.netrail.NetRail/`.
 
 ---
 
-*NetRail v1.2.0 — The Sovereign Search Console*
+*NetRail v1.2.2 — The Sovereign Search Console*

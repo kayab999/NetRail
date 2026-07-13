@@ -9,6 +9,7 @@ from typing import Any, Literal
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request, Response
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -57,6 +58,48 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 @app.exception_handler(NetRailError)
 async def netrail_error_handler(_request: Request, exc: NetRailError) -> JSONResponse:
     return JSONResponse(status_code=exc.status, content=exc.to_dict())
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_handler(
+    _request: Request, exc: RequestValidationError
+) -> JSONResponse:
+    """Map FastAPI/Pydantic 422 into stable NetRail `{code, detail, status}` (ADV-04)."""
+    errors = exc.errors()
+    locs = [tuple(err.get("loc", ())) for err in errors]
+    messages = [str(err.get("msg", "Invalid request")) for err in errors]
+    detail = messages[0] if messages else "Invalid request."
+
+    def _has_field(*names: str) -> bool:
+        return any(any(part in names for part in loc) for loc in locs)
+
+    if _has_field("query"):
+        err = NetRailError(
+            "QUERY_INVALID",
+            "Query must be 1-500 characters.",
+            status=400,
+        )
+    elif _has_field("max_results"):
+        err = NetRailError(
+            "CONFIG_MAX_RESULTS",
+            "max_results must be between 1 and 50.",
+            status=400,
+        )
+    elif _has_field("mode"):
+        err = NetRailError(
+            "QUERY_INVALID",
+            "mode must be 'web' or 'images'.",
+            status=400,
+        )
+    elif _has_field("url"):
+        err = NetRailError(
+            "OPEN_URL_INVALID",
+            "URL is required.",
+            status=400,
+        )
+    else:
+        err = NetRailError("REQUEST_INVALID", detail, status=400)
+    return JSONResponse(status_code=err.status, content=err.to_dict())
 
 
 @app.middleware("http")
@@ -163,11 +206,36 @@ async def health() -> dict[str, Any]:
         history["encryption_warning"] = (
             "History encryption is enabled but no key is available."
         )
+
+    brave_key_present = bool(
+        os.environ.get("BRAVE_SEARCH_API_KEY") or os.environ.get("NETRAIL_BRAVE_API_KEY")
+    )
+    searxng_configured = bool(settings.get("searxng_url")) or any(
+        b.get("id") == "searxng" and b.get("url")
+        for b in (settings.get("backends") or [])
+        if isinstance(b, dict)
+    )
+    recovery_hints: list[str] = []
+    if not searxng_configured:
+        recovery_hints.append(
+            "Set NETRAIL_SEARXNG_URL to a SearXNG instance for self-hosted metasearch."
+        )
+    if not settings.get("brave_enabled") or not brave_key_present:
+        recovery_hints.append(
+            "Export BRAVE_SEARCH_API_KEY and enable Brave in settings for richer web results."
+        )
+
     return {
         "status": "ok",
         "version": __version__,
         "telemetry": "none",
         "backends_configured": [b.name for b in backends],
+        "search_recovery": {
+            "searxng_configured": searxng_configured,
+            "brave_key_present": brave_key_present,
+            "brave_enabled": bool(settings.get("brave_enabled")),
+            "hints": recovery_hints,
+        },
         "default_provenance": "ddgs → DuckDuckGo metasearch → primarily Bing index",
         "history": history,
         "sandbox": "flatpak" if is_flatpak() else "native",

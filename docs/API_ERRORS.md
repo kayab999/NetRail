@@ -21,9 +21,11 @@ The frontend branches on `code`; `detail` is human-readable. Rust (Tauri / `netr
 | `OPEN_URL_INVALID_SCHEME` | 400 | Blocked scheme (javascript, data, file, …) |
 | `OPEN_URL_CREDENTIALS` | 400 | Embedded username/password in URL |
 | `OPEN_URL_NO_HOST` | 400 | Missing hostname |
-| `OPEN_URL_LOCALHOST` | 400 | Loopback / localhost open blocked |
-| `OPEN_URL_DNS_REBINDING` | 400 | nip.io / sslip.io / xip.io hostname |
-| `OPEN_URL_LINK_LOCAL` | 400 | Link-local or unspecified IP |
+| `OPEN_URL_LOCALHOST` | 400 | Loopback / localhost open blocked (incl. decimal/hex/octal/short forms) |
+| `OPEN_URL_DNS_REBINDING` | 400 | nip.io / sslip.io / xip.io / localtest.me hostname |
+| `OPEN_URL_LINK_LOCAL` | 400 | Link-local IP |
+| `OPEN_URL_PRIVATE` | 400 | Private / non-public IP (RFC1918, ULA, multicast, …) |
+| `REQUEST_INVALID` | 400 | Generic request validation failure (Python path) |
 | `OPEN_URL_REDIRECT_DEPTH` | 400 | Too many DDG redirect unwraps |
 | `CONFIG_MAX_RESULTS` | 400 | `max_results` not in 1–50 |
 | `CONFIG_HISTORY_TTL` | 400 | `history_ttl_days` over 3650 |
@@ -75,4 +77,4 @@ Python API tests: `tests/test_api.py`, `tests/test_security.py`
 
 ---
 
-*NetRail v1.2.0 — maintained by [kayab999](https://github.com/kayab999)*
+*NetRail v1.2.2 — open-URL private/encoded IP codes included — maintained by [kayab999](https://github.com/kayab999)*

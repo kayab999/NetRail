@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import ipaddress
+import re
 from urllib.parse import parse_qs, unquote, urlparse
 
 from netrail.errors import NetRailError
@@ -7,11 +9,105 @@ from netrail.errors import NetRailError
 _BLOCKED_SCHEMES = frozenset({"javascript", "data", "file", "vbscript"})
 _DDG_HOSTS = frozenset({"duckduckgo.com", "r.duckduckgo.com", "www.duckduckgo.com"})
 _MAX_REDIRECT_DEPTH = 5
+_HEX_INT = re.compile(r"^0[xX][0-9a-fA-F]+$")
+_OCTAL_INT = re.compile(r"^0[0-7]+$")
 
 
 def _is_ddg_host(host: str) -> bool:
     host = host.lower()
     return host in _DDG_HOSTS or any(host.endswith(f".{h}") for h in _DDG_HOSTS)
+
+
+def _parse_u32_loose(raw: str) -> int | None:
+    s = raw.strip()
+    if not s:
+        return None
+    try:
+        if _HEX_INT.match(s):
+            return int(s, 16)
+        if len(s) > 1 and _OCTAL_INT.match(s):
+            return int(s, 8)
+        if s.isdigit():
+            return int(s, 10)
+    except ValueError:
+        return None
+    return None
+
+
+def _parse_browser_ipv4(host: str) -> ipaddress.IPv4Address | None:
+    """Browser-style IPv4: decimal, hex, octal octets, short forms (127.1 → 127.0.0.1)."""
+    host = host.strip().strip("[]")
+    if not host:
+        return None
+
+    try:
+        return ipaddress.IPv4Address(host)
+    except ValueError:
+        pass
+
+    if "." not in host:
+        n = _parse_u32_loose(host)
+        if n is None or n > 0xFFFFFFFF:
+            return None
+        return ipaddress.IPv4Address(n)
+
+    parts = host.split(".")
+    try:
+        if len(parts) == 2:
+            a = _parse_u32_loose(parts[0])
+            b = _parse_u32_loose(parts[1])
+            if a is None or b is None or a > 255 or b > 0x00FFFFFF:
+                return None
+            return ipaddress.IPv4Address((a << 24) | b)
+        if len(parts) == 3:
+            a = _parse_u32_loose(parts[0])
+            b = _parse_u32_loose(parts[1])
+            c = _parse_u32_loose(parts[2])
+            if a is None or b is None or c is None or a > 255 or b > 255 or c > 0xFFFF:
+                return None
+            return ipaddress.IPv4Address((a << 24) | (b << 16) | c)
+        if len(parts) == 4:
+            octets: list[int] = []
+            for part in parts:
+                n = _parse_u32_loose(part)
+                if n is None or n > 255:
+                    return None
+                octets.append(n)
+            return ipaddress.IPv4Address(bytes(octets))
+    except (ValueError, OverflowError):
+        return None
+    return None
+
+
+def _parse_host_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    host = host.strip().strip("[]")
+    try:
+        return ipaddress.ip_address(host)
+    except ValueError:
+        return _parse_browser_ipv4(host)
+
+
+def _is_non_public_v4(ip: ipaddress.IPv4Address) -> bool:
+    return bool(
+        ip.is_loopback
+        or ip.is_unspecified
+        or ip.is_link_local
+        or ip.is_private
+        or ip.is_multicast
+        or ip.is_reserved
+        or int(ip) >= 0xF0000000  # 240.0.0.0/4 class E
+    )
+
+
+def _is_non_public_v6(ip: ipaddress.IPv6Address) -> bool:
+    return bool(
+        ip.is_loopback
+        or ip.is_unspecified
+        or ip.is_link_local
+        or ip.is_private  # ULA
+        or ip.is_multicast
+        or ip.is_reserved
+    )
 
 
 def _block_unsafe_host(host: str) -> None:
@@ -26,23 +122,50 @@ def _block_unsafe_host(host: str) -> None:
         host_lower.endswith(".nip.io")
         or host_lower.endswith(".sslip.io")
         or host_lower.endswith(".xip.io")
+        or host_lower.endswith(".localtest.me")
     ):
         raise NetRailError(
             "OPEN_URL_DNS_REBINDING",
             "DNS rebinding hostnames cannot be opened from search results.",
         )
 
-    import ipaddress
-
-    try:
-        ip = ipaddress.ip_address(host_lower.strip("[]"))
-    except ValueError:
+    ip = _parse_host_ip(host_lower)
+    if ip is None:
         return
 
-    if ip.is_loopback or ip.is_unspecified or ip.is_link_local:
+    if isinstance(ip, ipaddress.IPv4Address):
+        if ip.is_loopback or ip.is_unspecified:
+            raise NetRailError(
+                "OPEN_URL_LOCALHOST",
+                "Localhost URLs cannot be opened from search results.",
+            )
+        if ip.is_link_local:
+            raise NetRailError(
+                "OPEN_URL_LINK_LOCAL",
+                "Local or link-local IP addresses cannot be opened from search results.",
+            )
+        if _is_non_public_v4(ip):
+            raise NetRailError(
+                "OPEN_URL_PRIVATE",
+                "Private or non-public IP addresses cannot be opened from search results.",
+            )
+        return
+
+    # IPv6
+    if ip.is_loopback or ip.is_unspecified:
+        raise NetRailError(
+            "OPEN_URL_LOCALHOST",
+            "Localhost URLs cannot be opened from search results.",
+        )
+    if ip.is_link_local:
         raise NetRailError(
             "OPEN_URL_LINK_LOCAL",
             "Local or link-local IP addresses cannot be opened from search results.",
+        )
+    if _is_non_public_v6(ip):
+        raise NetRailError(
+            "OPEN_URL_PRIVATE",
+            "Private or non-public IP addresses cannot be opened from search results.",
         )
 
 
@@ -95,17 +218,15 @@ def _block_backend_host(host: str) -> None:
         host_lower.endswith(".nip.io")
         or host_lower.endswith(".sslip.io")
         or host_lower.endswith(".xip.io")
+        or host_lower.endswith(".localtest.me")
     ):
         raise NetRailError(
             "BACKEND_URL_DNS_REBINDING",
             "DNS rebinding hostnames are not allowed in backend URLs.",
         )
 
-    import ipaddress
-
-    try:
-        ip = ipaddress.ip_address(host_lower.strip("[]"))
-    except ValueError:
+    ip = _parse_host_ip(host_lower)
+    if ip is None:
         return
 
     if ip == ipaddress.ip_address("169.254.169.254"):

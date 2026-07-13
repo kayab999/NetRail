@@ -64,3 +64,25 @@ def test_rejects_nip_io_backend_url():
     with pytest.raises(NetRailError) as exc:
         validate_backend_url("http://127.0.0.1.nip.io/")
     assert exc.value.code == "BACKEND_URL_DNS_REBINDING"
+
+
+@pytest.mark.parametrize(
+    "url,code",
+    [
+        ("http://2130706433/", "OPEN_URL_LOCALHOST"),
+        ("http://0x7f000001/", "OPEN_URL_LOCALHOST"),
+        ("http://0177.0.0.1/", "OPEN_URL_LOCALHOST"),
+        ("http://127.1/", "OPEN_URL_LOCALHOST"),
+        ("http://192.168.1.1/", "OPEN_URL_PRIVATE"),
+        ("http://10.0.0.1/", "OPEN_URL_PRIVATE"),
+        ("http://172.16.0.1/", "OPEN_URL_PRIVATE"),
+    ],
+)
+def test_rejects_encoded_and_private_open_urls(url, code):
+    with pytest.raises(NetRailError) as exc:
+        validate_open_url(url)
+    assert exc.value.code == code
+
+
+def test_allows_private_backend_for_searxng():
+    assert validate_backend_url("http://192.168.0.5:8080") == "http://192.168.0.5:8080"
