@@ -17,11 +17,14 @@ use axum::{
     routing::{delete, get, post},
     Json, Router,
 };
+use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Deserialize;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::services::ServeDir;
+
+static FTS_STRIP: Lazy<Regex> = Lazy::new(|| Regex::new(r"[^\w\s-]").expect("FTS strip regex"));
 
 #[derive(Clone)]
 pub struct AppState {
@@ -336,8 +339,7 @@ fn default_history_limit() -> u32 {
 }
 
 fn fts_query(q: &str) -> String {
-    let re = Regex::new(r"[^\w\s-]").unwrap();
-    let cleaned = re.replace_all(q, " ").trim().to_string();
+    let cleaned = FTS_STRIP.replace_all(q, " ").trim().to_string();
     if cleaned.is_empty() {
         return "\"\"".into();
     }
