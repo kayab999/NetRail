@@ -102,6 +102,10 @@ impl NetRailError {
     pub fn status_code(&self) -> http::StatusCode {
         use http::StatusCode;
         match self {
+            Self::InvalidConfig { code, .. } if *code == "AUTH_REQUIRED" => {
+                StatusCode::UNAUTHORIZED
+            }
+
             Self::InvalidQuery { .. }
             | Self::InvalidOpenUrl { .. }
             | Self::InvalidConfig { .. }

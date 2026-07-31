@@ -265,9 +265,14 @@ fn block_unsafe_host(host: &str) -> NetRailResult<()> {
 }
 
 /// Validate a user-configured backend URL (e.g. SearXNG). Localhost and private
-/// LAN hosts are allowed; cloud metadata, rebinding hostnames, and link-local
-/// addresses are blocked.
+/// LAN hosts are allowed by default; cloud metadata, rebinding hostnames, and
+/// link-local addresses are blocked. Pass `strict = true` to also reject
+/// loopback / private IPs (cloud-safe / multi-tenant style).
 pub fn validate_backend_url(raw: &str) -> NetRailResult<String> {
+    validate_backend_url_with_options(raw, false)
+}
+
+pub fn validate_backend_url_with_options(raw: &str, strict: bool) -> NetRailResult<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return Err(NetRailError::InvalidBackendUrl {
@@ -300,12 +305,12 @@ pub fn validate_backend_url(raw: &str) -> NetRailResult<String> {
         code: "BACKEND_URL_NO_HOST",
         message: "Backend URL must include a host.".into(),
     })?;
-    block_backend_host(host)?;
+    block_backend_host(host, strict)?;
 
     Ok(trimmed.to_string())
 }
 
-fn block_backend_host(host: &str) -> NetRailResult<()> {
+fn block_backend_host(host: &str, strict: bool) -> NetRailResult<()> {
     let host_lower = host.to_lowercase();
 
     if is_dns_rebinding_helper(&host_lower) {
@@ -319,6 +324,18 @@ fn block_backend_host(host: &str) -> NetRailResult<()> {
         return Err(NetRailError::InvalidBackendUrl {
             code: "BACKEND_URL_CLOUD_METADATA",
             message: "Cloud metadata addresses cannot be used as backend URLs.".into(),
+        });
+    }
+
+    if strict
+        && matches!(
+            host_lower.as_str(),
+            "localhost" | "127.0.0.1" | "::1" | "0.0.0.0" | "[::1]"
+        )
+    {
+        return Err(NetRailError::InvalidBackendUrl {
+            code: "BACKEND_URL_STRICT_PRIVATE",
+            message: "strict_backend_urls rejects localhost backends.".into(),
         });
     }
 
@@ -339,6 +356,18 @@ fn block_backend_host(host: &str) -> NetRailResult<()> {
                 message: "Unspecified or link-local addresses cannot be used as backend URLs."
                     .into(),
             });
+        }
+        if strict {
+            let private = match ip {
+                IpAddr::V4(v4) => is_non_public_v4(v4) || v4.is_loopback(),
+                IpAddr::V6(v6) => is_non_public_v6(v6) || v6.is_loopback(),
+            };
+            if private {
+                return Err(NetRailError::InvalidBackendUrl {
+                    code: "BACKEND_URL_STRICT_PRIVATE",
+                    message: "strict_backend_urls rejects private/loopback backend hosts.".into(),
+                });
+            }
         }
     }
 
@@ -562,5 +591,12 @@ mod tests {
         assert_eq!(open_err.error_code(), "OPEN_URL_CLOUD_METADATA");
         let back_err = validate_backend_url("http://metadata.google.internal/").unwrap_err();
         assert_eq!(back_err.error_code(), "BACKEND_URL_CLOUD_METADATA");
+    }
+
+    #[test]
+    fn strict_backend_rejects_localhost() {
+        assert!(validate_backend_url("http://127.0.0.1:8080").is_ok());
+        let err = validate_backend_url_with_options("http://127.0.0.1:8080", true).unwrap_err();
+        assert_eq!(err.error_code(), "BACKEND_URL_STRICT_PRIVATE");
     }
 }

@@ -26,23 +26,36 @@ The Tauri shell embeds the UI and starts the Rust API on `127.0.0.1:7421`. Use t
 On Ubuntu 24.04 without FUSE:
 
 ```bash
-APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.3.0_amd64.AppImage
+APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.4.0_amd64.AppImage
 ```
 
-### Headless API
+### Headless API (`netrail-api`)
+
+The release binary **always** starts the HTTP API (no GUI). Extra flags such as `--api-only` are accepted by the **desktop** `netrail` binary to mean “API only”; they are optional/ignored on `netrail-api`.
 
 ```bash
-./netrail-api --api-only
+./netrail-api
+# optional static path:
+# NETRAIL_STATIC_DIR=/usr/share/netrail/static ./netrail-api
 ```
 
 Open **http://127.0.0.1:7421** in any browser if you prefer the web UI without the Tauri shell.
 
-### Python fallback
+### Python fallback (Docker / Flatpak / tests)
 
 ```bash
 ./run.sh
 # or: python -m netrail
 ```
+
+Prefer Rust `netrail-api` for production Docker when possible (`Dockerfile.rust`).
+
+### Desktop vs headless flags
+
+| Binary | Role | `--api-only` |
+|--------|------|----------------|
+| `netrail` | Tauri desktop | Meaningful — skip GUI, serve API |
+| `netrail-api` | Headless Rust API | Not required; binary is always API-only |
 
 ### Help, About, and Donate
 
@@ -294,10 +307,17 @@ curl -s http://127.0.0.1:7421/api/docs/about
 | **No browsers listed** | No `.desktop` browser entries found | Install a browser; ensure it has a Freedesktop entry |
 | **Open does nothing** | Browser binary moved or permissions | Re-select browser in dropdown; verify `which firefox` (or your browser) works |
 | **Private mode ignored** | Browser lacks known private flag | Browser opens in normal mode; try Firefox or Chromium |
-| **Few or no results** | Provider rate limit or query too narrow | Simplify query; wait and retry. Web mode may fall back to Wikipedia (your query still leaves the machine). Images mode has **no** Wikipedia fallback. |
-| **HTTP 429 `RATE_LIMITED`** | Local anti-spam: 90 searches / 120 opens per minute | Wait a minute, or set `NETRAIL_RATE_LIMIT=0` for smoke/dev only |
-| **Open blocked for LAN IP** | Private/loopback URLs cannot be opened from results | Intentional; configure SearXNG on LAN as a **backend** instead |
+| **Few or no results** | Provider rate limit or query too narrow | Simplify query; wait and retry. **Web** mode may fall back to Wikipedia (query still leaves the machine). **Images** mode has **no** Wikipedia fallback. |
+| **HTTP 429 `RATE_LIMITED`** | Local anti-spam: 90 searches / 120 opens / 60 mutations per minute | Wait a minute, or set `NETRAIL_RATE_LIMIT=0` for smoke/dev only |
+| **HTTP 401 `AUTH_REQUIRED`** | `NETRAIL_API_TOKEN` is set | Pass `Authorization: Bearer …` or `X-NetRail-Token` (UI injects when enabled) |
+| **Open blocked for LAN IP** | Private/loopback URLs cannot be opened from results | Intentional; point SearXNG at LAN as a **backend** (`searxng_url`), not via Open |
+| **Backend URL rejected (strict)** | `strict_backend_urls` / `NETRAIL_STRICT_BACKEND_URLS=1` | Only public HTTPS/HTTP backends allowed |
 | **Port already in use** | Another NetRail instance on 7421 | Stop the other process (`ss -tlnp | grep 7421`) |
+
+### Privacy notes (honest)
+
+- The **API** listens only on `127.0.0.1`. Search **queries leave your machine** to enabled backends (DDGS, SearXNG, Brave) and, on empty **web** fanout, to Wikipedia.
+- History encryption covers query text, titles, and snippets. **FTS tokens, visit URLs, and collection URLs remain plaintext** (required for local search/dedupe). Full-disk encryption is still your OS’s job.
 
 ### Search failed and your network
 

@@ -138,8 +138,12 @@ cp .env.example .env
 ### Run API only
 
 ```bash
+# Python compatibility image (default service)
 docker compose up -d netrail
 curl -s http://127.0.0.1:7421/api/health
+
+# Preferred production path: Rust netrail-api
+docker compose --profile rust up -d netrail-rust
 ```
 
 ### Run with SearXNG profile
@@ -152,13 +156,17 @@ Set in `.env`:
 
 ```
 SEARXNG_URL=http://searxng:8080
+NETRAIL_DB_KEY=...   # required for encrypted history
+# NETRAIL_API_TOKEN=...  # recommended if you ever publish the port beyond pure single-user trust
 ```
 
 ### Security warning
 
-The compose file binds `127.0.0.1:7421:7421`. **Do not** change this to `7421:7421` unless you intend to expose NetRail to your entire LAN.
+The compose file binds `127.0.0.1:7421:7421`. **Do not** change this to `7421:7421` unless you intend to expose NetRail to your entire LAN (then set `NETRAIL_API_TOKEN`).
 
 Docker has no OS keyring — `NETRAIL_DB_KEY` is **required** for encrypted history.
+
+Build Rust image directly: `docker build -f Dockerfile.rust -t netrail-api .`
 
 ---
 
@@ -168,7 +176,14 @@ Docker has no OS keyring — `NETRAIL_DB_KEY` is **required** for encrypted hist
 |----------|---------|
 | `NETRAIL_DB_PATH` | SQLite database location |
 | `NETRAIL_DB_KEY` | Fernet key (Docker / headless) |
+| `NETRAIL_STATIC_DIR` | Directory containing `index.html` / UI assets |
 | `NETRAIL_AUTO_OPEN` | Open browser on start (`true`/`false`) |
+| `NETRAIL_RATE_LIMIT` | `0` / `false` disables local 90/120/60 per-minute caps |
+| `NETRAIL_API_TOKEN` | Optional API token; require Bearer / `X-NetRail-Token` on `/api/*` (except health) |
+| `NETRAIL_INJECT_UI_TOKEN` | When token set, inject into served HTML for UI (default on) |
+| `NETRAIL_STRICT_BACKEND_URLS` | `1` rejects private/loopback SearXNG/backend URLs |
+| `NETRAIL_AUDIT_LOG` | `1` appends JSON lines to XDG data `netrail/audit.log` |
+| `NETRAIL_AUDIT_LOG_PATH` | Explicit audit log path |
 | `SEARXNG_URL` / `NETRAIL_SEARXNG_URL` | Self-hosted SearXNG base URL |
 | `BRAVE_SEARCH_API_KEY` / `NETRAIL_BRAVE_API_KEY` | Brave Search API key (never stored in settings) |
 | `NETRAIL_SEARCH_STRATEGY` | `fanout` or `fallback` |
@@ -201,4 +216,4 @@ Flatpak uses XDG paths under `~/.var/app/io.netrail.NetRail/`.
 
 ---
 
-*NetRail v1.2.2 — dual-stack policy: Rust production · Python compatibility*
+*NetRail v1.4.0 — dual-stack policy: Rust production · Python compatibility · optional API token / audit log*

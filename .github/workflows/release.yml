@@ -76,8 +76,26 @@ jobs:
       - name: E2E smoke release netrail-api
         run: bash scripts/e2e-api-smoke.sh dist/release/netrail-api
 
-      - name: Generate SHA256 checksums
+      - name: Generate SBOM + SHA256 checksums
         run: |
+          # Lightweight SPDX-ish inventory (no external syft dependency).
+          {
+            echo "# NetRail SBOM (component inventory)"
+            echo "generated=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "version=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")"
+            echo ""
+            echo "## Rust (Cargo.lock packages)"
+            python3 - <<'PY'
+import re
+text=open("src-tauri/Cargo.lock").read()
+pkgs=re.findall(r'name = "([^"]+)"\nversion = "([^"]+)"', text)
+for name, ver in sorted(set(pkgs)):
+    print(f"{name}@{ver}")
+PY
+            echo ""
+            echo "## Python (requirements.txt)"
+            cat requirements.txt
+          } > dist/release/SBOM.txt
           cd dist/release
           sha256sum * > SHA256SUMS
           cat SHA256SUMS

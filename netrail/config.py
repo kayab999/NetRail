@@ -31,6 +31,7 @@ DEFAULTS: dict[str, Any] = {
     "history_enabled": True,
     "history_encrypt": True,
     "history_ttl_days": 90,
+    "strict_backend_urls": False,
 }
 
 
@@ -38,14 +39,22 @@ def _as_bool(value: str) -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
 
 
+def strict_backend_urls_from_env() -> bool:
+    return _as_bool(os.environ.get("NETRAIL_STRICT_BACKEND_URLS", "0"))
+
+
 def _apply_env_overrides(settings: dict[str, Any]) -> dict[str, Any]:
+    if raw := os.environ.get("NETRAIL_STRICT_BACKEND_URLS"):
+        settings["strict_backend_urls"] = _as_bool(raw)
+
     if url := os.environ.get("NETRAIL_SEARXNG_URL") or os.environ.get("SEARXNG_URL"):
         # Same gate as settings save — never apply metadata/rebinding/etc. from env.
         from netrail.errors import NetRailError
         from netrail.security import validate_backend_url
 
+        strict = bool(settings.get("strict_backend_urls")) or strict_backend_urls_from_env()
         try:
-            settings["searxng_url"] = validate_backend_url(url)
+            settings["searxng_url"] = validate_backend_url(url, strict=strict)
         except NetRailError:
             # Leave prior settings value; invalid env must not enable a hostile backend.
             pass
@@ -131,12 +140,13 @@ def validate_settings(settings: dict[str, Any]) -> None:
             "search_strategy must be 'fanout' or 'fallback'.",
         )
 
+    strict = bool(settings.get("strict_backend_urls")) or strict_backend_urls_from_env()
     if url := settings.get("searxng_url"):
-        validate_backend_url(url)
+        validate_backend_url(url, strict=strict)
 
     for entry in settings.get("backends") or []:
         if entry_url := entry.get("url"):
-            validate_backend_url(entry_url)
+            validate_backend_url(entry_url, strict=strict)
 
 
 def save_settings(settings: dict[str, Any]) -> dict[str, Any]:

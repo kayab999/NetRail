@@ -4,6 +4,25 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-07-31
+
+### Added
+
+- **Optional API token** — `NETRAIL_API_TOKEN` protects `/api/*` except health; UI inject via `NETRAIL_INJECT_UI_TOKEN`
+- **`strict_backend_urls`** — settings + `NETRAIL_STRICT_BACKEND_URLS` reject private/loopback backend URLs
+- **Mutation rate limits** — 60/min for settings, history purge/delete, collections (search 90 / open 120 unchanged)
+- **Audit log** — `NETRAIL_AUDIT_LOG` / `NETRAIL_AUDIT_LOG_PATH` JSON lines for sensitive actions
+- **Dockerfile.rust** — multi-stage `netrail-api` image; compose profile `rust`
+- **CI dependency audits** — `cargo audit` + `pip-audit`
+- **Release SBOM.txt** — Cargo.lock + requirements inventory with SHA256SUMS
+- **Parity harness** — `scripts/parity-api-smoke.sh` (Python probes + live Rust when built)
+- Expanded Python API tests (auth, rate limit, history disabled, collection name, invalid mode)
+
+### Changed
+
+- Health `api_contract` → **1.4**; exposes `auth`, `strict_backend_urls`, `audit_log`, `mutate_per_minute`
+- Docs: MANUAL headless flags, DISTRIBUTION env table, honest privacy/rate-limit notes
+
 ## [1.3.0] — 2026-07-31
 
 ### Fixed
@@ -277,6 +296,7 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 - URL open restricted to `http://` and `https://` schemes
 - Localhost-only server bind in v0.1
 
+[1.4.0]: https://github.com/kayab999/NetRail/releases/tag/v1.4.0
 [1.3.0]: https://github.com/kayab999/NetRail/releases/tag/v1.3.0
 [1.2.3]: https://github.com/kayab999/NetRail/releases/tag/v1.2.3
 [1.2.2]: https://github.com/kayab999/NetRail/releases/tag/v1.2.2

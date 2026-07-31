@@ -8,21 +8,23 @@ Download the **AppImage** or **.deb** from the [latest release](https://github.c
 
 ```bash
 # Desktop app (AppImage)
-chmod +x NetRail_1.3.0_amd64.AppImage
-# Ubuntu 24.04+ without FUSE: APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.3.0_amd64.AppImage
-./NetRail_1.3.0_amd64.AppImage
+chmod +x NetRail_1.4.0_amd64.AppImage
+# Ubuntu 24.04+ without FUSE: APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.4.0_amd64.AppImage
+./NetRail_1.4.0_amd64.AppImage
 
 # Or Debian/Ubuntu package
-sudo dpkg -i NetRail_1.3.0_amd64.deb
+sudo dpkg -i NetRail_1.4.0_amd64.deb
 ```
 
 **Headless API** (homelabs, scripting, Docker):
 
 ```bash
 chmod +x netrail-api
-./netrail-api --api-only
+./netrail-api
 curl http://127.0.0.1:7421/api/health
 ```
+
+(`netrail-api` is always headless; `--api-only` is for the desktop `netrail` binary.)
 
 Build from source: see [Development](#development) below.
 
@@ -32,7 +34,7 @@ Build from source: see [Development](#development) below.
 
 *Fanout search across SearXNG and DDGS. Results stay in the link rail until you open them.*
 
-**Version:** 1.3.0 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
+**Version:** 1.4.0 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
 
 ---
 
@@ -46,10 +48,10 @@ NetRail is a local, privacy-first research console for Linux. It fans out your q
 | One fragile index | **Fanout** to SearXNG + DDGS + Brave concurrently |
 | Opaque provenance | `[DDGS]` / `[SearXNG]` / `[Brave]` pill on every result |
 | Cloud history | Encrypted SQLite + FTS5, local only |
-| Slow startup | Native Rust engine, **&lt;100ms** API cold start |
+| Slow startup | Native Rust engine (cold start depends on machine; not CI-gated) |
 | Surveillance economics | Zero telemetry — audit the source |
 
-**Binaries:** 12MB desktop · 6.7MB headless API · zero accounts · zero analytics.
+**Binaries:** compact desktop + headless API (sizes vary by strip/link flags) · zero accounts · zero analytics.
 
 ---
 
@@ -147,6 +149,7 @@ Full API: [docs/MANUAL.md](docs/MANUAL.md)
 | [Distribution](docs/DISTRIBUTION.md) | Flatpak, Docker, AppImage, install |
 | [Open Letter](OPEN_LETTER.md) | Philosophy and the v1.0 postscript |
 | [API error codes](docs/API_ERRORS.md) | Stable `code` / `detail` / `status` reference |
+| [Release notes 1.4.0](docs/RELEASE_v1.4.0.md) | Wave 3–5 token, audit, Docker Rust, parity harness |
 | [Release notes 1.3.0](docs/RELEASE_v1.3.0.md) | Wave 2 security/parity hardening |
 | [Release notes 1.2.3](docs/RELEASE_v1.2.3.md) | Docs truth + open-URL/env P1 hardening |
 | [Release notes 1.2.2](docs/RELEASE_v1.2.2.md) | v1.2.2 RC hygiene (CI, versions) |

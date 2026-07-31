@@ -1,0 +1,35 @@
+# Production-style image: headless Rust netrail-api.
+# Build: docker build -f Dockerfile.rust -t netrail-api .
+# Prefer this over the Python Dockerfile for Docker/homelab production.
+
+FROM rust:bookworm AS builder
+WORKDIR /src
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+COPY src-tauri ./src-tauri
+COPY docs ./docs
+COPY netrail/static ./netrail/static
+RUN cargo build --release --manifest-path src-tauri/Cargo.toml \
+      --bin netrail-api --no-default-features
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=builder /src/src-tauri/target/release/netrail-api /usr/local/bin/netrail-api
+COPY netrail/static /usr/share/netrail/static
+
+ENV NETRAIL_STATIC_DIR=/usr/share/netrail/static \
+    NETRAIL_DB_PATH=/app/data/netrail.db \
+    NETRAIL_AUTO_OPEN=false \
+    NETRAIL_HISTORY_ENCRYPT=true
+
+RUN mkdir -p /app/data
+EXPOSE 7421
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD curl -sf http://127.0.0.1:7421/api/health >/dev/null
+
+CMD ["netrail-api"]

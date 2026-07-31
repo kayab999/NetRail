@@ -77,10 +77,22 @@ function applyHealthSecurity(health) {
   if (message) showSecurityBanner(message);
 }
 
+function apiHeaders(extra = {}) {
+  const headers = { "Content-Type": "application/json", ...extra };
+  const token =
+    (typeof window !== "undefined" && window.NETRAIL_API_TOKEN) ||
+    (typeof localStorage !== "undefined" && localStorage.getItem("netrail_api_token")) ||
+    "";
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 async function api(path, options = {}) {
   const response = await fetch(path, {
-    headers: { "Content-Type": "application/json" },
     ...options,
+    headers: apiHeaders(options.headers || {}),
   });
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));

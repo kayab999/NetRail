@@ -255,7 +255,7 @@ def validate_open_url(url: str) -> str:
     return _validate_open_url_inner(url, 0)
 
 
-def _block_backend_host(host: str) -> None:
+def _block_backend_host(host: str, *, strict: bool = False) -> None:
     host_lower = host.lower()
     if _is_dns_rebinding_helper(host_lower):
         raise NetRailError(
@@ -267,6 +267,12 @@ def _block_backend_host(host: str) -> None:
         raise NetRailError(
             "BACKEND_URL_CLOUD_METADATA",
             "Cloud metadata addresses cannot be used as backend URLs.",
+        )
+
+    if strict and host_lower in {"localhost", "127.0.0.1", "::1", "0.0.0.0", "[::1]"}:
+        raise NetRailError(
+            "BACKEND_URL_STRICT_PRIVATE",
+            "strict_backend_urls rejects localhost backends.",
         )
 
     ip = _parse_host_ip(host_lower)
@@ -283,10 +289,23 @@ def _block_backend_host(host: str) -> None:
             "BACKEND_URL_LINK_LOCAL",
             "Unspecified or link-local addresses cannot be used as backend URLs.",
         )
+    if strict:
+        if isinstance(ip, ipaddress.IPv4Address):
+            private = _is_non_public_v4(ip) or ip.is_loopback
+        else:
+            private = _is_non_public_v6(ip) or ip.is_loopback
+        if private:
+            raise NetRailError(
+                "BACKEND_URL_STRICT_PRIVATE",
+                "strict_backend_urls rejects private/loopback backend hosts.",
+            )
 
 
-def validate_backend_url(url: str) -> str:
-    """Validate a user-configured backend URL (e.g. SearXNG)."""
+def validate_backend_url(url: str, *, strict: bool = False) -> str:
+    """Validate a user-configured backend URL (e.g. SearXNG).
+
+    When ``strict`` is True, loopback and private/LAN hosts are rejected.
+    """
     trimmed = url.strip()
     if not trimmed:
         raise NetRailError("BACKEND_URL_EMPTY", "Backend URL cannot be empty.")
@@ -307,5 +326,5 @@ def validate_backend_url(url: str) -> str:
     if not host:
         raise NetRailError("BACKEND_URL_NO_HOST", "Backend URL must include a host.")
 
-    _block_backend_host(host)
+    _block_backend_host(host, strict=strict)
     return trimmed

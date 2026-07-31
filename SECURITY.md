@@ -60,6 +60,9 @@ We aim to acknowledge reports within **72 hours** and ship fixes for confirmed i
 - URL open validation as above
 - Backend URL validation blocks cloud metadata and rebinding hostnames
 - CSP, `nosniff`, and `no-referrer` on API responses
-- Local rate limits on search/open (90 / 120 per minute); set `NETRAIL_RATE_LIMIT=0` to disable
+- Local rate limits on search/open/mutations (90 / 120 / 60 per minute); set `NETRAIL_RATE_LIMIT=0` to disable
+- Optional `NETRAIL_API_TOKEN` (Bearer / `X-NetRail-Token`) for Docker or multi-process hosts
+- Optional `NETRAIL_STRICT_BACKEND_URLS` to forbid private/loopback SearXNG URLs
+- Optional `NETRAIL_AUDIT_LOG` JSON lines for search/open/settings/history mutations
 - Zero telemetry
 - Image result thumbnails request `referrerpolicy=no-referrer`

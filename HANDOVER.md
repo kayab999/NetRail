@@ -3,12 +3,12 @@
 | Field | Value |
 |-------|--------|
 | **Product** | Local privacy-first research console for Linux |
-| **Version** | **1.3.0** (`scripts/check-versions.sh`) |
+| **Version** | **1.4.0** (`scripts/check-versions.sh`) |
 | **Primary path** | Rust Axum API + Tauri 2 desktop; Python for Docker/Flatpak/tests |
 | **License** | AGPL-3.0 |
 | **Repo** | https://github.com/kayab999/NetRail |
 | **Freeze date** | 2026-07-12 |
-| **HEAD note** | **1.3.0** Wave 2 security/parity (mapped IPv6, metadata hosts, redirects off, history degrade parity, fanout deadline, error contract). Audit: [docs/AUDIT_ENTERPRISE_2026-07-31.md](docs/AUDIT_ENTERPRISE_2026-07-31.md) |
+| **HEAD note** | **1.4.0** Waves 3–5: optional API token, strict backends, mutation rate limits, audit log, Rust Docker, dep audits, parity smoke. Audit: [docs/AUDIT_ENTERPRISE_2026-07-31.md](docs/AUDIT_ENTERPRISE_2026-07-31.md) |
 
 ---
 
@@ -226,7 +226,7 @@ Non-happy-path covered: empty query, bad mode/settings, open localhost/private/e
 ```
 You are continuing NetRail (Linux local research console, Rust-primary + Python fallback).
 
-Read HANDOVER.md first. Repo: NetRail. Version 1.3.0.
+Read HANDOVER.md first. Repo: NetRail. Version 1.4.0.
 
 Invariants: localhost-only API, no telemetry, open-URL blocks (incl. encoded loopback + private IPs), no Brave key on disk, version SSOT via scripts/check-versions.sh.
 
@@ -268,4 +268,4 @@ Do not force-push. Do not push unless I ask.
 
 ---
 
-*Handover for human/AI continuity — NetRail 1.3.0 — be honest, no scope creep, prefer durable repo state.*
+*Handover for human/AI continuity — NetRail 1.4.0 — be honest, no scope creep, prefer durable repo state.*

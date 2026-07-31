@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# Dual-stack security/contract probes: Python TestClient vectors + optional live Rust binary.
+# Usage:
+#   bash scripts/parity-api-smoke.sh
+#   bash scripts/parity-api-smoke.sh /path/to/netrail-api
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+
+export NETRAIL_RATE_LIMIT=0
+export NETRAIL_HISTORY_ENCRYPT=false
+export NETRAIL_AUTO_OPEN=false
+unset NETRAIL_API_TOKEN || true
+
+echo "== Python golden security probes (pytest) =="
+if [[ -x "$ROOT/.venv/bin/python" ]]; then
+  PY="$ROOT/.venv/bin/python"
+else
+  PY=python3
+fi
+"$PY" -m pytest tests/test_url_policy.py tests/test_security.py tests/test_api.py -q --tb=line
+
+BIN="${1:-$ROOT/src-tauri/target/release/netrail-api}"
+if [[ ! -x "$BIN" ]]; then
+  BIN="$ROOT/src-tauri/target/debug/netrail-api"
+fi
+if [[ ! -x "$BIN" ]]; then
+  echo "note: netrail-api binary not found — skipping live Rust parity probes"
+  echo "PARITY SMOKE OK (Python only)"
+  exit 0
+fi
+
+export NETRAIL_STATIC_DIR="${NETRAIL_STATIC_DIR:-$ROOT/netrail/static}"
+EXPECTED_VERSION="$("$PY" -c "import json; print(json.load(open('package.json'))['version'])")"
+
+if curl -sf http://127.0.0.1:7421/api/health >/dev/null 2>&1; then
+  echo "error: port 7421 already in use" >&2
+  exit 1
+fi
+
+LOG="$(mktemp)"
+PID_FILE="$(mktemp)"
+cleanup() {
+  if [[ -f "$PID_FILE" ]]; then
+    kill "$(cat "$PID_FILE")" 2>/dev/null || true
+    wait "$(cat "$PID_FILE")" 2>/dev/null || true
+    rm -f "$PID_FILE"
+  fi
+  rm -f "$LOG"
+}
+trap cleanup EXIT
+
+"$BIN" >"$LOG" 2>&1 &
+echo $! >"$PID_FILE"
+ready=0
+for _ in $(seq 1 40); do
+  if curl -sf http://127.0.0.1:7421/api/health >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
+  if ! kill -0 "$(cat "$PID_FILE")" 2>/dev/null; then
+    echo "error: netrail-api exited early" >&2
+    cat "$LOG" >&2 || true
+    exit 1
+  fi
+  sleep 0.25
+done
+[[ "$ready" -eq 1 ]] || { echo "timeout health" >&2; cat "$LOG" >&2; exit 1; }
+
+probe() {
+  local method="$1" path="$2" body="${3:-}" expect_code="$4" expect_status="$5"
+  local args=(-s -o /tmp/nr-parity.json -w '%{http_code}' -X "$method" "http://127.0.0.1:7421$path")
+  if [[ -n "$body" ]]; then
+    args+=(-H 'Content-Type: application/json' -d "$body")
+  fi
+  local status
+  status="$(curl "${args[@]}")"
+  "$PY" -c "
+import json
+status=int('$status')
+with open('/tmp/nr-parity.json') as f:
+    j=json.load(f)
+assert status == int('$expect_status'), (status, j)
+assert j.get('code') == '$expect_code', j
+print('$method', '$path', j['code'], status)
+"
+}
+
+echo "== Rust live parity probes =="
+health="$(curl -sf http://127.0.0.1:7421/api/health)"
+echo "$health" | "$PY" -c "
+import sys, json
+h=json.load(sys.stdin)
+assert h.get('status')=='ok'
+assert h.get('version')=='$EXPECTED_VERSION', h
+assert h.get('api_contract')=='1.4', h
+assert 'mutate_per_minute' in h.get('rate_limit', {}), h
+print('health ok', h['version'])
+"
+
+probe POST /api/search '{"query":"","mode":"web"}' QUERY_INVALID 400
+probe POST /api/open '{"url":"http://127.0.0.1/"}' OPEN_URL_LOCALHOST 400
+probe POST /api/open '{"url":"http://192.168.1.1/"}' OPEN_URL_PRIVATE 400
+probe POST /api/open '{"url":"https://duck.com/l/?uddg=http%3A%2F%2F127.0.0.1%2F"}' OPEN_URL_LOCALHOST 400
+probe POST /api/open '{"url":"http://localtest.me/"}' OPEN_URL_DNS_REBINDING 400
+probe POST /api/open '{"url":"http://metadata.google.internal/"}' OPEN_URL_CLOUD_METADATA 400
+probe GET /api/docs/nope '' DOC_NOT_FOUND 404
+
+echo "PARITY SMOKE OK (Python + Rust $BIN)"

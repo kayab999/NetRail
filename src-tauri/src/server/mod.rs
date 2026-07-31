@@ -1,3 +1,5 @@
+use crate::audit;
+use crate::auth::{self, check_request_token, inject_ui_token, path_requires_token};
 use crate::backends::get_enabled_backends;
 use crate::browsers::{discover_browsers, open_url};
 use crate::config::{is_flatpak, load_settings, save_settings, static_dir, Settings, HOST, PORT, VERSION};
@@ -12,7 +14,8 @@ use crate::security::{validate_open_url, CSP};
 use reqwest::Client;
 use axum::{
     extract::{Path, Query, State},
-    http::{header, HeaderValue, StatusCode},
+    http::{header, HeaderValue, Request, StatusCode},
+    middleware::Next,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
     Json, Router,
@@ -58,6 +61,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/docs/assets/{filename}", get(get_doc_asset))
         .nest_service("/static", ServeDir::new(static_path))
         .with_state(state)
+        .layer(axum::middleware::from_fn(api_auth_middleware))
         .layer(axum::middleware::from_fn(security_headers))
 }
 
@@ -86,10 +90,7 @@ pub async fn start() -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
-async fn security_headers(
-    request: axum::http::Request<axum::body::Body>,
-    next: axum::middleware::Next,
-) -> Response {
+async fn security_headers(request: Request<axum::body::Body>, next: Next) -> Response {
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
     headers.insert(
@@ -107,15 +108,60 @@ async fn security_headers(
     response
 }
 
+async fn api_auth_middleware(request: Request<axum::body::Body>, next: Next) -> Response {
+    let path = request.uri().path().to_string();
+    if path_requires_token(&path) {
+        let auth = request
+            .headers()
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok());
+        let x_token = request
+            .headers()
+            .get("x-netrail-token")
+            .and_then(|v| v.to_str().ok());
+        if let Err(err) = check_request_token(auth, x_token) {
+            return ApiError::from(err).into_response();
+        }
+    }
+    next.run(request).await
+}
+
+fn inject_token_script(html: &str) -> String {
+    let Some(token) = auth::api_token_from_env() else {
+        return html.to_string();
+    };
+    if !inject_ui_token() {
+        return html.to_string();
+    }
+    // Escape for JS string in double quotes.
+    let escaped = token.replace('\\', "\\\\").replace('"', "\\\"");
+    let snippet = format!(
+        r#"<script>window.NETRAIL_API_TOKEN="{escaped}";</script>"#
+    );
+    if let Some(idx) = html.find("</head>") {
+        let mut out = String::with_capacity(html.len() + snippet.len());
+        out.push_str(&html[..idx]);
+        out.push_str(&snippet);
+        out.push_str(&html[idx..]);
+        out
+    } else {
+        format!("{snippet}{html}")
+    }
+}
+
 async fn index() -> impl IntoResponse {
     let path = static_dir().join("index.html");
     match tokio::fs::read(&path).await {
-        Ok(bytes) => (
-            StatusCode::OK,
-            [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
-            bytes,
-        )
-            .into_response(),
+        Ok(bytes) => {
+            let html = String::from_utf8_lossy(&bytes);
+            let body = inject_token_script(&html);
+            (
+                StatusCode::OK,
+                [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+                body,
+            )
+                .into_response()
+        }
         Err(err) => {
             tracing::error!(
                 path = %path.display(),
@@ -190,7 +236,7 @@ async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
         "status": "ok",
         "version": VERSION,
         "telemetry": "none",
-        "api_contract": "1.2",
+        "api_contract": "1.4",
         "backends_configured": backend_names,
         "search_recovery": {
             "searxng_configured": searxng_configured,
@@ -201,13 +247,13 @@ async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
         "default_provenance": "ddgs → DuckDuckGo metasearch → primarily Bing index",
         "history": history,
         "sandbox": if is_flatpak() { "flatpak" } else { "native" },
-        "rate_limit": {
-            "enabled": std::env::var("NETRAIL_RATE_LIMIT")
-                .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
-                .unwrap_or(true),
-            "search_per_minute": 90,
-            "open_per_minute": 120,
+        "auth": {
+            "token_required": auth::token_required(),
         },
+        "strict_backend_urls": settings.strict_backend_urls
+            || crate::config::strict_backend_urls_from_env(),
+        "audit_log": audit::enabled(),
+        "rate_limit": state.rate_limiter.status_json(),
     }))
 }
 
@@ -250,9 +296,10 @@ async fn put_settings(
     State(state): State<AppState>,
     Json(body): Json<Settings>,
 ) -> Result<Json<Settings>, ApiError> {
+    state.rate_limiter.check_mutate()?;
     let saved = save_settings(&body)?;
     init_history_on_startup(&saved);
-    let _ = state;
+    audit::log_event("settings.put", serde_json::json!({ "ok": true }));
     Ok(Json(saved))
 }
 
@@ -295,6 +342,14 @@ async fn run_search(
         &settings,
     )
     .await?;
+    audit::log_event(
+        "search",
+        serde_json::json!({
+            "mode": body.mode,
+            "query_len": query.len(),
+            "max_results": body.max_results.clamp(1, 50),
+        }),
+    );
     Ok(Json(payload))
 }
 
@@ -322,6 +377,13 @@ async fn open_link(
     }
 
     let result = open_url(&safe_url, &settings, body.result_id)?;
+    audit::log_event(
+        "open",
+        serde_json::json!({
+            "url_host": url::Url::parse(&safe_url).ok().and_then(|u| u.host_str().map(str::to_string)),
+            "private_mode": body.private_mode,
+        }),
+    );
     Ok(Json(serde_json::to_value(result).unwrap_or_default()))
 }
 
@@ -369,6 +431,7 @@ async fn delete_history_entry(
     State(state): State<AppState>,
     Path(query_id): Path<i64>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    state.rate_limiter.check_mutate()?;
     let settings = (state.settings_fn)();
     let store = require_store(&settings)?;
     if !store.delete_history_entry(query_id)? {
@@ -378,6 +441,10 @@ async fn delete_history_entry(
         }
         .into());
     }
+    audit::log_event(
+        "history.delete",
+        serde_json::json!({ "query_id": query_id }),
+    );
     Ok(Json(serde_json::json!({
         "status": "ok",
         "deleted_id": query_id,
@@ -385,9 +452,11 @@ async fn delete_history_entry(
 }
 
 async fn purge_history(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
+    state.rate_limiter.check_mutate()?;
     let settings = (state.settings_fn)();
     let store = require_store(&settings)?;
     let count = store.purge_all_history()?;
+    audit::log_event("history.purge", serde_json::json!({ "purged": count }));
     Ok(Json(serde_json::json!({
         "status": "ok",
         "purged": count,
@@ -412,6 +481,7 @@ async fn create_collection(
     State(state): State<AppState>,
     Json(body): Json<CollectionCreate>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    state.rate_limiter.check_mutate()?;
     let settings = (state.settings_fn)();
     let store = require_store(&settings)?;
     let name = body.name.trim();
@@ -422,7 +492,9 @@ async fn create_collection(
         }
         .into());
     }
-    Ok(Json(store.create_collection(name)?))
+    let created = store.create_collection(name)?;
+    audit::log_event("collection.create", serde_json::json!({ "name_len": name.len() }));
+    Ok(Json(created))
 }
 
 #[derive(Deserialize)]

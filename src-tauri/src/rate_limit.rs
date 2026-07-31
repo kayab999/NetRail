@@ -9,6 +9,8 @@ use std::time::{Duration, Instant};
 
 const DEFAULT_SEARCH_PER_MIN: u32 = 90;
 const DEFAULT_OPEN_PER_MIN: u32 = 120;
+/// Settings / history purge / collections mutations.
+const DEFAULT_MUTATE_PER_MIN: u32 = 60;
 const WINDOW: Duration = Duration::from_secs(60);
 
 #[derive(Debug)]
@@ -48,6 +50,7 @@ impl WindowCounter {
 pub struct RateLimiter {
     search: Arc<Mutex<WindowCounter>>,
     open: Arc<Mutex<WindowCounter>>,
+    mutate: Arc<Mutex<WindowCounter>>,
 }
 
 impl Default for RateLimiter {
@@ -63,9 +66,20 @@ impl RateLimiter {
             .unwrap_or(true);
         let search_limit = if enabled { DEFAULT_SEARCH_PER_MIN } else { 0 };
         let open_limit = if enabled { DEFAULT_OPEN_PER_MIN } else { 0 };
+        let mutate_limit = if enabled { DEFAULT_MUTATE_PER_MIN } else { 0 };
         Self {
             search: Arc::new(Mutex::new(WindowCounter::new(search_limit))),
             open: Arc::new(Mutex::new(WindowCounter::new(open_limit))),
+            mutate: Arc::new(Mutex::new(WindowCounter::new(mutate_limit))),
+        }
+    }
+
+    /// Test helper: build limiter with explicit per-window caps (0 = unlimited).
+    pub fn with_limits(search: u32, open: u32, mutate: u32) -> Self {
+        Self {
+            search: Arc::new(Mutex::new(WindowCounter::new(search))),
+            open: Arc::new(Mutex::new(WindowCounter::new(open))),
+            mutate: Arc::new(Mutex::new(WindowCounter::new(mutate))),
         }
     }
 
@@ -93,6 +107,31 @@ impl RateLimiter {
                 ),
             })
         }
+    }
+
+    pub fn check_mutate(&self) -> NetRailResult<()> {
+        if self.mutate.lock().try_acquire() {
+            Ok(())
+        } else {
+            Err(NetRailError::RateLimited {
+                code: "RATE_LIMITED",
+                message: format!(
+                    "Too many configuration/history mutations (max {DEFAULT_MUTATE_PER_MIN}/minute)."
+                ),
+            })
+        }
+    }
+
+    pub fn status_json(&self) -> serde_json::Value {
+        let enabled = env::var("NETRAIL_RATE_LIMIT")
+            .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
+            .unwrap_or(true);
+        serde_json::json!({
+            "enabled": enabled,
+            "search_per_minute": DEFAULT_SEARCH_PER_MIN,
+            "open_per_minute": DEFAULT_OPEN_PER_MIN,
+            "mutate_per_minute": DEFAULT_MUTATE_PER_MIN,
+        })
     }
 }
 

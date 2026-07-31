@@ -10,19 +10,27 @@ from typing import Any, Literal
 import uvicorn
 from fastapi import FastAPI, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from netrail import __version__
+from netrail import audit
+from netrail import rate_limit
+from netrail.auth import (
+    api_token_from_env,
+    check_request_token,
+    inject_ui_token,
+    path_requires_token,
+    token_required,
+)
 from netrail.errors import NetRailError
 from netrail.backends.registry import get_enabled_backends
 from netrail.browsers import discover_browsers, open_url
-from netrail.config import load_settings, save_settings
+from netrail.config import load_settings, save_settings, strict_backend_urls_from_env
 from netrail.docs_content import asset_path, load_doc
 from netrail.history.store import get_store, init_history_on_startup
 from netrail.runtime import is_flatpak, static_dir
-from netrail import rate_limit
 from netrail.search import search
 from netrail.security import validate_open_url
 
@@ -122,6 +130,20 @@ async def request_validation_handler(
 
 
 @app.middleware("http")
+async def api_auth_middleware(request: Request, call_next) -> Response:
+    path = request.url.path
+    if path_requires_token(path):
+        try:
+            check_request_token(
+                request.headers.get("authorization"),
+                request.headers.get("x-netrail-token"),
+            )
+        except NetRailError as exc:
+            return JSONResponse(status_code=exc.status, content=exc.to_dict())
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def security_headers(request: Request, call_next) -> Response:
     response = await call_next(request)
     response.headers["Content-Security-Policy"] = CSP
@@ -173,6 +195,7 @@ class SettingsModel(BaseModel):
     history_enabled: bool = True
     history_encrypt: bool = True
     history_ttl_days: int = Field(default=90, ge=0, le=3650)
+    strict_backend_urls: bool = False
 
 
 class CollectionCreate(BaseModel):
@@ -203,8 +226,23 @@ def _fts_query(q: str) -> str:
 
 
 @app.get("/")
-async def index() -> FileResponse:
-    return FileResponse(STATIC_DIR / "index.html")
+async def index() -> Response:
+    path = STATIC_DIR / "index.html"
+    if not path.is_file():
+        return HTMLResponse(
+            "<h1>NetRail UI assets missing</h1>",
+            status_code=404,
+        )
+    html = path.read_text(encoding="utf-8")
+    token = api_token_from_env()
+    if token and inject_ui_token():
+        escaped = token.replace("\\", "\\\\").replace('"', '\\"')
+        snippet = f'<script>window.NETRAIL_API_TOKEN="{escaped}";</script>'
+        if "</head>" in html:
+            html = html.replace("</head>", snippet + "</head>", 1)
+        else:
+            html = snippet + html
+    return HTMLResponse(html)
 
 
 @app.get("/api/health")
@@ -263,7 +301,11 @@ async def health() -> dict[str, Any]:
         "default_provenance": "ddgs → DuckDuckGo metasearch → primarily Bing index",
         "history": history,
         "sandbox": "flatpak" if is_flatpak() else "native",
-        "api_contract": "1.2",
+        "api_contract": "1.4",
+        "auth": {"token_required": token_required()},
+        "strict_backend_urls": bool(settings.get("strict_backend_urls"))
+        or strict_backend_urls_from_env(),
+        "audit_log": audit.enabled(),
         "rate_limit": rate_limit.status_dict(),
     }
 
@@ -302,7 +344,10 @@ async def get_settings() -> dict[str, Any]:
 
 @app.put("/api/settings")
 async def put_settings(settings: SettingsModel) -> dict[str, Any]:
-    return save_settings(settings.model_dump())
+    rate_limit.check_mutate()
+    saved = save_settings(settings.model_dump())
+    audit.log_event("settings.put", {"ok": True})
+    return saved
 
 
 @app.get("/api/docs/{slug}")
@@ -321,11 +366,20 @@ async def get_doc_asset(filename: str) -> FileResponse:
 @app.post("/api/search")
 async def run_search(request: SearchRequest) -> dict[str, Any]:
     rate_limit.check_search()
-    return search(
+    payload = search(
         query=request.query,
         mode=request.mode,
         max_results=request.max_results,
     )
+    audit.log_event(
+        "search",
+        {
+            "mode": request.mode,
+            "query_len": len(request.query),
+            "max_results": request.max_results,
+        },
+    )
+    return payload
 
 
 @app.post("/api/open")
@@ -359,6 +413,15 @@ async def open_link(request: OpenRequest) -> dict[str, str]:
             private_mode=private_mode,
         )
 
+    from urllib.parse import urlparse
+
+    audit.log_event(
+        "open",
+        {
+            "url_host": urlparse(safe_url).hostname,
+            "private_mode": private_mode,
+        },
+    )
     return result
 
 
@@ -375,6 +438,7 @@ async def get_history(
 
 @app.delete("/api/history/{query_id}")
 async def delete_history_entry(query_id: int) -> dict[str, Any]:
+    rate_limit.check_mutate()
     store = _require_store()
     if not store.delete_history_entry(query_id):
         raise NetRailError(
@@ -382,13 +446,16 @@ async def delete_history_entry(query_id: int) -> dict[str, Any]:
             f"history entry {query_id}",
             status=404,
         )
+    audit.log_event("history.delete", {"query_id": query_id})
     return {"status": "ok", "deleted_id": query_id}
 
 
 @app.delete("/api/history")
 async def purge_history() -> dict[str, Any]:
+    rate_limit.check_mutate()
     store = _require_store()
     count = store.purge_all_history()
+    audit.log_event("history.purge", {"purged": count})
     return {"status": "ok", "purged": count}
 
 
@@ -400,8 +467,11 @@ async def list_collections() -> list[dict[str, Any]]:
 
 @app.post("/api/collections")
 async def create_collection(body: CollectionCreate) -> dict[str, Any]:
+    rate_limit.check_mutate()
     store = _require_store()
-    return store.create_collection(body.name)
+    created = store.create_collection(body.name)
+    audit.log_event("collection.create", {"name_len": len(body.name)})
+    return created
 
 
 @app.post("/api/collections/{collection_id}/items")

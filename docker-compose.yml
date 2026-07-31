@@ -1,4 +1,5 @@
 services:
+  # Default: Python compatibility image. Prefer: `docker compose --profile rust up netrail-rust`.
   netrail:
     build: .
     container_name: netrail
@@ -12,6 +13,30 @@ services:
       NETRAIL_DB_KEY: ${NETRAIL_DB_KEY:?Set NETRAIL_DB_KEY in .env — generate with: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"}
       NETRAIL_AUTO_OPEN: "false"
       NETRAIL_HISTORY_ENCRYPT: "true"
+      # Recommended when anything other than pure single-user trust:
+      # NETRAIL_API_TOKEN: ${NETRAIL_API_TOKEN:-}
+      # NETRAIL_STRICT_BACKEND_URLS: "1"
+      # NETRAIL_AUDIT_LOG: "1"
+      SEARXNG_URL: ${SEARXNG_URL:-}
+    restart: unless-stopped
+
+  netrail-rust:
+    build:
+      context: .
+      dockerfile: Dockerfile.rust
+    container_name: netrail-rust
+    profiles: ["rust"]
+    ports:
+      - "127.0.0.1:7421:7421"
+    volumes:
+      - netrail_data:/app/data
+    environment:
+      NETRAIL_DB_PATH: /app/data/netrail.db
+      NETRAIL_DB_KEY: ${NETRAIL_DB_KEY:?Set NETRAIL_DB_KEY in .env}
+      NETRAIL_STATIC_DIR: /usr/share/netrail/static
+      NETRAIL_AUTO_OPEN: "false"
+      NETRAIL_HISTORY_ENCRYPT: "true"
+      NETRAIL_API_TOKEN: ${NETRAIL_API_TOKEN:-}
       SEARXNG_URL: ${SEARXNG_URL:-}
     restart: unless-stopped
 

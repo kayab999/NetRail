@@ -1,13 +1,13 @@
 {
   "name": "netrail",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
-  "description": "Local research console — search first, browse second",
+  "description": "Local research console \u2014 search first, browse second",
   "repository": {
     "type": "git",
     "url": "https://github.com/kayab999/NetRail.git"
   },
-  "author": "Carlos Hernández <https://github.com/kayab999>",
+  "author": "Carlos Hern\u00e1ndez <https://github.com/kayab999>",
   "scripts": {
     "tauri": "tauri",
     "dev": "tauri dev -- --bin netrail",

@@ -4,7 +4,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-pub const VERSION: &str = "1.3.0";
+pub const VERSION: &str = "1.4.0";
 pub const HOST: &str = "127.0.0.1";
 pub const PORT: u16 = 7421;
 
@@ -39,6 +39,9 @@ pub struct Settings {
     pub history_enabled: bool,
     pub history_encrypt: bool,
     pub history_ttl_days: u32,
+    /// When true, SearXNG/backend URLs may not use loopback or private IPs.
+    #[serde(default)]
+    pub strict_backend_urls: bool,
 }
 
 fn default_backend_order() -> Vec<String> {
@@ -68,6 +71,7 @@ impl Default for Settings {
             history_enabled: true,
             history_encrypt: true,
             history_ttl_days: 90,
+            strict_backend_urls: false,
         }
     }
 }
@@ -118,7 +122,7 @@ pub fn load_settings() -> Settings {
 }
 
 pub fn validate_settings(settings: &Settings) -> NetRailResult<()> {
-    use crate::security::validate_backend_url;
+    use crate::security::validate_backend_url_with_options;
 
     if settings.max_results < 1 || settings.max_results > 50 {
         return Err(NetRailError::InvalidConfig {
@@ -138,15 +142,22 @@ pub fn validate_settings(settings: &Settings) -> NetRailResult<()> {
             message: "search_strategy must be 'fanout' or 'fallback'.".into(),
         });
     }
+    let strict = settings.strict_backend_urls || strict_backend_urls_from_env();
     if let Some(ref url) = settings.searxng_url {
-        validate_backend_url(url)?;
+        validate_backend_url_with_options(url, strict)?;
     }
     for entry in &settings.backends {
         if let Some(ref url) = entry.url {
-            validate_backend_url(url)?;
+            validate_backend_url_with_options(url, strict)?;
         }
     }
     Ok(())
+}
+
+pub fn strict_backend_urls_from_env() -> bool {
+    env::var("NETRAIL_STRICT_BACKEND_URLS")
+        .map(|v| parse_bool(&v))
+        .unwrap_or(false)
 }
 
 pub fn save_settings(settings: &Settings) -> NetRailResult<Settings> {
@@ -159,10 +170,14 @@ pub fn save_settings(settings: &Settings) -> NetRailResult<Settings> {
 }
 
 fn apply_env_overrides(settings: &mut Settings) {
+    if let Ok(raw) = env::var("NETRAIL_STRICT_BACKEND_URLS") {
+        settings.strict_backend_urls = parse_bool(&raw);
+    }
     if let Ok(url) = env::var("NETRAIL_SEARXNG_URL").or_else(|_| env::var("SEARXNG_URL")) {
         if !url.is_empty() {
+            let strict = settings.strict_backend_urls || strict_backend_urls_from_env();
             // Same gate as settings save — never apply metadata/rebinding from env.
-            match crate::security::validate_backend_url(&url) {
+            match crate::security::validate_backend_url_with_options(&url, strict) {
                 Ok(safe) => settings.searxng_url = Some(safe),
                 Err(_) => {
                     // Leave prior settings value; invalid env must not enable a hostile backend.

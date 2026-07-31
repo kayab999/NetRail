@@ -1,5 +1,6 @@
 from fastapi.testclient import TestClient
 
+from netrail import rate_limit
 from netrail.main import app
 
 client = TestClient(app)
@@ -26,13 +27,18 @@ def test_health_parity_shape_with_rust_contract():
     payload = client.get("/api/health").json()
     assert payload["status"] == "ok"
     assert payload["version"] == __version__
-    assert payload.get("api_contract") == "1.2"
+    assert payload.get("api_contract") == "1.4"
     assert "rate_limit" in payload
     assert "enabled" in payload["rate_limit"]
     assert "search_per_minute" in payload["rate_limit"]
     assert "open_per_minute" in payload["rate_limit"]
+    assert "mutate_per_minute" in payload["rate_limit"]
     assert "search_recovery" in payload
     assert "backends_configured" in payload
+    assert "auth" in payload
+    assert "token_required" in payload["auth"]
+    assert "strict_backend_urls" in payload
+    assert "audit_log" in payload
 
 
 def test_backends_endpoint():
@@ -80,3 +86,68 @@ def test_unknown_doc_returns_doc_not_found_with_code():
 def test_csp_header_on_index():
     response = client.get("/")
     assert "Content-Security-Policy" in response.headers
+
+
+def test_history_disabled_returns_history_disabled(monkeypatch, tmp_path):
+    monkeypatch.setenv("NETRAIL_HISTORY_ENABLED", "0")
+    from netrail.history.store import reset_store_for_tests
+
+    reset_store_for_tests()
+    response = client.get("/api/history")
+    assert response.status_code == 400
+    assert response.json()["code"] == "HISTORY_DISABLED"
+    monkeypatch.delenv("NETRAIL_HISTORY_ENABLED", raising=False)
+    reset_store_for_tests()
+
+
+def test_collection_empty_name_returns_collection_name_invalid():
+    response = client.post("/api/collections", json={"name": ""})
+    assert response.status_code == 400
+    assert response.json()["code"] == "COLLECTION_NAME_INVALID"
+
+
+def test_invalid_mode_returns_query_invalid():
+    response = client.post(
+        "/api/search", json={"query": "rust", "mode": "video", "max_results": 5}
+    )
+    assert response.status_code == 400
+    assert response.json()["code"] == "QUERY_INVALID"
+
+
+def test_api_token_required_when_configured(monkeypatch):
+    monkeypatch.setenv("NETRAIL_API_TOKEN", "test-secret-token")
+    # Health remains open
+    assert client.get("/api/health").status_code == 200
+    denied = client.get("/api/backends")
+    assert denied.status_code == 401
+    assert denied.json()["code"] == "AUTH_REQUIRED"
+    ok = client.get(
+        "/api/backends", headers={"Authorization": "Bearer test-secret-token"}
+    )
+    assert ok.status_code == 200
+    monkeypatch.delenv("NETRAIL_API_TOKEN", raising=False)
+
+
+def test_rate_limit_search_returns_429():
+    rate_limit.set_test_limits(search=2, open_limit=100, mutate=100)
+    try:
+        r1 = client.post("/api/search", json={"query": "a", "mode": "web", "max_results": 1})
+        r2 = client.post("/api/search", json={"query": "b", "mode": "web", "max_results": 1})
+        r3 = client.post("/api/search", json={"query": "c", "mode": "web", "max_results": 1})
+        # First two may 200/502 depending on network; third must be limited.
+        assert r3.status_code == 429
+        assert r3.json()["code"] == "RATE_LIMITED"
+        assert r1.status_code != 429 or r2.status_code != 429
+    finally:
+        rate_limit.set_test_limits()
+
+
+def test_strict_backend_rejects_localhost(monkeypatch):
+    from netrail.security import validate_backend_url
+    from netrail.errors import NetRailError
+    import pytest
+
+    validate_backend_url("http://127.0.0.1:8080", strict=False)
+    with pytest.raises(NetRailError) as exc:
+        validate_backend_url("http://127.0.0.1:8080", strict=True)
+    assert exc.value.code == "BACKEND_URL_STRICT_PRIVATE"

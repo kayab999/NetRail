@@ -55,3 +55,13 @@ jobs:
           cargo build --release --manifest-path src-tauri/Cargo.toml \
             --bin netrail-api --no-default-features
           bash scripts/e2e-api-smoke.sh
+
+      - name: Dual-stack parity API smoke
+        run: bash scripts/parity-api-smoke.sh
+
+      - name: Dependency audits
+        run: |
+          cargo install cargo-audit --locked --version 0.21.2 || cargo install cargo-audit --locked
+          cargo audit --file src-tauri/Cargo.lock
+          python -m pip install -q pip-audit
+          python -m pip-audit -r requirements.txt
