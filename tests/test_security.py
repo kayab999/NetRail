@@ -38,6 +38,28 @@ def test_rejects_nip_io():
     assert exc.value.code == "OPEN_URL_DNS_REBINDING"
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://localtest.me/",
+        "http://nip.io/",
+        "http://sslip.io/",
+        "http://xip.io/",
+    ],
+)
+def test_rejects_rebinding_apex(url):
+    with pytest.raises(NetRailError) as exc:
+        validate_open_url(url)
+    assert exc.value.code == "OPEN_URL_DNS_REBINDING"
+
+
+def test_unwraps_duck_com_blocks_inner_localhost():
+    ddg = "https://duck.com/l/?uddg=http%3A%2F%2F127.0.0.1%2F"
+    with pytest.raises(NetRailError) as exc:
+        validate_open_url(ddg)
+    assert exc.value.code == "OPEN_URL_LOCALHOST"
+
+
 def test_unwraps_ddg_redirect_blocks_inner_localhost():
     ddg = "https://duckduckgo.com/l/?uddg=http%3A%2F%2F127.0.0.1%2Fapi"
     with pytest.raises(NetRailError) as exc:

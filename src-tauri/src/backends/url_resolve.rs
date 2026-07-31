@@ -1,5 +1,6 @@
 use url::Url;
 
+/// Keep in sync with `security::DDG_HOSTS` (open unwrap uses the same set).
 const DDG_HOSTS: &[&str] = &["duckduckgo.com", "duck.com"];
 
 fn is_ddg_host(host: &str) -> bool {

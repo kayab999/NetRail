@@ -4,7 +4,7 @@
 
 | Version | Supported |
 |---------|-----------|
-| 1.2.x   | Yes       |
+| 1.2.x   | Yes (incl. 1.2.3) |
 | 1.1.x   | Yes (security fixes) |
 | 1.0.x   | Yes (security fixes) |
 | < 1.0   | No        |
@@ -25,7 +25,8 @@ Search results and `/api/open` reject:
 - Embedded credentials
 - Loopback / localhost (including **decimal, hex, octal, and short IPv4 forms** browsers may resolve to `127.0.0.1`)
 - Link-local and **private / non-public** addresses (RFC1918, ULA, multicast, …)
-- Known DNS-rebinding helper domains (`nip.io`, `sslip.io`, `xip.io`, `localtest.me`)
+- Known DNS-rebinding helper domains — apex and subdomains (`nip.io`, `sslip.io`, `xip.io`, `localtest.me`)
+- DuckDuckGo redirect wrappers (`duckduckgo.com`, `duck.com`, and subdomains) are unwrapped via `uddg=` before checks
 
 **Backend URLs** (e.g. self-hosted SearXNG) still **allow** localhost and private LAN hosts so operators can point at home instances. Cloud metadata and rebinding hostnames remain blocked.
 

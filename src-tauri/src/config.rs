@@ -4,7 +4,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-pub const VERSION: &str = "1.2.2";
+pub const VERSION: &str = "1.2.3";
 pub const HOST: &str = "127.0.0.1";
 pub const PORT: u16 = 7421;
 
@@ -161,7 +161,16 @@ pub fn save_settings(settings: &Settings) -> NetRailResult<Settings> {
 fn apply_env_overrides(settings: &mut Settings) {
     if let Ok(url) = env::var("NETRAIL_SEARXNG_URL").or_else(|_| env::var("SEARXNG_URL")) {
         if !url.is_empty() {
-            settings.searxng_url = Some(url);
+            // Same gate as settings save — never apply metadata/rebinding from env.
+            match crate::security::validate_backend_url(&url) {
+                Ok(safe) => settings.searxng_url = Some(safe),
+                Err(_) => {
+                    // Leave prior settings value; invalid env must not enable a hostile backend.
+                    tracing::warn!(
+                        "Ignoring invalid NETRAIL_SEARXNG_URL / SEARXNG_URL (failed backend URL policy)"
+                    );
+                }
+            }
         }
     }
     if let Ok(raw) = env::var("NETRAIL_BRAVE_ENABLED") {

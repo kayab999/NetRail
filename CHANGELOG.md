@@ -4,6 +4,20 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 
 ## [Unreleased]
 
+## [1.2.3] — 2026-07-31
+
+### Fixed
+
+- **Open-URL DDG unwrap** — include `duck.com` (and shared host set with merge resolve) so `uddg=` to loopback is blocked (`OPEN_URL_LOCALHOST`)
+- **DNS rebinding apex** — block `localtest.me`, `nip.io`, `sslip.io`, `xip.io` as apex hosts, not only subdomains
+- **Env backend URL** — `NETRAIL_SEARXNG_URL` / `SEARXNG_URL` validated with the same backend URL policy as settings save; invalid values are ignored
+- **Docs truth** — README no longer claims queries stay on loopback; MANUAL copy shortcut is Ctrl+C; architecture/viability/freeze notes stamped current vs historical
+
+### Added
+
+- **Shared URL policy fixtures** — `tests/fixtures/url_policy.json` exercised by Python and Rust unit tests
+- **Enterprise audit** — `docs/AUDIT_ENTERPRISE_2026-07-31.md` (post-GA adversarial audit + workplan)
+
 ## [1.2.2] — 2026-07-12
 
 ### Fixed
@@ -242,6 +256,7 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 - URL open restricted to `http://` and `https://` schemes
 - Localhost-only server bind in v0.1
 
+[1.2.3]: https://github.com/kayab999/NetRail/releases/tag/v1.2.3
 [1.2.2]: https://github.com/kayab999/NetRail/releases/tag/v1.2.2
 [1.2.1]: https://github.com/kayab999/NetRail/releases/tag/v1.2.1
 [1.2.0]: https://github.com/kayab999/NetRail/releases/tag/v1.2.0

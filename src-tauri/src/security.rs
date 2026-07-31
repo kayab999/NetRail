@@ -2,7 +2,10 @@ use crate::error::{NetRailError, NetRailResult};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use url::Url;
 
-const DDG_HOSTS: &[&str] = &["duckduckgo.com", "r.duckduckgo.com"];
+/// Base registrable hosts; subdomains (www., r., …) match via suffix.
+/// Keep in sync with `url_resolve::DDG_HOSTS` and Python `netrail.security`.
+const DDG_HOSTS: &[&str] = &["duckduckgo.com", "duck.com"];
+const DNS_REBINDING_HELPERS: &[&str] = &["nip.io", "sslip.io", "xip.io", "localtest.me"];
 const MAX_REDIRECT_DEPTH: u8 = 5;
 
 pub fn validate_open_url(raw: &str) -> NetRailResult<String> {
@@ -58,6 +61,12 @@ fn is_ddg_host(host: &str) -> bool {
     DDG_HOSTS
         .iter()
         .any(|&h| host == h || host.ends_with(&format!(".{h}")))
+}
+
+fn is_dns_rebinding_helper(host: &str) -> bool {
+    DNS_REBINDING_HELPERS
+        .iter()
+        .any(|&d| host == d || host.ends_with(&format!(".{d}")))
 }
 
 /// Parse IPv4 the way browsers often do: decimal integer, hex, octal octets,
@@ -167,11 +176,7 @@ fn block_unsafe_host(host: &str) -> NetRailResult<()> {
         });
     }
 
-    if host_lower.ends_with(".nip.io")
-        || host_lower.ends_with(".sslip.io")
-        || host_lower.ends_with(".xip.io")
-        || host_lower.ends_with(".localtest.me")
-    {
+    if is_dns_rebinding_helper(&host_lower) {
         return Err(NetRailError::InvalidOpenUrl {
             code: "OPEN_URL_DNS_REBINDING",
             message: "DNS rebinding hostnames cannot be opened from search results.".into(),
@@ -273,11 +278,7 @@ pub fn validate_backend_url(raw: &str) -> NetRailResult<String> {
 fn block_backend_host(host: &str) -> NetRailResult<()> {
     let host_lower = host.to_lowercase();
 
-    if host_lower.ends_with(".nip.io")
-        || host_lower.ends_with(".sslip.io")
-        || host_lower.ends_with(".xip.io")
-        || host_lower.ends_with(".localtest.me")
-    {
+    if is_dns_rebinding_helper(&host_lower) {
         return Err(NetRailError::InvalidBackendUrl {
             code: "BACKEND_URL_DNS_REBINDING",
             message: "DNS rebinding hostnames are not allowed in backend URLs.".into(),
@@ -339,15 +340,88 @@ mod tests {
     }
 
     #[test]
+    fn rejects_rebinding_apex_domains() {
+        for url in [
+            "http://localtest.me/",
+            "http://nip.io/",
+            "http://sslip.io/",
+            "http://xip.io/",
+        ] {
+            let err = validate_open_url(url).unwrap_err();
+            assert_eq!(err.error_code(), "OPEN_URL_DNS_REBINDING", "{url}");
+        }
+    }
+
+    #[test]
     fn unwraps_ddg_redirect_and_blocks_inner_localhost() {
         let ddg = "https://duckduckgo.com/l/?uddg=http%3A%2F%2F127.0.0.1%2Fapi";
         assert!(validate_open_url(ddg).is_err());
     }
 
     #[test]
+    fn unwraps_duck_com_redirect_and_blocks_inner_localhost() {
+        let ddg = "https://duck.com/l/?uddg=http%3A%2F%2F127.0.0.1%2F";
+        let err = validate_open_url(ddg).unwrap_err();
+        assert_eq!(err.error_code(), "OPEN_URL_LOCALHOST");
+    }
+
+    #[test]
     fn unwraps_ddg_redirect_to_safe_url() {
         let ddg = "https://duckduckgo.com/l/?uddg=https%3A%2F%2Frust-lang.org%2F";
         assert_eq!(validate_open_url(ddg).unwrap(), "https://rust-lang.org/");
+    }
+
+    #[test]
+    fn golden_url_policy_fixture() {
+        let raw = include_str!("../../tests/fixtures/url_policy.json");
+        let fixture: serde_json::Value =
+            serde_json::from_str(raw).expect("url_policy.json must parse");
+
+        for case in fixture["open_url"].as_array().expect("open_url array") {
+            let id = case["id"].as_str().unwrap_or("?");
+            let url = case["url"].as_str().expect("url");
+            let expect = case["expect"].as_str().expect("expect");
+            match expect {
+                "allow" => {
+                    let got = validate_open_url(url).unwrap_or_else(|e| {
+                        panic!("open_url {id}: expected allow, got {e:?}")
+                    });
+                    if let Some(normalized) = case["normalized"].as_str() {
+                        assert_eq!(got, normalized, "open_url {id}");
+                    }
+                }
+                "block" => {
+                    let err = validate_open_url(url).expect_err(&format!("open_url {id}"));
+                    if let Some(code) = case["code"].as_str() {
+                        assert_eq!(err.error_code(), code, "open_url {id}");
+                    }
+                }
+                other => panic!("open_url {id}: bad expect {other}"),
+            }
+        }
+
+        for case in fixture["backend_url"].as_array().expect("backend_url array") {
+            let id = case["id"].as_str().unwrap_or("?");
+            let url = case["url"].as_str().expect("url");
+            let expect = case["expect"].as_str().expect("expect");
+            match expect {
+                "allow" => {
+                    let got = validate_backend_url(url).unwrap_or_else(|e| {
+                        panic!("backend_url {id}: expected allow, got {e:?}")
+                    });
+                    if let Some(normalized) = case["normalized"].as_str() {
+                        assert_eq!(got, normalized, "backend_url {id}");
+                    }
+                }
+                "block" => {
+                    let err = validate_backend_url(url).expect_err(&format!("backend_url {id}"));
+                    if let Some(code) = case["code"].as_str() {
+                        assert_eq!(err.error_code(), code, "backend_url {id}");
+                    }
+                }
+                other => panic!("backend_url {id}: bad expect {other}"),
+            }
+        }
     }
 
     #[test]

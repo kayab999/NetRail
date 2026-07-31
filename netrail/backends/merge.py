@@ -4,6 +4,7 @@ from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
 
 from netrail.backends.types import SearchResult
 
+# Keep in sync with netrail.security._DDG_HOSTS (open unwrap + merge resolve).
 DDG_HOSTS = frozenset({"duckduckgo.com", "duck.com"})
 
 

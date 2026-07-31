@@ -7,7 +7,9 @@ from urllib.parse import parse_qs, unquote, urlparse
 from netrail.errors import NetRailError
 
 _BLOCKED_SCHEMES = frozenset({"javascript", "data", "file", "vbscript"})
-_DDG_HOSTS = frozenset({"duckduckgo.com", "r.duckduckgo.com", "www.duckduckgo.com"})
+# Base registrable hosts; subdomains (www., r., …) match via suffix.
+_DDG_HOSTS = frozenset({"duckduckgo.com", "duck.com"})
+_DNS_REBINDING_HELPERS = frozenset({"nip.io", "sslip.io", "xip.io", "localtest.me"})
 _MAX_REDIRECT_DEPTH = 5
 _HEX_INT = re.compile(r"^0[xX][0-9a-fA-F]+$")
 _OCTAL_INT = re.compile(r"^0[0-7]+$")
@@ -16,6 +18,13 @@ _OCTAL_INT = re.compile(r"^0[0-7]+$")
 def _is_ddg_host(host: str) -> bool:
     host = host.lower()
     return host in _DDG_HOSTS or any(host.endswith(f".{h}") for h in _DDG_HOSTS)
+
+
+def _is_dns_rebinding_helper(host: str) -> bool:
+    host = host.lower()
+    return host in _DNS_REBINDING_HELPERS or any(
+        host.endswith(f".{d}") for d in _DNS_REBINDING_HELPERS
+    )
 
 
 def _parse_u32_loose(raw: str) -> int | None:
@@ -118,12 +127,7 @@ def _block_unsafe_host(host: str) -> None:
             "Localhost URLs cannot be opened from search results.",
         )
 
-    if (
-        host_lower.endswith(".nip.io")
-        or host_lower.endswith(".sslip.io")
-        or host_lower.endswith(".xip.io")
-        or host_lower.endswith(".localtest.me")
-    ):
+    if _is_dns_rebinding_helper(host_lower):
         raise NetRailError(
             "OPEN_URL_DNS_REBINDING",
             "DNS rebinding hostnames cannot be opened from search results.",
@@ -214,12 +218,7 @@ def validate_open_url(url: str) -> str:
 
 def _block_backend_host(host: str) -> None:
     host_lower = host.lower()
-    if (
-        host_lower.endswith(".nip.io")
-        or host_lower.endswith(".sslip.io")
-        or host_lower.endswith(".xip.io")
-        or host_lower.endswith(".localtest.me")
-    ):
+    if _is_dns_rebinding_helper(host_lower):
         raise NetRailError(
             "BACKEND_URL_DNS_REBINDING",
             "DNS rebinding hostnames are not allowed in backend URLs.",

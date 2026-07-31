@@ -40,7 +40,15 @@ def _as_bool(value: str) -> bool:
 
 def _apply_env_overrides(settings: dict[str, Any]) -> dict[str, Any]:
     if url := os.environ.get("NETRAIL_SEARXNG_URL") or os.environ.get("SEARXNG_URL"):
-        settings["searxng_url"] = url
+        # Same gate as settings save — never apply metadata/rebinding/etc. from env.
+        from netrail.errors import NetRailError
+        from netrail.security import validate_backend_url
+
+        try:
+            settings["searxng_url"] = validate_backend_url(url)
+        except NetRailError:
+            # Leave prior settings value; invalid env must not enable a hostile backend.
+            pass
 
     if os.environ.get("BRAVE_SEARCH_API_KEY") or os.environ.get("NETRAIL_BRAVE_API_KEY"):
         settings["brave_enabled"] = True
