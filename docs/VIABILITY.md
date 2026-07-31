@@ -1,5 +1,7 @@
 # NetRail — Viability Assessment & Strategic Response
 
+> **Status note (2026-07-31):** Strategic framing below remains useful. The **risk table** was written against v0.2-era plans; several rows are **shipped** in 1.2.x (history, Tauri/Rust desktop, tests, fanout/Brave). Treat open rows as product strategy, not build status. Current architecture: [ARCHITECTURE.md](ARCHITECTURE.md). Residual engineering backlog: [AUDIT_ENTERPRISE_2026-07-31.md](AUDIT_ENTERPRISE_2026-07-31.md).
+
 This document records an expert technical and product analysis of NetRail, the team's response, and tracked mitigation status. It complements [ARCHITECTURE.md](ARCHITECTURE.md) with honest market and sustainability framing.
 
 ---
@@ -18,14 +20,14 @@ The product is viable as an open-source professional tool and institutional offe
 
 | Risk | Severity | Mitigation | Status |
 |------|----------|------------|--------|
-| Manifesto vs. borrowed index (ddgs→Bing) | P0 | Open Letter rewrite; provenance in UI/API | ✅ v0.2 |
-| `ddgs` HTML scraping fragility | P0 | `SearchBackend` protocol; fallback chain; SearXNG | ✅ v0.2 |
-| No user retention (no history) | P1 | History + collections in v0.3 | 🔲 Planned |
-| Python Tauri sidecar trap | P1 | Rust port at v0.5, not Python sidecar | 📋 Decided |
-| Browser-as-UI paradox | P2 | Tauri shell accelerated to v0.5 | 📋 Planned |
-| No test suite | P1 | pytest on API, backends, security | ✅ v0.2 |
-| Linux-only audience ceiling | P2 | macOS after v0.5; audience expansion docs | 🔲 Planned |
-| No revenue model | P1 | Sponsorware → institutional licenses at v1.0 | 📋 Documented |
+| Manifesto vs. borrowed index (ddgs→Bing) | P0 | Open Letter rewrite; provenance in UI/API | ✅ shipped |
+| `ddgs` HTML scraping fragility | P0 | `SearchBackend` protocol; fallback chain; SearXNG | ✅ shipped |
+| No user retention (no history) | P1 | History + collections | ✅ 0.3+ / 1.x |
+| Python Tauri sidecar trap | P1 | Rust port, not Python sidecar | ✅ Tauri + Axum production |
+| Browser-as-UI paradox | P2 | Tauri desktop shell | ✅ 1.x |
+| No test suite | P1 | pytest + cargo tests + CI | ✅ 1.x |
+| Linux-only audience ceiling | P2 | macOS later; audience expansion docs | 🔲 still open |
+| No revenue model | P1 | Sponsorware → institutional licenses | 📋 ongoing |
 
 ---
 

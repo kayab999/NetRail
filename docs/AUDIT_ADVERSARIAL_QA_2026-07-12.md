@@ -1,5 +1,7 @@
 # NetRail — Adversarial Q&A Audit (post-hardening)
 
+> **Historical (2026-07-12).** Mid-document narrative still describes some findings as open (encoded loopback, RFC1918 open, Python 422, no rate limit, publish blocked). Those were **closed or superseded in the 1.2.2 tree and later**. Prefer code + tests + [AUDIT_ENTERPRISE_2026-07-31.md](AUDIT_ENTERPRISE_2026-07-31.md) over this file’s body text.
+
 | Field | Value |
 |-------|--------|
 | **Date** | 2026-07-12 |

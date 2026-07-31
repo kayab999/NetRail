@@ -8,12 +8,12 @@ Download the **AppImage** or **.deb** from the [latest release](https://github.c
 
 ```bash
 # Desktop app (AppImage)
-chmod +x NetRail_1.2.2_amd64.AppImage
-# Ubuntu 24.04+ without FUSE: APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.2.2_amd64.AppImage
-./NetRail_1.2.2_amd64.AppImage
+chmod +x NetRail_1.2.3_amd64.AppImage
+# Ubuntu 24.04+ without FUSE: APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.2.3_amd64.AppImage
+./NetRail_1.2.3_amd64.AppImage
 
 # Or Debian/Ubuntu package
-sudo dpkg -i NetRail_1.2.2_amd64.deb
+sudo dpkg -i NetRail_1.2.3_amd64.deb
 ```
 
 **Headless API** (homelabs, scripting, Docker):
@@ -32,7 +32,7 @@ Build from source: see [Development](#development) below.
 
 *Fanout search across SearXNG and DDGS. Results stay in the link rail until you open them.*
 
-**Version:** 1.2.2 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
+**Version:** 1.2.3 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
 
 ---
 
@@ -64,7 +64,7 @@ NetRail does not pretend you can overthrow Google overnight. It shows you exactl
 | 3 | 🟢 **Paid independence** | Bring your own Brave Search API key (`BRAVE_SEARCH_API_KEY`) |
 | 4 | 🔜 **Owned corpus** | Local crawl & FTS5 index *(v2.x)* |
 
-Every result shows a backend pill. Every query stays on `127.0.0.1`. Every setting lives in `~/.config/netrail/`.
+Every result shows a backend pill. The **API** listens only on `127.0.0.1`; search queries leave your machine only to backends you enable (and Wikipedia fallback when web fanout is empty). Settings live in `~/.config/netrail/`.
 
 ---
 
@@ -147,7 +147,9 @@ Full API: [docs/MANUAL.md](docs/MANUAL.md)
 | [Distribution](docs/DISTRIBUTION.md) | Flatpak, Docker, AppImage, install |
 | [Open Letter](OPEN_LETTER.md) | Philosophy and the v1.0 postscript |
 | [API error codes](docs/API_ERRORS.md) | Stable `code` / `detail` / `status` reference |
-| [Release notes](docs/RELEASE_v1.2.2.md) | v1.2.2 RC hygiene (CI, versions) |
+| [Release notes 1.2.3](docs/RELEASE_v1.2.3.md) | Docs truth + open-URL/env P1 hardening |
+| [Release notes 1.2.2](docs/RELEASE_v1.2.2.md) | v1.2.2 RC hygiene (CI, versions) |
+| [Enterprise audit](docs/AUDIT_ENTERPRISE_2026-07-31.md) | Post-GA adversarial audit + workplan |
 
 ---
 

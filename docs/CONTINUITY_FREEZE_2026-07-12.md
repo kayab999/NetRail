@@ -1,5 +1,8 @@
 # Continuity mission freeze — NetRail 1.2.2
 
+> **Historical.** Point-in-time freeze from 2026-07-12. **v1.2.2 was published** as GitHub Latest.
+> For current residual risk and backlog, see [AUDIT_ENTERPRISE_2026-07-31.md](AUDIT_ENTERPRISE_2026-07-31.md) and [HANDOVER.md](../HANDOVER.md).
+
 **Date:** 2026-07-12  
 **Mission:** audit → harden → score → package → handover  
 **Author role:** Senior engineer / technical auditor  
@@ -39,10 +42,10 @@ bash scripts/package-smoke.sh
 
 ## What’s left (operator)
 
-1. Tag `v1.2.2` and publish GitHub Release when ready  
-2. Close draft releases 1.2.0 / 1.2.1  
+1. ~~Tag `v1.2.2` and publish GitHub Release~~ ✅ Done (Latest)  
+2. ~~Close draft releases 1.2.0 / 1.2.1~~ ✅ Done  
 3. Rebuild offline `dist/` after latest commits if shipping local artifacts  
 
 ## Truth over marketing
 
-README/install paths claim 1.2.2; code versions match. Public **Latest** on GitHub may still be older until you publish — HANDOVER documents that residual.
+README/install paths and code versions matched 1.2.2 at freeze; public **Latest** is now **v1.2.2**. Later hardening is tracked in the enterprise audit (2026-07-31), not this freeze note.

@@ -3,12 +3,12 @@
 | Field | Value |
 |-------|--------|
 | **Product** | Local privacy-first research console for Linux |
-| **Version** | **1.2.2** (`scripts/check-versions.sh`) |
+| **Version** | **1.2.3** (`scripts/check-versions.sh`) |
 | **Primary path** | Rust Axum API + Tauri 2 desktop; Python for Docker/Flatpak/tests |
 | **License** | AGPL-3.0 |
 | **Repo** | https://github.com/kayab999/NetRail |
 | **Freeze date** | 2026-07-12 |
-| **HEAD note** | `main` includes RC hardening + score lifts; **tag/publish v1.2.2 may still be pending** |
+| **HEAD note** | **1.2.3** Wave 0+1 hardening (docs truth + open-URL/env P1s). Prior public Latest was **v1.2.2**. Audit: [docs/AUDIT_ENTERPRISE_2026-07-31.md](docs/AUDIT_ENTERPRISE_2026-07-31.md) |
 
 ---
 
@@ -214,10 +214,10 @@ Non-happy-path covered: empty query, bad mode/settings, open localhost/private/e
 - [x] Rate limits + a11y polish
 - [x] CI green on push (as of last score lift)
 - [x] HANDOVER.md written
-- [ ] Tag `v1.2.2` (operator — this freeze cycle)
-- [ ] Publish GitHub Release + SHA256SUMS (non-draft)
-- [ ] Close draft 1.2.0 / 1.2.1
-- [ ] `bash scripts/e2e-api-smoke.sh` green in CI
+- [x] Tag `v1.2.2`
+- [x] Publish GitHub Release + SHA256SUMS (non-draft, Latest)
+- [x] Close draft 1.2.0 / 1.2.1
+- [x] `bash scripts/e2e-api-smoke.sh` green in CI + release
 
 ---
 
@@ -226,7 +226,7 @@ Non-happy-path covered: empty query, bad mode/settings, open localhost/private/e
 ```
 You are continuing NetRail (Linux local research console, Rust-primary + Python fallback).
 
-Read HANDOVER.md first. Repo: NetRail. Version 1.2.2.
+Read HANDOVER.md first. Repo: NetRail. Version 1.2.3.
 
 Invariants: localhost-only API, no telemetry, open-URL blocks (incl. encoded loopback + private IPs), no Brave key on disk, version SSOT via scripts/check-versions.sh.
 
@@ -260,11 +260,12 @@ Do not force-push. Do not push unless I ask.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Lifecycle roadmap |
 | [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | Packaging |
 | [docs/MANUAL.md](docs/MANUAL.md) | User manual |
-| [docs/AUDIT_ADVERSARIAL_QA_2026-07-12.md](docs/AUDIT_ADVERSARIAL_QA_2026-07-12.md) | Hostile Q&A |
+| [docs/AUDIT_ENTERPRISE_2026-07-31.md](docs/AUDIT_ENTERPRISE_2026-07-31.md) | Post-GA enterprise audit + workplan |
+| [docs/AUDIT_ADVERSARIAL_QA_2026-07-12.md](docs/AUDIT_ADVERSARIAL_QA_2026-07-12.md) | Hostile Q&A (historical) |
 | [docs/AUDIT_RC_2026-07-12.md](docs/AUDIT_RC_2026-07-12.md) | RC audit |
 | [CHANGELOG.md](CHANGELOG.md) | Semver history |
 | [docs/RELEASE_v1.2.2.md](docs/RELEASE_v1.2.2.md) | Release notes |
 
 ---
 
-*Handover for human/AI continuity — NetRail 1.2.2 — be honest, no scope creep, prefer durable repo state.*
+*Handover for human/AI continuity — NetRail 1.2.3 — be honest, no scope creep, prefer durable repo state.*

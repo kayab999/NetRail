@@ -26,7 +26,7 @@ The Tauri shell embeds the UI and starts the Rust API on `127.0.0.1:7421`. Use t
 On Ubuntu 24.04 without FUSE:
 
 ```bash
-APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.2.2_amd64.AppImage
+APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.2.3_amd64.AppImage
 ```
 
 ### Headless API
@@ -294,7 +294,9 @@ curl -s http://127.0.0.1:7421/api/docs/about
 | **No browsers listed** | No `.desktop` browser entries found | Install a browser; ensure it has a Freedesktop entry |
 | **Open does nothing** | Browser binary moved or permissions | Re-select browser in dropdown; verify `which firefox` (or your browser) works |
 | **Private mode ignored** | Browser lacks known private flag | Browser opens in normal mode; try Firefox or Chromium |
-| **Few or no results** | Provider rate limit or query too narrow | Simplify query; wait and retry |
+| **Few or no results** | Provider rate limit or query too narrow | Simplify query; wait and retry. Web mode may fall back to Wikipedia (your query still leaves the machine). Images mode has **no** Wikipedia fallback. |
+| **HTTP 429 `RATE_LIMITED`** | Local anti-spam: 90 searches / 120 opens per minute | Wait a minute, or set `NETRAIL_RATE_LIMIT=0` for smoke/dev only |
+| **Open blocked for LAN IP** | Private/loopback URLs cannot be opened from results | Intentional; configure SearXNG on LAN as a **backend** instead |
 | **Port already in use** | Another NetRail instance on 7421 | Stop the other process (`ss -tlnp | grep 7421`) |
 
 ### Search failed and your network
@@ -319,7 +321,7 @@ NetRail is intentionally modular: network repair tools are a separate concern. O
 | Move through results | **↑** / **↓** (when results are shown) |
 | Open highlighted result | **Enter** (with result highlighted) |
 | Open highlighted in private mode | **Shift+Enter** |
-| Copy highlighted URL | **Ctrl+Shift+C** (with search field focused) |
+| Copy highlighted URL | **Ctrl+C** (with search field focused) |
 | Export results | **Export** button (JSON); **Shift+click** for CSV |
 | Switch mode | Click **Web**, **Images**, or **History** tab |
 

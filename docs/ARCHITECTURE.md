@@ -1,5 +1,7 @@
 # NetRail — Architecture & Lifecycle Blueprint
 
+> **Current product:** NetRail **1.2.x** (Rust-primary). Lifecycle tables below retain historical phase labels; rows marked ✅ are shipped. Open items are backlog, not “still in Phase 1.” Residual risk: [AUDIT_ENTERPRISE_2026-07-31.md](AUDIT_ENTERPRISE_2026-07-31.md).
+
 ## Vision
 
 NetRail aims to be a **sovereign research console** for Linux professionals: local, operator-aware, link-first, and free of surveillance economics. It revives the Web Ferret workflow for an era where discovery has been centralized behind a handful of indexes and engagement-optimized UIs.
@@ -8,9 +10,9 @@ NetRail does not try to rebuild Google's data centers on a laptop. It tries to p
 
 ---
 
-## High-Level Design (v1.0 — current)
+## High-Level Design (v1.2.x — current)
 
-Production v1.0 runs a **Rust Axum API** on `127.0.0.1:7421`, shared with a static web UI (`netrail/static/`). The Tauri desktop shell (`src-tauri/`) embeds that UI and spawns the API in-process. A headless `netrail-api` binary ships the same engine without GTK/Tauri. Python (`netrail/main.py`) remains for tests, Docker, Flatpak, and `install.sh` fallback.
+Production **1.2.x** runs a **Rust Axum API** on `127.0.0.1:7421`, shared with a static web UI (`netrail/static/`). The Tauri desktop shell (`src-tauri/`) embeds that UI and spawns the API in-process. A headless `netrail-api` binary ships the same engine without GTK/Tauri. Python (`netrail/main.py`) remains for tests, Docker, Flatpak, and `install.sh` fallback.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -196,9 +198,9 @@ User query → NetRail (127.0.0.1) → SearchBackend registry
 
 Provenance is returned in API responses and shown in the UI. See [VIABILITY.md](VIABILITY.md) for product risk analysis.
 
-### Future: local history encryption
+### Local history encryption (shipped)
 
-Planned for v0.2+. Optional encrypted SQLite at `~/.local/share/netrail/history.db` with user-held key or system keyring integration.
+Optional Fernet field encryption for query text, titles, and snippets at `~/.local/share/netrail/netrail.db` (override `NETRAIL_DB_PATH`) with OS keyring or `NETRAIL_DB_KEY`. FTS5 tokens and visited/collection URLs remain plaintext by design — see [SECURITY.md](../SECURITY.md).
 
 ---
 
@@ -243,7 +245,7 @@ NetMedic IPC, MCP servers, or desktop launchers can wrap these calls in ~50 line
 | Search | `SearchBackend` protocol | `ddgs` default; `searxng` optional; fallback chain |
 | UI | Static HTML/CSS/JS | No build chain; auditable; offline-capable assets |
 | Config | JSON in XDG | Standard Linux convention |
-| Desktop (planned) | Tauri 2 + **Rust port** | Single binary; avoid Python sidecar (see VIABILITY.md) |
+| Desktop (shipped 1.x) | Tauri 2 + **Rust port** | Production path; Python kept for Docker/Flatpak/tests |
 | Local AI (planned) | llama.cpp / GGUF | Aligns with local-model patterns used in adjacent tools |
 
 ---
@@ -273,9 +275,9 @@ The roadmap is organized into **phases** with explicit goals, deliverables, exit
 
 ---
 
-### Phase 1 — Credibility + Reliability (in progress)
+### Phase 1 — Credibility + Reliability (complete for 1.x)
 
-**Version:** 0.2.0  
+**Version:** 0.2.0 → absorbed into **1.2.x**  
 **Theme:** Close the manifesto–reality gap; survive `ddgs` breakage
 
 | Deliverable | State |
@@ -288,11 +290,11 @@ The roadmap is organized into **phases** with explicit goals, deliverables, exit
 | CSP + stricter URL validation | ✅ |
 | Test suite (API, backends, security) | ✅ |
 | Open Letter honesty rewrite | ✅ |
-| Result caching | 🔲 v0.2.1 |
-| Async multi-backend fanout | 🔲 v0.2.1 |
-| Brave Search API (BYO key) | 🔲 v0.2.2 |
+| Result caching | 🔲 optional backlog |
+| Async multi-backend fanout | ✅ 1.x (`join_all` / thread pool) |
+| Brave Search API (BYO key) | ✅ 1.x (`BRAVE_SEARCH_API_KEY`) |
 
-**Exit criteria:** User sees where results come from; SearXNG works when configured; tests gate releases.
+**Exit criteria:** User sees where results come from; SearXNG works when configured; tests gate releases. ✅
 
 ---
 
