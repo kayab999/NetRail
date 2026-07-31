@@ -4,6 +4,27 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-07-31
+
+### Fixed
+
+- **IPv4-mapped IPv6 open** — unmap `::ffff:x.x.x.x` before loopback/private checks (Rust + Python)
+- **AWS IPv6 IMDS backend** — block `fd00:ec2::254` correctly on Rust (was wrong last segment)
+- **Cloud metadata hostnames** — block `metadata.google.internal`, `metadata`, `instance-data` on open and backend
+- **Backend HTTP redirects** — reqwest/httpx clients for SearXNG/Brave do not follow redirects
+- **History encrypt no-key (Python)** — degrade to plaintext + health banner (parity with Rust) instead of disabling history
+- **Python fanout deadline** — 20s overall timeout matching Rust
+- **Invalid search mode (Rust)** — return `QUERY_INVALID` 400 instead of silent web default
+- **Error `detail` (Rust)** — raw message without thiserror prefix (parity with Python)
+- **Collection validation codes (Python)** — map `name`/`title`/`notes` to stable collection codes
+- **Open browser failure (Python)** — typed `BROWSER_NOT_FOUND` instead of bare HTTPException
+- **Collection notes max (Rust)** — reject notes longer than 2000 characters
+
+### Added
+
+- Golden fixture cases for mapped IPv6, AWS IPv6 IMDS, and metadata hostnames
+- API error docs for `OPEN_URL_CLOUD_METADATA`, `COLLECTION_ITEM_NOTES_INVALID`
+
 ## [1.2.3] — 2026-07-31
 
 ### Fixed
@@ -256,6 +277,7 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 - URL open restricted to `http://` and `https://` schemes
 - Localhost-only server bind in v0.1
 
+[1.3.0]: https://github.com/kayab999/NetRail/releases/tag/v1.3.0
 [1.2.3]: https://github.com/kayab999/NetRail/releases/tag/v1.2.3
 [1.2.2]: https://github.com/kayab999/NetRail/releases/tag/v1.2.2
 [1.2.1]: https://github.com/kayab999/NetRail/releases/tag/v1.2.1

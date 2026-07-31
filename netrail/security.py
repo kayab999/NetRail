@@ -10,6 +10,13 @@ _BLOCKED_SCHEMES = frozenset({"javascript", "data", "file", "vbscript"})
 # Base registrable hosts; subdomains (www., r., …) match via suffix.
 _DDG_HOSTS = frozenset({"duckduckgo.com", "duck.com"})
 _DNS_REBINDING_HELPERS = frozenset({"nip.io", "sslip.io", "xip.io", "localtest.me"})
+_CLOUD_METADATA_HOSTS = frozenset(
+    {
+        "metadata.google.internal",
+        "metadata",
+        "instance-data",
+    }
+)
 _MAX_REDIRECT_DEPTH = 5
 _HEX_INT = re.compile(r"^0[xX][0-9a-fA-F]+$")
 _OCTAL_INT = re.compile(r"^0[0-7]+$")
@@ -91,9 +98,35 @@ def _parse_browser_ipv4(host: str) -> ipaddress.IPv4Address | None:
 def _parse_host_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
     host = host.strip().strip("[]")
     try:
-        return ipaddress.ip_address(host)
+        ip = ipaddress.ip_address(host)
     except ValueError:
         return _parse_browser_ipv4(host)
+    return _effective_ip(ip)
+
+
+def _effective_ip(
+    ip: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
+    """Unmap IPv4-mapped IPv6 so loopback/private checks apply."""
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        return ip.ipv4_mapped
+    return ip
+
+
+def _is_cloud_metadata_host(host: str) -> bool:
+    host = host.lower()
+    return host in _CLOUD_METADATA_HOSTS or any(
+        host.endswith(f".{h}") for h in _CLOUD_METADATA_HOSTS
+    )
+
+
+def _is_cloud_metadata_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    ip = _effective_ip(ip)
+    if ip == ipaddress.ip_address("169.254.169.254"):
+        return True
+    if ip == ipaddress.ip_address("fd00:ec2::254"):
+        return True
+    return False
 
 
 def _is_non_public_v4(ip: ipaddress.IPv4Address) -> bool:
@@ -133,6 +166,12 @@ def _block_unsafe_host(host: str) -> None:
             "DNS rebinding hostnames cannot be opened from search results.",
         )
 
+    if _is_cloud_metadata_host(host_lower):
+        raise NetRailError(
+            "OPEN_URL_CLOUD_METADATA",
+            "Cloud metadata hostnames cannot be opened from search results.",
+        )
+
     ip = _parse_host_ip(host_lower)
     if ip is None:
         return
@@ -155,7 +194,7 @@ def _block_unsafe_host(host: str) -> None:
             )
         return
 
-    # IPv6
+    # IPv6 (already unmapped when possible)
     if ip.is_loopback or ip.is_unspecified:
         raise NetRailError(
             "OPEN_URL_LOCALHOST",
@@ -224,16 +263,17 @@ def _block_backend_host(host: str) -> None:
             "DNS rebinding hostnames are not allowed in backend URLs.",
         )
 
-    ip = _parse_host_ip(host_lower)
-    if ip is None:
-        return
-
-    if ip == ipaddress.ip_address("169.254.169.254"):
+    if _is_cloud_metadata_host(host_lower):
         raise NetRailError(
             "BACKEND_URL_CLOUD_METADATA",
             "Cloud metadata addresses cannot be used as backend URLs.",
         )
-    if ip == ipaddress.ip_address("fd00:ec2::254"):
+
+    ip = _parse_host_ip(host_lower)
+    if ip is None:
+        return
+
+    if _is_cloud_metadata_ip(ip):
         raise NetRailError(
             "BACKEND_URL_CLOUD_METADATA",
             "Cloud metadata addresses cannot be used as backend URLs.",

@@ -25,6 +25,8 @@ The frontend branches on `code`; `detail` is human-readable. Rust (Tauri / `netr
 | `OPEN_URL_DNS_REBINDING` | 400 | nip.io / sslip.io / xip.io / localtest.me hostname |
 | `OPEN_URL_LINK_LOCAL` | 400 | Link-local IP |
 | `OPEN_URL_PRIVATE` | 400 | Private / non-public IP (RFC1918, ULA, multicast, …) |
+| `OPEN_URL_CLOUD_METADATA` | 400 | Cloud metadata hostname (e.g. `metadata.google.internal`) |
+| `COLLECTION_ITEM_NOTES_INVALID` | 400 | Collection item notes longer than 2000 characters |
 | `REQUEST_INVALID` | 400 | Generic request validation failure (Python path) |
 | `RATE_LIMITED` | 429 | Too many search/open calls in a 60s window (disable with `NETRAIL_RATE_LIMIT=0`) |
 | `OPEN_URL_REDIRECT_DEPTH` | 400 | Too many DDG redirect unwraps |
@@ -37,7 +39,7 @@ The frontend branches on `code`; `detail` is human-readable. Rust (Tauri / `netr
 | `BACKEND_URL_CREDENTIALS` | 400 | Credentials in backend URL |
 | `BACKEND_URL_NO_HOST` | 400 | Backend URL missing host |
 | `BACKEND_URL_DNS_REBINDING` | 400 | Rebinding hostname in backend URL |
-| `BACKEND_URL_CLOUD_METADATA` | 400 | 169.254.169.254 or fd00:ec2::254 |
+| `BACKEND_URL_CLOUD_METADATA` | 400 | 169.254.169.254, fd00:ec2::254, or known metadata hostnames |
 | `BACKEND_URL_LINK_LOCAL` | 400 | Link-local backend address |
 | `HISTORY_DISABLED` | 400 | History endpoints with history off |
 | `COLLECTION_NAME_INVALID` | 400 | Collection name empty or too long |

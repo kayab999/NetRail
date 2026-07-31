@@ -448,6 +448,15 @@ async fn add_collection_item(
         }
         .into());
     }
+    if let Some(ref notes) = body.notes {
+        if notes.len() > 2000 {
+            return Err(NetRailError::InvalidConfig {
+                code: "COLLECTION_ITEM_NOTES_INVALID",
+                message: "Notes must be at most 2000 characters.".into(),
+            }
+            .into());
+        }
+    }
     Ok(Json(
         store.add_collection_item(collection_id, &safe_url, title, body.notes.as_deref())?,
     ))
@@ -539,7 +548,7 @@ impl From<NetRailError> for ApiError {
         Self {
             status: err.status_code(),
             code: err.error_code(),
-            detail: err.to_string(),
+            detail: err.detail_message(),
         }
     }
 }

@@ -52,7 +52,7 @@ class BraveBackend:
             "X-Subscription-Token": self.api_key,
         }
         params = {"q": query, "count": min(max_results, 20)}
-        with httpx.Client(timeout=self.timeout) as client:
+        with httpx.Client(timeout=self.timeout, follow_redirects=False) as client:
             response = client.get(
                 "https://api.search.brave.com/res/v1/web/search",
                 headers=headers,
@@ -83,7 +83,7 @@ class BraveBackend:
             "X-Subscription-Token": self.api_key,
         }
         params = {"q": query, "count": min(max_results, 20)}
-        with httpx.Client(timeout=self.timeout) as client:
+        with httpx.Client(timeout=self.timeout, follow_redirects=False) as client:
             response = client.get(
                 "https://api.search.brave.com/res/v1/images/search",
                 headers=headers,

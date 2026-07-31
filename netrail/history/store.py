@@ -13,6 +13,20 @@ from netrail.history.crypto import decrypt_text, encrypt_text, ensure_encryption
 from netrail.history.db import connect, normalize_url
 
 _store: "HistoryStore | None" = None
+_encryption_degraded: bool = False
+
+ENCRYPTION_DEGRADED_MESSAGE = (
+    "System keyring unavailable (common on WSL, i3, or headless). "
+    "History is stored unencrypted this session."
+)
+
+
+def encryption_degraded() -> bool:
+    return _encryption_degraded
+
+
+def encryption_degraded_message() -> str:
+    return ENCRYPTION_DEGRADED_MESSAGE
 
 
 class HistoryStore:
@@ -321,20 +335,21 @@ class HistoryStore:
 
 
 def get_store() -> HistoryStore | None:
-    global _store
+    """Return history store. Encrypt-on with no key degrades to plaintext (Rust parity)."""
+    global _store, _encryption_degraded
     settings = load_settings()
     if not settings.get("history_enabled", True):
         return None
 
     if _store is None:
-        want_encrypt = settings.get("history_encrypt", True)
+        want_encrypt = bool(settings.get("history_encrypt", True))
         if want_encrypt:
             ensure_encryption_key()
         from netrail.history.crypto import encryption_active
 
-        if want_encrypt and not encryption_active():
-            return None
         use_encrypt = want_encrypt and encryption_active()
+        if want_encrypt and not encryption_active():
+            _encryption_degraded = True
         _store = HistoryStore(connect(), encrypt=use_encrypt)
         ttl = int(settings.get("history_ttl_days", 90))
         _store.purge_expired(ttl)
@@ -344,3 +359,10 @@ def get_store() -> HistoryStore | None:
 
 def init_history_on_startup() -> None:
     get_store()
+
+
+def reset_store_for_tests() -> None:
+    """Test helper: drop singleton so next get_store() re-evaluates settings/key."""
+    global _store, _encryption_degraded
+    _store = None
+    _encryption_degraded = False

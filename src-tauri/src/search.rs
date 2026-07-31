@@ -15,9 +15,11 @@ pub async fn search(
     let mode = match mode.trim().to_lowercase().as_str() {
         "web" => SearchMode::Web,
         "images" => SearchMode::Images,
-        other => {
-            tracing::warn!(mode = %other, "invalid search mode; defaulting to web");
-            SearchMode::Web
+        _ => {
+            return Err(NetRailError::InvalidQuery {
+                code: "QUERY_INVALID",
+                message: "mode must be 'web' or 'images'.".into(),
+            });
         }
     };
     let response = search_with_fallback(client, query, mode, max_results, settings).await;

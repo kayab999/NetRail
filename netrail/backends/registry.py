@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout, as_completed
 from typing import Any
 
 from netrail.backends.brave import BraveBackend
@@ -13,6 +13,9 @@ from netrail.backends.wikipedia import WikipediaBackend
 from netrail.config import load_settings
 
 logger = logging.getLogger(__name__)
+
+# Match Rust FANOUT_DEADLINE (src-tauri/src/backends/mod.rs).
+FANOUT_DEADLINE_SECONDS = 20.0
 
 
 def get_enabled_backends(settings: dict[str, Any] | None = None) -> list[Any]:
@@ -101,19 +104,23 @@ def search_with_fallback(
             pool.submit(_query_backend, backend, query, mode, max_results): backend
             for backend in backends
         }
-        for future in as_completed(futures):
-            name, provenance, batch, err = future.result()
-            if err:
-                logger.warning("backend search failed: %s", err)
-                errors.append(err)
-                continue
-            if batch:
-                backends_used.append(name)
-                provenance_chain.append(provenance)
-                batches.append((name, batch))
-            else:
-                logger.warning("%s returned zero parseable results", name)
-                errors.append(f"{name}: returned no results")
+        try:
+            for future in as_completed(futures, timeout=FANOUT_DEADLINE_SECONDS):
+                name, provenance, batch, err = future.result()
+                if err:
+                    logger.warning("backend search failed: %s", err)
+                    errors.append(err)
+                    continue
+                if batch:
+                    backends_used.append(name)
+                    provenance_chain.append(provenance)
+                    batches.append((name, batch))
+                else:
+                    logger.warning("%s returned zero parseable results", name)
+                    errors.append(f"{name}: returned no results")
+        except FuturesTimeout:
+            logger.warning("fanout timed out after %.0fs", FANOUT_DEADLINE_SECONDS)
+            errors.append("fanout: timed out after 20 seconds")
 
     if strategy == "fallback":
         flat = [item for _, batch in batches for item in batch]

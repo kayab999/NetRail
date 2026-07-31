@@ -26,7 +26,11 @@ Search results and `/api/open` reject:
 - Loopback / localhost (including **decimal, hex, octal, and short IPv4 forms** browsers may resolve to `127.0.0.1`)
 - Link-local and **private / non-public** addresses (RFC1918, ULA, multicast, …)
 - Known DNS-rebinding helper domains — apex and subdomains (`nip.io`, `sslip.io`, `xip.io`, `localtest.me`)
+- Cloud metadata hostnames (`metadata.google.internal`, `metadata`, `instance-data`) and IMDS IPs (`169.254.169.254`, `fd00:ec2::254`)
+- IPv4-mapped IPv6 forms (`::ffff:127.0.0.1`, etc.) after unmap
 - DuckDuckGo redirect wrappers (`duckduckgo.com`, `duck.com`, and subdomains) are unwrapped via `uddg=` before checks
+
+Backend HTTP clients **do not follow redirects**, so a SearXNG/Brave hop cannot bounce NetRail onto private targets via 30x.
 
 **Backend URLs** (e.g. self-hosted SearXNG) still **allow** localhost and private LAN hosts so operators can point at home instances. Cloud metadata and rebinding hostnames remain blocked.
 
@@ -34,7 +38,7 @@ Search results and `/api/open` reject:
 
 - Query text and result titles/snippets are encrypted with Fernet when a key is available (`NETRAIL_DB_KEY` or OS keyring).
 - The FTS5 index stores **plaintext tokens** of queries (required for local search).
-- If encryption is enabled but the keyring is unavailable (WSL, some window managers, headless), NetRail **degrades** to unencrypted history for the session and shows a **security banner**. Prefer setting `NETRAIL_DB_KEY` in those environments.
+- If encryption is enabled but the keyring is unavailable (WSL, some window managers, headless), NetRail **degrades** to unencrypted history for the session and shows a **security banner** (Rust and Python). Prefer setting `NETRAIL_DB_KEY` in those environments.
 
 ## Reporting a vulnerability
 

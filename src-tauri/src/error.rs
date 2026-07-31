@@ -144,10 +144,35 @@ impl NetRailError {
         }
     }
 
+    /// Human-readable detail without the thiserror enum prefix (parity with Python).
+    pub fn detail_message(&self) -> String {
+        match self {
+            Self::InvalidQuery { message, .. }
+            | Self::InvalidOpenUrl { message, .. }
+            | Self::InvalidConfig { message, .. }
+            | Self::InvalidBackendUrl { message, .. }
+            | Self::FanoutFailure { message, .. }
+            | Self::Database { message, .. }
+            | Self::Network { message, .. }
+            | Self::Parse { message, .. }
+            | Self::Encryption { message, .. }
+            | Self::Internal { message, .. }
+            | Self::RateLimited { message, .. } => message.clone(),
+            Self::MissingField { field, .. } => format!("Missing required field: {field}"),
+            Self::NotFound { entity, .. } => format!("{entity} not found"),
+            Self::BackendHttp {
+                backend, status, ..
+            } => format!("{backend}: HTTP {status}"),
+            Self::BackendFailure {
+                backend, message, ..
+            } => format!("{backend}: {message}"),
+        }
+    }
+
     pub fn to_json(&self) -> serde_json::Value {
         serde_json::json!({
             "code": self.error_code(),
-            "detail": self.to_string(),
+            "detail": self.detail_message(),
             "status": self.status_code().as_u16(),
         })
     }
@@ -244,7 +269,10 @@ mod tests {
         let json = err.to_json();
         assert_eq!(json["code"], "CONFIG_MAX_RESULTS");
         assert_eq!(json["status"], 400);
-        assert!(json["detail"].as_str().unwrap().contains("max_results"));
+        assert_eq!(
+            json["detail"].as_str().unwrap(),
+            "max_results must be between 1 and 50."
+        );
     }
 
     #[test]

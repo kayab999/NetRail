@@ -6,6 +6,12 @@ use url::Url;
 /// Keep in sync with `url_resolve::DDG_HOSTS` and Python `netrail.security`.
 const DDG_HOSTS: &[&str] = &["duckduckgo.com", "duck.com"];
 const DNS_REBINDING_HELPERS: &[&str] = &["nip.io", "sslip.io", "xip.io", "localtest.me"];
+/// Cloud instance-metadata hostnames (not IP literals). Keep in sync with Python.
+const CLOUD_METADATA_HOSTS: &[&str] = &[
+    "metadata.google.internal",
+    "metadata",
+    "instance-data",
+];
 const MAX_REDIRECT_DEPTH: u8 = 5;
 
 pub fn validate_open_url(raw: &str) -> NetRailResult<String> {
@@ -140,9 +146,20 @@ fn parse_u32_loose(raw: &str) -> Option<u32> {
 fn parse_host_ip(host: &str) -> Option<IpAddr> {
     let host = host.trim().trim_matches(|c| c == '[' || c == ']');
     if let Ok(ip) = host.parse::<IpAddr>() {
-        return Some(ip);
+        return Some(effective_ip(ip));
     }
     parse_browser_ipv4(host).map(IpAddr::V4)
+}
+
+/// Unmap IPv4-mapped IPv6 (`::ffff:x.x.x.x`) so loopback/private checks apply.
+fn effective_ip(ip: IpAddr) -> IpAddr {
+    match ip {
+        IpAddr::V6(v6) => v6
+            .to_ipv4_mapped()
+            .map(IpAddr::V4)
+            .unwrap_or(IpAddr::V6(v6)),
+        other => other,
+    }
 }
 
 fn is_non_public_v4(ip: Ipv4Addr) -> bool {
@@ -163,6 +180,12 @@ fn is_non_public_v6(ip: Ipv6Addr) -> bool {
         || ip.is_multicast()
 }
 
+fn is_cloud_metadata_host(host: &str) -> bool {
+    CLOUD_METADATA_HOSTS
+        .iter()
+        .any(|&h| host == h || host.ends_with(&format!(".{h}")))
+}
+
 fn block_unsafe_host(host: &str) -> NetRailResult<()> {
     let host_lower = host.to_lowercase();
 
@@ -180,6 +203,13 @@ fn block_unsafe_host(host: &str) -> NetRailResult<()> {
         return Err(NetRailError::InvalidOpenUrl {
             code: "OPEN_URL_DNS_REBINDING",
             message: "DNS rebinding hostnames cannot be opened from search results.".into(),
+        });
+    }
+
+    if is_cloud_metadata_host(&host_lower) {
+        return Err(NetRailError::InvalidOpenUrl {
+            code: "OPEN_URL_CLOUD_METADATA",
+            message: "Cloud metadata hostnames cannot be opened from search results.".into(),
         });
     }
 
@@ -285,6 +315,13 @@ fn block_backend_host(host: &str) -> NetRailResult<()> {
         });
     }
 
+    if is_cloud_metadata_host(&host_lower) {
+        return Err(NetRailError::InvalidBackendUrl {
+            code: "BACKEND_URL_CLOUD_METADATA",
+            message: "Cloud metadata addresses cannot be used as backend URLs.".into(),
+        });
+    }
+
     if let Some(ip) = parse_host_ip(&host_lower) {
         if is_cloud_metadata_ip(ip) {
             return Err(NetRailError::InvalidBackendUrl {
@@ -309,9 +346,10 @@ fn block_backend_host(host: &str) -> NetRailResult<()> {
 }
 
 fn is_cloud_metadata_ip(ip: IpAddr) -> bool {
-    match ip {
+    match effective_ip(ip) {
         IpAddr::V4(v4) => v4.octets() == [169, 254, 169, 254],
-        IpAddr::V6(v6) => v6.segments() == [0xfd00, 0xec2, 0, 0, 0, 0, 0, 0],
+        // AWS IMDS IPv6: fd00:ec2::254
+        IpAddr::V6(v6) => v6.segments() == [0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x254],
     }
 }
 
@@ -498,5 +536,31 @@ mod tests {
             parse_browser_ipv4("2130706433"),
             Some(Ipv4Addr::new(127, 0, 0, 1))
         );
+    }
+
+    #[test]
+    fn rejects_ipv4_mapped_loopback() {
+        let err = validate_open_url("http://[::ffff:127.0.0.1]/").unwrap_err();
+        assert_eq!(err.error_code(), "OPEN_URL_LOCALHOST");
+    }
+
+    #[test]
+    fn rejects_ipv4_mapped_private() {
+        let err = validate_open_url("http://[::ffff:c0a8:101]/").unwrap_err();
+        assert_eq!(err.error_code(), "OPEN_URL_PRIVATE");
+    }
+
+    #[test]
+    fn rejects_aws_ipv6_metadata_backend() {
+        let err = validate_backend_url("http://[fd00:ec2::254]/").unwrap_err();
+        assert_eq!(err.error_code(), "BACKEND_URL_CLOUD_METADATA");
+    }
+
+    #[test]
+    fn rejects_metadata_hostname_open_and_backend() {
+        let open_err = validate_open_url("http://metadata.google.internal/").unwrap_err();
+        assert_eq!(open_err.error_code(), "OPEN_URL_CLOUD_METADATA");
+        let back_err = validate_backend_url("http://metadata.google.internal/").unwrap_err();
+        assert_eq!(back_err.error_code(), "BACKEND_URL_CLOUD_METADATA");
     }
 }

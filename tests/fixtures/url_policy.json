@@ -114,6 +114,24 @@
       "url": "https://user:pass@example.com/",
       "expect": "block",
       "code": "OPEN_URL_CREDENTIALS"
+    },
+    {
+      "id": "reject_ipv4_mapped_loopback",
+      "url": "http://[::ffff:127.0.0.1]/",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_ipv4_mapped_private",
+      "url": "http://[::ffff:c0a8:101]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_metadata_hostname_open",
+      "url": "http://metadata.google.internal/",
+      "expect": "block",
+      "code": "OPEN_URL_CLOUD_METADATA"
     }
   ],
   "backend_url": [
@@ -152,6 +170,18 @@
       "url": "http://nip.io/",
       "expect": "block",
       "code": "BACKEND_URL_DNS_REBINDING"
+    },
+    {
+      "id": "reject_aws_ipv6_metadata",
+      "url": "http://[fd00:ec2::254]/",
+      "expect": "block",
+      "code": "BACKEND_URL_CLOUD_METADATA"
+    },
+    {
+      "id": "reject_metadata_hostname_backend",
+      "url": "http://metadata.google.internal/",
+      "expect": "block",
+      "code": "BACKEND_URL_CLOUD_METADATA"
     }
   ]
 }

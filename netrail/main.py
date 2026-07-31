@@ -98,6 +98,24 @@ async def request_validation_handler(
             "URL is required.",
             status=400,
         )
+    elif _has_field("name"):
+        err = NetRailError(
+            "COLLECTION_NAME_INVALID",
+            "Collection name must be 1-120 characters.",
+            status=400,
+        )
+    elif _has_field("title"):
+        err = NetRailError(
+            "COLLECTION_ITEM_TITLE_INVALID",
+            "Title must be 1-500 characters.",
+            status=400,
+        )
+    elif _has_field("notes"):
+        err = NetRailError(
+            "COLLECTION_ITEM_NOTES_INVALID",
+            "Notes must be at most 2000 characters.",
+            status=400,
+        )
     else:
         err = NetRailError("REQUEST_INVALID", detail, status=400)
     return JSONResponse(status_code=err.status, content=err.to_dict())
@@ -199,6 +217,8 @@ async def health() -> dict[str, Any]:
     if encrypt_requested:
         ensure_encryption_key()
     encryption_ok = encryption_active()
+    from netrail.history.store import encryption_degraded, encryption_degraded_message
+
     store = get_store()
     history = store.stats() if store else {"enabled": False}
     history["encrypt_requested"] = encrypt_requested
@@ -207,6 +227,9 @@ async def health() -> dict[str, Any]:
         history["encryption_warning"] = (
             "History encryption is enabled but no key is available."
         )
+    if encryption_degraded():
+        history["encryption_degraded"] = True
+        history["encryption_degraded_message"] = encryption_degraded_message()
 
     brave_key_present = bool(
         os.environ.get("BRAVE_SEARCH_API_KEY") or os.environ.get("NETRAIL_BRAVE_API_KEY")
@@ -321,7 +344,11 @@ async def open_link(request: OpenRequest) -> dict[str, str]:
             webbrowser.open(safe_url)
             result = {"browser": "system default", "mode": "normal", "url": safe_url}
         except Exception as fallback_exc:  # noqa: BLE001
-            raise HTTPException(status_code=500, detail=str(exc)) from fallback_exc
+            raise NetRailError(
+                "BROWSER_NOT_FOUND",
+                str(exc) or "No web browser found on this system.",
+                status=500,
+            ) from fallback_exc
 
     store = get_store()
     if store:

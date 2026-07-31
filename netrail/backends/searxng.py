@@ -31,7 +31,7 @@ class SearXNGBackend:
         if not self.base_url.startswith(("http://", "https://")):
             return False
         try:
-            with httpx.Client(timeout=3.0) as client:
+            with httpx.Client(timeout=3.0, follow_redirects=False) as client:
                 response = client.get(f"{self.base_url}/healthz")
                 return response.status_code < 500
         except httpx.HTTPError:
@@ -46,7 +46,7 @@ class SearXNGBackend:
             "categories": category,
         }
 
-        with httpx.Client(timeout=self.timeout) as client:
+        with httpx.Client(timeout=self.timeout, follow_redirects=False) as client:
             response = client.get(endpoint, params=params)
             response.raise_for_status()
             payload = response.json()
