@@ -197,7 +197,7 @@ Severity key: **P0** ship/stop · **P1** real bypass/contract break/feature-defe
 | 7 | Schema `user_version` migrations | A11 | S | M | **done 2026-08-01** |
 | 8 | DNS-pin roadmap (resolve+verify before spawn) | A15 | L | H | open |
 | 9 | Webview E2E for focus-search/docs bridge | A7 + handoff P1 | M | M | open |
-| 10 | CI: `cargo audit` + `npm audit` + artifact signing | — | S–M | L | open |
+| 10 | CI: `cargo audit` + `npm audit` + artifact signing | — | S–M | L | **done 2026-08-01** — release workflow gates on `cargo audit` (0 vulnerabilities after `plist` 1.9→1.10 / `quick-xml` 0.39→0.41 upgrade for RUSTSEC-2026-0194/0195) and `npm audit --audit-level=high` (clean); release `SHA256SUMS` is sigstore keyless-signed (`cosign sign-blob` via GitHub OIDC, verified in-job) — `SHA256SUMS.sig`/`SHA256SUMS.pem` ship as release assets; `Swatinem/rust-cache` added |
 
 **Recommended sequence:** 1–2 (1.4.2 hotfix) — **done 2026-08-01**, see closure notes in §6 — then 3–4–7 (1.5.0 hardening) — **done 2026-08-01** — then 5–6 (1.6.0 ops) — **done 2026-08-01** — then 9 (webview E2E), 8 (enterprise readiness gate, before any multi-user story).
 

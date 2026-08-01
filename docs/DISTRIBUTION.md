@@ -48,7 +48,12 @@ Your browser opens to `http://127.0.0.1:7421` automatically.
 
 ### From GitHub Release
 
-Download the AppImage or `.deb` from the [Releases](https://github.com/kayab999/NetRail/releases) page. Verify checksums against `SHA256SUMS` in the release assets.
+Download the AppImage or `.deb` from the [Releases](https://github.com/kayab999/NetRail/releases) page. Verify checksums against `SHA256SUMS` in the release assets, and verify the sigstore (keyless) signature before installing:
+
+```bash
+sha256sum -c SHA256SUMS
+cosign verify-blob --certificate SHA256SUMS.pem --signature SHA256SUMS.sig SHA256SUMS
+```
 
 ```bash
 chmod +x NetRail_*_amd64.AppImage

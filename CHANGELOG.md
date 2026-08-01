@@ -2,7 +2,14 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased] — 1.6.0 (ops batch from the 2026-08-01 audit)
+## [Unreleased]
+
+### Changed
+
+- **CI hardening (audit matrix #10)** — the release workflow now gates on `cargo audit` and `npm audit --audit-level=high`, and signs the release `SHA256SUMS` with a sigstore keyless signature (`cosign sign-blob` over GitHub OIDC; `SHA256SUMS.sig` + `SHA256SUMS.pem` ship as release assets, verification instructions in DISTRIBUTION.md). `Swatinem/rust-cache` added (cuts the ~11 min build).
+- **Dependency security fix (build toolchain)** — `plist` 1.9 → 1.10 / `quick-xml` 0.39 → 0.41 closes RUSTSEC-2026-0194 (quadratic attribute scan) and RUSTSEC-2026-0195 (namespace-declaration DoS), both high severity in the Tauri bundle toolchain.
+
+## [1.6.0] — 2026-08-01
 
 ### Changed
 
