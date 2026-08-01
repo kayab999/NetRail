@@ -14,7 +14,7 @@ use crate::security::{validate_open_url, CSP};
 use reqwest::Client;
 use axum::{
     extract::{rejection::{JsonRejection, QueryRejection}, Path, Query, State},
-    http::{header, HeaderValue, Request, StatusCode},
+    http::{header, HeaderMap, HeaderValue, Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
     routing::{delete, get, post},
@@ -339,19 +339,50 @@ async fn list_browsers() -> Json<Vec<serde_json::Value>> {
     Json(browsers)
 }
 
-async fn get_settings(State(state): State<AppState>) -> Json<Settings> {
-    Json((state.settings_fn)())
+/// Strong ETag over the canonical settings JSON, so concurrent writers can
+/// detect last-writer-wins clobbering via `If-Match` (A6).
+fn settings_etag(settings: &Settings) -> String {
+    let bytes = serde_json::to_vec(settings).unwrap_or_default();
+    let digest = sha2::Sha256::digest(&bytes);
+    let encoded = base64::engine::general_purpose::STANDARD.encode(digest);
+    format!("\"{encoded}\"")
+}
+
+async fn get_settings(State(state): State<AppState>) -> Response {
+    let settings = (state.settings_fn)();
+    ([(header::ETAG, settings_etag(&settings))], Json(settings)).into_response()
 }
 
 async fn put_settings(
     State(state): State<AppState>,
+    headers: HeaderMap,
     body: Result<Json<Settings>, JsonRejection>,
-) -> Result<Json<Settings>, ApiError> {
+) -> Result<Response, ApiError> {
     let Json(body) = body?;
-    state.rate_limiter.check_mutate()?;
+    let identity = request_identity(&headers);
+    if let Some(if_match) = headers.get(header::IF_MATCH).and_then(|v| v.to_str().ok()) {
+        let current = (state.settings_fn)();
+        if if_match.trim() != settings_etag(&current) {
+            return Err(NetRailError::Conflict {
+                code: "SETTINGS_CONFLICT",
+                message: "Settings changed since read (ETag mismatch). Re-fetch and retry.".into(),
+            }
+            .into());
+        }
+    }
+    state.rate_limiter.check_mutate(&identity)?;
     let saved = save_settings(&body)?;
     audit::log_event("settings.put", serde_json::json!({ "ok": true }));
-    Ok(Json(saved))
+    Ok(([(header::ETAG, settings_etag(&saved))], Json(saved)).into_response())
+}
+
+/// Rate-limit bucket key for the current request (A9): token hash when auth
+/// is on, "anonymous" otherwise.
+fn request_identity(headers: &HeaderMap) -> String {
+    crate::auth::client_identity(
+        headers.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()),
+        headers.get("x-netrail-token").and_then(|v| v.to_str().ok()),
+    )
 }
 
 #[derive(Deserialize)]
@@ -373,10 +404,11 @@ fn default_max_results() -> u32 {
 
 async fn run_search(
     State(state): State<AppState>,
+    headers: HeaderMap,
     body: Result<Json<SearchRequest>, JsonRejection>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let Json(body) = body?;
-    state.rate_limiter.check_search()?;
+    state.rate_limiter.check_search(&request_identity(&headers))?;
     let query = body.query.trim();
     if query.is_empty() || query.len() > 500 {
         return Err(NetRailError::InvalidQuery {
@@ -424,10 +456,11 @@ struct OpenRequest {
 
 async fn open_link(
     State(state): State<AppState>,
+    headers: HeaderMap,
     body: Result<Json<OpenRequest>, JsonRejection>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let Json(body) = body?;
-    state.rate_limiter.check_open()?;
+    state.rate_limiter.check_open(&request_identity(&headers))?;
     let safe_url = validate_open_url(&body.url)?;
     let mut settings = (state.settings_fn)();
     if let Some(id) = body.browser_id {
@@ -500,9 +533,10 @@ async fn get_history(
 
 async fn delete_history_entry(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(query_id): Path<i64>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
-    state.rate_limiter.check_mutate()?;
+    state.rate_limiter.check_mutate(&request_identity(&headers))?;
     let settings = (state.settings_fn)();
     let deleted = state
         .store
@@ -526,8 +560,11 @@ async fn delete_history_entry(
     })))
 }
 
-async fn purge_history(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
-    state.rate_limiter.check_mutate()?;
+async fn purge_history(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    state.rate_limiter.check_mutate(&request_identity(&headers))?;
     let settings = (state.settings_fn)();
     let count = state
         .store
@@ -560,10 +597,11 @@ async fn list_collections(
 
 async fn create_collection(
     State(state): State<AppState>,
+    headers: HeaderMap,
     body: Result<Json<CollectionCreate>, JsonRejection>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let Json(body) = body?;
-    state.rate_limiter.check_mutate()?;
+    state.rate_limiter.check_mutate(&request_identity(&headers))?;
     let settings = (state.settings_fn)();
     let name = body.name.trim();
     if name.is_empty() || name.len() > 120 {

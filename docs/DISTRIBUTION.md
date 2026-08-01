@@ -180,12 +180,15 @@ Build Rust image directly: `docker build -f Dockerfile.rust -t netrail-api .`
 | `NETRAIL_DB_KEY` | Fernet key (Docker / headless) |
 | `NETRAIL_STATIC_DIR` | Directory containing `index.html` / UI assets |
 | `NETRAIL_AUTO_OPEN` | Open browser on start (`true`/`false`) |
-| `NETRAIL_RATE_LIMIT` | `0` / `false` disables local 90/120/60 per-minute caps |
+| `NETRAIL_RATE_LIMIT` | `0` / `false` disables the per-identity 90/120/60 per-minute caps (defaults; when a token is configured, limits apply per token identity, otherwise to the anonymous bucket) |
 | `NETRAIL_API_TOKEN` | Optional API token; require Bearer / `X-NetRail-Token` on `/api/*` (except health) |
 | `NETRAIL_INJECT_UI_TOKEN` | When token set, inject into served HTML for UI (default on). Note: the injected page (`/`) is unauthenticated, so any local HTTP client can read the token from it — see SECURITY.md. Set `0` and supply via `localStorage` if you need tighter behavior |
 | `NETRAIL_STRICT_BACKEND_URLS` | `1` rejects private/loopback SearXNG/backend URLs |
 | `NETRAIL_AUDIT_LOG` | `1` appends JSON lines to XDG data `netrail/audit.log` |
 | `NETRAIL_AUDIT_LOG_PATH` | Explicit audit log path |
+| `NETRAIL_AUDIT_MAX_BYTES` | Audit rotation size cap (default 10 MiB); on write overflow the log is shifted to `<path>.1` (`.2`, …) |
+| `NETRAIL_AUDIT_MAX_FILES` | Max rotated audit files kept (default 3; `0` disables rotation) |
+| `NETRAIL_LOG_JSON` | `1` emits structured JSON logs (tracing-subscriber `json`) instead of plain text |
 | `SEARXNG_URL` / `NETRAIL_SEARXNG_URL` | Self-hosted SearXNG base URL |
 | `BRAVE_SEARCH_API_KEY` / `NETRAIL_BRAVE_API_KEY` | Brave Search API key (never stored in settings) |
 | `NETRAIL_SEARCH_STRATEGY` | `fanout` or `fallback` |

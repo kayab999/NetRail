@@ -20,6 +20,12 @@ export NETRAIL_HISTORY_ENCRYPT=false
 export NETRAIL_RATE_LIMIT=0
 export NETRAIL_STATIC_DIR="${NETRAIL_STATIC_DIR:-$ROOT/netrail/static}"
 
+# Isolate the live binary from real user state (settings, history DB, audit).
+export XDG_CONFIG_HOME="$(mktemp -d)"
+export NETRAIL_DB_PATH="$(mktemp -d)/netrail.db"
+unset NETRAIL_AUDIT_LOG_PATH || true
+unset NETRAIL_AUDIT_LOG || true
+
 if curl -sf http://127.0.0.1:7421/api/health >/dev/null 2>&1; then
   echo "error: port 7421 already in use (stop other NetRail instances first)" >&2
   exit 1

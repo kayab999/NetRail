@@ -5,8 +5,14 @@ import os
 from pathlib import Path
 from typing import Any
 
-CONFIG_DIR = Path.home() / ".config" / "netrail"
-CONFIG_FILE = CONFIG_DIR / "settings.json"
+def config_dir() -> Path:
+    # Resolved lazily: tests (and processes) may legitimately change $HOME
+    # after import, and module-level Path.home() would freeze the wrong path.
+    return Path.home() / ".config" / "netrail"
+
+
+def config_file() -> Path:
+    return config_dir() / "settings.json"
 
 DEFAULT_BACKENDS: list[dict[str, Any]] = [
     {"id": "searxng", "enabled": True, "url": None},
@@ -98,9 +104,9 @@ def _apply_env_overrides(settings: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_settings() -> dict[str, Any]:
-    if CONFIG_FILE.exists():
+    if config_file().exists():
         try:
-            data = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            data = json.loads(config_file().read_text(encoding="utf-8"))
         except (json.JSONDecodeError, OSError):
             data = {}
     else:
@@ -151,10 +157,10 @@ def validate_settings(settings: dict[str, Any]) -> None:
 
 def save_settings(settings: dict[str, Any]) -> dict[str, Any]:
     validate_settings(settings)
-    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    config_dir().mkdir(parents=True, exist_ok=True)
     payload = DEFAULTS.copy()
     for key in DEFAULTS:
         if key in settings:
             payload[key] = settings[key]
-    CONFIG_FILE.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    config_file().write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
     return _apply_env_overrides(payload)

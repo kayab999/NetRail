@@ -94,6 +94,12 @@ pub enum NetRailError {
         code: &'static str,
         message: String,
     },
+
+    #[error("Conflict: {message}")]
+    Conflict {
+        code: &'static str,
+        message: String,
+    },
 }
 
 pub type NetRailResult<T> = Result<T, NetRailError>;
@@ -115,6 +121,8 @@ impl NetRailError {
             Self::NotFound { .. } => StatusCode::NOT_FOUND,
 
             Self::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,
+
+            Self::Conflict { .. } => StatusCode::CONFLICT,
 
             Self::BackendHttp { .. }
             | Self::BackendFailure { .. }
@@ -144,7 +152,8 @@ impl NetRailError {
             | Self::Parse { code, .. }
             | Self::Encryption { code, .. }
             | Self::Internal { code, .. }
-            | Self::RateLimited { code, .. } => code,
+            | Self::RateLimited { code, .. }
+            | Self::Conflict { code, .. } => code,
         }
     }
 
@@ -161,7 +170,8 @@ impl NetRailError {
             | Self::Parse { message, .. }
             | Self::Encryption { message, .. }
             | Self::Internal { message, .. }
-            | Self::RateLimited { message, .. } => message.clone(),
+            | Self::RateLimited { message, .. }
+            | Self::Conflict { message, .. } => message.clone(),
             Self::MissingField { field, .. } => format!("Missing required field: {field}"),
             Self::NotFound { entity, .. } => format!("{entity} not found"),
             Self::BackendHttp {

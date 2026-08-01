@@ -29,6 +29,7 @@ The frontend branches on `code`; `detail` is human-readable. Rust (Tauri / `netr
 | `COLLECTION_ITEM_NOTES_INVALID` | 400 | Collection item notes longer than 2000 characters |
 | `REQUEST_INVALID` | 400 | Generic request validation failure (malformed body/query params) — both stacks |
 | `RATE_LIMITED` | 429 | Too many search/open/mutation calls in a 60s window (disable with `NETRAIL_RATE_LIMIT=0`) |
+| `SETTINGS_CONFLICT` | 409 | `If-Match` on `PUT /api/settings` doesn't match the current settings `ETag` (settings changed since read; re-fetch and retry) |
 | `AUTH_REQUIRED` | 401 | `NETRAIL_API_TOKEN` set but Bearer / `X-NetRail-Token` missing or wrong |
 | `BACKEND_URL_STRICT_PRIVATE` | 400 | `strict_backend_urls` rejected private/loopback backend host |
 | `OPEN_URL_REDIRECT_DEPTH` | 400 | Too many DDG redirect unwraps |

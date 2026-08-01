@@ -1,8 +1,14 @@
 //! Lightweight localhost rate limits for search/open abuse protection.
 //! Disable with `NETRAIL_RATE_LIMIT=0`.
+//!
+//! Buckets are keyed by client identity: when token auth is on, each token
+//! gets its own per-minute budget (`client_identity` in auth.rs); otherwise
+//! everything shares one process-wide budget. Limits are per-process — two
+//! API processes (desktop + Docker) do not share counters (A9).
 
 use crate::error::{NetRailError, NetRailResult};
 use parking_lot::Mutex;
+use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -12,25 +18,18 @@ const DEFAULT_OPEN_PER_MIN: u32 = 120;
 /// Settings / history purge / collections mutations.
 const DEFAULT_MUTATE_PER_MIN: u32 = 60;
 const WINDOW: Duration = Duration::from_secs(60);
+/// Drop buckets idle for two windows when the identity set grows past this.
+const MAX_IDENTITIES: usize = 1024;
 
 #[derive(Debug)]
 struct WindowCounter {
     window_start: Instant,
     count: u32,
-    limit: u32,
 }
 
 impl WindowCounter {
-    fn new(limit: u32) -> Self {
-        Self {
-            window_start: Instant::now(),
-            count: 0,
-            limit,
-        }
-    }
-
-    fn try_acquire(&mut self) -> bool {
-        if self.limit == 0 {
+    fn try_acquire(&mut self, limit: u32) -> bool {
+        if limit == 0 {
             return true;
         }
         let now = Instant::now();
@@ -38,7 +37,7 @@ impl WindowCounter {
             self.window_start = now;
             self.count = 0;
         }
-        if self.count >= self.limit {
+        if self.count >= limit {
             return false;
         }
         self.count += 1;
@@ -48,9 +47,12 @@ impl WindowCounter {
 
 #[derive(Clone)]
 pub struct RateLimiter {
-    search: Arc<Mutex<WindowCounter>>,
-    open: Arc<Mutex<WindowCounter>>,
-    mutate: Arc<Mutex<WindowCounter>>,
+    search: Arc<Mutex<HashMap<String, WindowCounter>>>,
+    open: Arc<Mutex<HashMap<String, WindowCounter>>>,
+    mutate: Arc<Mutex<HashMap<String, WindowCounter>>>,
+    search_limit: u32,
+    open_limit: u32,
+    mutate_limit: u32,
 }
 
 impl Default for RateLimiter {
@@ -59,32 +61,51 @@ impl Default for RateLimiter {
     }
 }
 
+fn acquire(map: &Mutex<HashMap<String, WindowCounter>>, identity: &str, limit: u32) -> bool {
+    if limit == 0 {
+        return true;
+    }
+    let mut guard = map.lock();
+    let counter = guard
+        .entry(identity.to_string())
+        .or_insert_with(|| WindowCounter {
+            window_start: Instant::now(),
+            count: 0,
+        });
+    let ok = counter.try_acquire(limit);
+    if guard.len() > MAX_IDENTITIES {
+        let now = Instant::now();
+        guard.retain(|_, c| now.duration_since(c.window_start) < WINDOW * 2);
+    }
+    ok
+}
+
 impl RateLimiter {
     pub fn from_env() -> Self {
         let enabled = env::var("NETRAIL_RATE_LIMIT")
             .map(|v| v != "0" && !v.eq_ignore_ascii_case("false"))
             .unwrap_or(true);
-        let search_limit = if enabled { DEFAULT_SEARCH_PER_MIN } else { 0 };
-        let open_limit = if enabled { DEFAULT_OPEN_PER_MIN } else { 0 };
-        let mutate_limit = if enabled { DEFAULT_MUTATE_PER_MIN } else { 0 };
-        Self {
-            search: Arc::new(Mutex::new(WindowCounter::new(search_limit))),
-            open: Arc::new(Mutex::new(WindowCounter::new(open_limit))),
-            mutate: Arc::new(Mutex::new(WindowCounter::new(mutate_limit))),
-        }
+        Self::with_limits(
+            if enabled { DEFAULT_SEARCH_PER_MIN } else { 0 },
+            if enabled { DEFAULT_OPEN_PER_MIN } else { 0 },
+            if enabled { DEFAULT_MUTATE_PER_MIN } else { 0 },
+        )
     }
 
     /// Test helper: build limiter with explicit per-window caps (0 = unlimited).
     pub fn with_limits(search: u32, open: u32, mutate: u32) -> Self {
         Self {
-            search: Arc::new(Mutex::new(WindowCounter::new(search))),
-            open: Arc::new(Mutex::new(WindowCounter::new(open))),
-            mutate: Arc::new(Mutex::new(WindowCounter::new(mutate))),
+            search: Arc::new(Mutex::new(HashMap::new())),
+            open: Arc::new(Mutex::new(HashMap::new())),
+            mutate: Arc::new(Mutex::new(HashMap::new())),
+            search_limit: search,
+            open_limit: open,
+            mutate_limit: mutate,
         }
     }
 
-    pub fn check_search(&self) -> NetRailResult<()> {
-        if self.search.lock().try_acquire() {
+    pub fn check_search(&self, identity: &str) -> NetRailResult<()> {
+        if acquire(&self.search, identity, self.search_limit) {
             Ok(())
         } else {
             Err(NetRailError::RateLimited {
@@ -96,8 +117,8 @@ impl RateLimiter {
         }
     }
 
-    pub fn check_open(&self) -> NetRailResult<()> {
-        if self.open.lock().try_acquire() {
+    pub fn check_open(&self, identity: &str) -> NetRailResult<()> {
+        if acquire(&self.open, identity, self.open_limit) {
             Ok(())
         } else {
             Err(NetRailError::RateLimited {
@@ -109,8 +130,8 @@ impl RateLimiter {
         }
     }
 
-    pub fn check_mutate(&self) -> NetRailResult<()> {
-        if self.mutate.lock().try_acquire() {
+    pub fn check_mutate(&self, identity: &str) -> NetRailResult<()> {
+        if acquire(&self.mutate, identity, self.mutate_limit) {
             Ok(())
         } else {
             Err(NetRailError::RateLimited {
@@ -128,6 +149,7 @@ impl RateLimiter {
             .unwrap_or(true);
         serde_json::json!({
             "enabled": enabled,
+            "mode": if crate::auth::token_required() { "per-token" } else { "process" },
             "search_per_minute": DEFAULT_SEARCH_PER_MIN,
             "open_per_minute": DEFAULT_OPEN_PER_MIN,
             "mutate_per_minute": DEFAULT_MUTATE_PER_MIN,
@@ -141,18 +163,34 @@ mod tests {
 
     #[test]
     fn allows_under_limit() {
-        let mut c = WindowCounter::new(3);
-        assert!(c.try_acquire());
-        assert!(c.try_acquire());
-        assert!(c.try_acquire());
-        assert!(!c.try_acquire());
+        let mut c = WindowCounter {
+            window_start: Instant::now(),
+            count: 0,
+        };
+        assert!(c.try_acquire(3));
+        assert!(c.try_acquire(3));
+        assert!(c.try_acquire(3));
+        assert!(!c.try_acquire(3));
     }
 
     #[test]
     fn zero_limit_disables() {
-        let mut c = WindowCounter::new(0);
+        let mut c = WindowCounter {
+            window_start: Instant::now(),
+            count: 0,
+        };
         for _ in 0..20 {
-            assert!(c.try_acquire());
+            assert!(c.try_acquire(0));
         }
+    }
+
+    #[test]
+    fn buckets_are_keyed_by_identity() {
+        let limiter = RateLimiter::with_limits(2, 0, 0);
+        assert!(limiter.check_search("alice").is_ok());
+        assert!(limiter.check_search("alice").is_ok());
+        assert!(limiter.check_search("alice").is_err());
+        assert!(limiter.check_search("bob").is_ok());
+        assert!(limiter.check_open("alice").is_ok());
     }
 }

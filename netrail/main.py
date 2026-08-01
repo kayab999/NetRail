@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import os
 import re
 import threading
@@ -22,6 +23,7 @@ from netrail import rate_limit
 from netrail.auth import (
     api_token_from_env,
     check_request_token,
+    client_identity,
     inject_ui_token,
     path_requires_token,
     token_required,
@@ -357,16 +359,50 @@ async def list_browsers() -> list[dict[str, Any]]:
 
 
 @app.get("/api/settings")
-async def get_settings() -> dict[str, Any]:
-    return load_settings()
+async def get_settings() -> Response:
+    settings = load_settings()
+    return Response(
+        content=json.dumps(settings),
+        media_type="application/json",
+        headers={"ETag": _settings_etag(settings)},
+    )
+
+
+def _settings_etag(settings: dict) -> str:
+    """Strong ETag over canonical settings JSON (A6). Python uses sorted keys;
+    Rust uses its struct field order — each stack is self-consistent, which is
+    all If-Match needs."""
+    canonical = json.dumps(settings, sort_keys=True, separators=(",", ":"))
+    return f'"{hashlib.sha256(canonical.encode()).hexdigest()}"'
+
+
+def _request_identity(req: Request) -> str:
+    """Rate-limit bucket key for this request (A9): token hash when auth is
+    on, "anonymous" otherwise."""
+    return client_identity(
+        req.headers.get("Authorization"),
+        req.headers.get("x-netrail-token"),
+    )
 
 
 @app.put("/api/settings")
-async def put_settings(settings: SettingsModel) -> dict[str, Any]:
-    rate_limit.check_mutate()
+async def put_settings(req: Request, settings: SettingsModel) -> Response:
+    if if_match := req.headers.get("If-Match"):
+        current = load_settings()
+        if if_match.strip() != _settings_etag(current):
+            raise NetRailError(
+                "SETTINGS_CONFLICT",
+                "Settings changed since read (ETag mismatch). Re-fetch and retry.",
+                status=409,
+            )
+    rate_limit.check_mutate(_request_identity(req))
     saved = save_settings(settings.model_dump())
     audit.log_event("settings.put", {"ok": True})
-    return saved
+    return Response(
+        content=json.dumps(saved),
+        media_type="application/json",
+        headers={"ETag": _settings_etag(saved)},
+    )
 
 
 @app.get("/api/docs/{slug}")
@@ -383,8 +419,8 @@ async def get_doc_asset(filename: str) -> FileResponse:
 
 
 @app.post("/api/search")
-async def run_search(request: SearchRequest) -> dict[str, Any]:
-    rate_limit.check_search()
+async def run_search(req: Request, request: SearchRequest) -> dict[str, Any]:
+    rate_limit.check_search(_request_identity(req))
     payload = search(
         query=request.query,
         mode=request.mode,
@@ -402,8 +438,8 @@ async def run_search(request: SearchRequest) -> dict[str, Any]:
 
 
 @app.post("/api/open")
-async def open_link(request: OpenRequest) -> dict[str, str]:
-    rate_limit.check_open()
+async def open_link(req: Request, request: OpenRequest) -> dict[str, str]:
+    rate_limit.check_open(_request_identity(req))
     safe_url = validate_open_url(request.url)
 
     settings = load_settings()
@@ -456,8 +492,8 @@ async def get_history(
 
 
 @app.delete("/api/history/{query_id}")
-async def delete_history_entry(query_id: int) -> dict[str, Any]:
-    rate_limit.check_mutate()
+async def delete_history_entry(req: Request, query_id: int) -> dict[str, Any]:
+    rate_limit.check_mutate(_request_identity(req))
     store = _require_store()
     if not store.delete_history_entry(query_id):
         raise NetRailError(
@@ -470,8 +506,8 @@ async def delete_history_entry(query_id: int) -> dict[str, Any]:
 
 
 @app.delete("/api/history")
-async def purge_history() -> dict[str, Any]:
-    rate_limit.check_mutate()
+async def purge_history(req: Request) -> dict[str, Any]:
+    rate_limit.check_mutate(_request_identity(req))
     store = _require_store()
     count = store.purge_all_history()
     audit.log_event("history.purge", {"purged": count})
@@ -485,8 +521,8 @@ async def list_collections() -> list[dict[str, Any]]:
 
 
 @app.post("/api/collections")
-async def create_collection(body: CollectionCreate) -> dict[str, Any]:
-    rate_limit.check_mutate()
+async def create_collection(req: Request, body: CollectionCreate) -> dict[str, Any]:
+    rate_limit.check_mutate(_request_identity(req))
     store = _require_store()
     created = store.create_collection(body.name)
     audit.log_event("collection.create", {"name_len": len(body.name)})

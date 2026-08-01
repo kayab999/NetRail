@@ -3,12 +3,7 @@
 
 fn main() {
     if std::env::args().any(|arg| arg == "--api-only") {
-        tracing_subscriber::fmt()
-            .with_env_filter(
-                tracing_subscriber::EnvFilter::try_from_default_env()
-                    .unwrap_or_else(|_| "netrail=info".into()),
-            )
-            .init();
+        netrail_lib::logging::init("netrail=info");
         tauri::async_runtime::block_on(async {
             if let Err(err) = netrail_lib::server::start().await {
                 eprintln!("NetRail API server failed: {err}");

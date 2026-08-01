@@ -322,3 +322,94 @@ async fn collection_missing_name_returns_typed_collection_name_invalid() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_api_error(&json, "COLLECTION_NAME_INVALID", 400);
 }
+
+fn valid_settings_body() -> serde_json::Value {
+    serde_json::json!({
+        "search_strategy": "fanout",
+        "backend_order": ["ddgs"],
+        "ddgs_enabled": true,
+        "searxng_url": null,
+        "brave_enabled": false,
+        "private_mode": false,
+        "history_enabled": true,
+        "history_encrypt": false,
+        "history_ttl_days": 90,
+        "max_results": 25
+    })
+}
+
+#[tokio::test]
+async fn settings_get_returns_etag() {
+    let settings = Settings::default();
+    let mut app = build_router(test_state(settings));
+    let response = (&mut app)
+        .oneshot(Request::builder().uri("/api/settings").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let etag = response.headers().get("etag").expect("GET settings ETag");
+    assert!(etag.to_str().unwrap().starts_with('"'));
+}
+
+#[tokio::test]
+async fn settings_put_with_stale_if_match_returns_settings_conflict() {
+    let dir = TempDir::new().unwrap();
+    std::env::set_var("XDG_CONFIG_HOME", dir.path());
+    let settings = Settings::default();
+    let mut app = build_router(test_state(settings));
+    let body = valid_settings_body();
+    let response = (&mut app)
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/settings")
+                .header("content-type", "application/json")
+                .header("if-match", "\"stale-etag\"")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let bytes = axum::body::to_bytes(response.into_body(), 4096).await.unwrap();
+    let json: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_api_error(&json, "SETTINGS_CONFLICT", 409);
+    std::env::remove_var("XDG_CONFIG_HOME");
+}
+
+#[tokio::test]
+async fn settings_put_with_fresh_if_match_succeeds_and_returns_new_etag() {
+    let dir = TempDir::new().unwrap();
+    std::env::set_var("XDG_CONFIG_HOME", dir.path());
+    let settings = Settings::default();
+    let mut app = build_router(test_state(settings));
+
+    let get = (&mut app)
+        .oneshot(Request::builder().uri("/api/settings").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    let etag = get
+        .headers()
+        .get("etag")
+        .expect("ETag")
+        .to_str()
+        .unwrap()
+        .to_string();
+
+    let body = valid_settings_body();
+    let response = (&mut app)
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/api/settings")
+                .header("content-type", "application/json")
+                .header("if-match", &etag)
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert!(response.headers().get("etag").is_some());
+    std::env::remove_var("XDG_CONFIG_HOME");
+}

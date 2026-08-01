@@ -18,6 +18,9 @@ if [[ -x "$ROOT/.venv/bin/python" ]]; then
 else
   PY=python3
 fi
+# Isolate the pytest section too: netrail.config now resolves $HOME lazily,
+# so no test may read or write the developer's real ~/.config/netrail.
+export HOME="$(mktemp -d)"
 "$PY" -m pytest tests/test_url_policy.py tests/test_security.py tests/test_api.py -q --tb=line
 
 BIN="${1:-$ROOT/src-tauri/target/release/netrail-api}"
@@ -32,6 +35,13 @@ fi
 
 export NETRAIL_STATIC_DIR="${NETRAIL_STATIC_DIR:-$ROOT/netrail/static}"
 EXPECTED_VERSION="$("$PY" -c "import json; print(json.load(open('package.json'))['version'])")"
+
+# Isolate the live binary from real user state: settings writes, history DB
+# (SharedStore opens at startup and runs the TTL purge), and audit log.
+export XDG_CONFIG_HOME="$(mktemp -d)"
+export NETRAIL_DB_PATH="$(mktemp -d)/netrail.db"
+unset NETRAIL_AUDIT_LOG_PATH || true
+unset NETRAIL_AUDIT_LOG || true
 
 if curl -sf http://127.0.0.1:7421/api/health >/dev/null 2>&1; then
   echo "error: port 7421 already in use" >&2
@@ -148,5 +158,48 @@ print(f"fixture open_url vectors: {len(vecs)} passed")
 PYEOF
 
 probe GET /api/docs/nope '' DOC_NOT_FOUND 404
+
+# Settings concurrency contract (A6): ETag on GET, 409 SETTINGS_CONFLICT on a
+# stale If-Match PUT, 200 on a fresh one. Python side covered in test_api.py.
+"$PY" - <<'PYEOF'
+import json, urllib.request
+
+base = "http://127.0.0.1:7421"
+
+def call(method, path, data=None, headers=None):
+    req = urllib.request.Request(
+        base + path,
+        data=json.dumps(data).encode() if data is not None else None,
+        headers={"Content-Type": "application/json", **(headers or {})},
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            return resp.status, json.loads(resp.read()), resp.headers.get("ETag")
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read()), e.headers.get("ETag")
+
+settings = {
+    "search_strategy": "fanout",
+    "backend_order": ["ddgs"],
+    "ddgs_enabled": True,
+    "searxng_url": None,
+    "brave_enabled": False,
+    "private_mode": False,
+    "history_enabled": True,
+    "history_encrypt": False,
+    "history_ttl_days": 90,
+    "max_results": 25,
+}
+status, _, etag = call("GET", "/api/settings")
+assert status == 200 and etag and etag.startswith('"'), (status, etag)
+status, body, _ = call("PUT", "/api/settings", settings, {"If-Match": '"stale"'})
+assert status == 409 and body.get("code") == "SETTINGS_CONFLICT", (status, body)
+status, _, new_etag = call("PUT", "/api/settings", settings, {"If-Match": etag})
+assert status == 200 and new_etag, (status, new_etag)
+status, body, _ = call("PUT", "/api/settings", settings)
+assert status == 200, (status, body)
+print("settings ETag/If-Match probes: passed")
+PYEOF
 
 echo "PARITY SMOKE OK (Python + Rust $BIN)"

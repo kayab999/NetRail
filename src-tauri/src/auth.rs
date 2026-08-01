@@ -4,6 +4,8 @@
 //! `Authorization: Bearer <token>` or `X-NetRail-Token: <token>`.
 
 use crate::error::{NetRailError, NetRailResult};
+use base64::Engine;
+use sha2::Digest;
 use std::env;
 
 pub fn api_token_from_env() -> Option<String> {
@@ -52,6 +54,32 @@ pub fn check_request_token(auth_header: Option<&str>, x_token: Option<&str>) -> 
         message: "Valid NETRAIL_API_TOKEN required (Authorization: Bearer or X-NetRail-Token)."
             .into(),
     })
+}
+
+/// Stable per-client bucket key for rate limiting (A9). When token auth is
+/// on, the key is the SHA-256 of the presented token — never the token
+/// itself — so each client gets its own per-minute budget. Without auth,
+/// everything shares one "anonymous" budget per process.
+pub fn client_identity(auth_header: Option<&str>, x_token: Option<&str>) -> String {
+    if api_token_from_env().is_none() {
+        return "anonymous".into();
+    }
+    let token = auth_header
+        .and_then(|auth| {
+            let auth = auth.trim();
+            auth.strip_prefix("Bearer ")
+                .or_else(|| auth.strip_prefix("bearer "))
+        })
+        .map(str::trim)
+        .or_else(|| x_token.map(str::trim));
+    match token {
+        Some(t) if !t.is_empty() => {
+            let digest = sha2::Sha256::digest(t.as_bytes());
+            let encoded = base64::engine::general_purpose::STANDARD.encode(digest);
+            format!("token:{encoded}")
+        }
+        _ => "anonymous".into(),
+    }
 }
 
 pub fn path_requires_token(path: &str) -> bool {

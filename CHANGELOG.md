@@ -2,6 +2,18 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased] — 1.6.0 (ops batch from the 2026-08-01 audit)
+
+### Changed
+
+- **Settings ETag / If-Match (A6, dual-stack)** — `GET /api/settings` and successful `PUT`s now return a strong `ETag` header. `PUT` accepts an optional `If-Match`: a mismatch returns 409 `SETTINGS_CONFLICT` (settings changed since read), absent `If-Match` keeps back-compat (unconditional write). Rust hashes serde struct-order JSON, Python sorted-key JSON — each stack is self-consistent, which is all `If-Match` needs.
+- **Per-identity rate limits (A9, dual-stack)** — rate-limit buckets are now keyed per client identity: `anonymous` when no token is configured, otherwise `token:<base64(sha256(token))>` (identical derivation in both stacks). 1024 identities with an idle sweep; the health/status payload reports `rate_limit.mode: per-token|process`. Defaults remain 90 search / 120 open / 60 mutate per minute, `NETRAIL_RATE_LIMIT=0` still disables.
+- **Audit log rotation (A5, dual-stack)** — the JSONL audit log now rotates by size: `NETRAIL_AUDIT_MAX_BYTES` (default 10 MiB) with up to `NETRAIL_AUDIT_MAX_FILES` rotated files (default 3, `0` disables rotation).
+- **Structured JSON logs (A5, Rust)** — `NETRAIL_LOG_JSON=1` switches all entrypoints (`netrail-api`, `--api-only`, desktop) to tracing-subscriber `json()` output via the new `logging.rs`.
+- **Test/config isolation fix (Python)** — `netrail.config` resolves `CONFIG_FILE`/`CONFIG_DIR` lazily (`config_file()`/`config_dir()`) instead of binding `Path.home()` at import; tests and scripts that change `$HOME` now truly isolate, and no test writes the developer's real `~/.config/netrail/settings.json`.
+- **Smoke-script hygiene** — both `e2e-api-smoke.sh` and `parity-api-smoke.sh` now run the live binary with isolated `XDG_CONFIG_HOME` / `NETRAIL_DB_PATH` and the pytest section with an isolated `$HOME`; parity smoke gained live ETag/If-Match probes (GET etag → stale If-Match 409 → fresh If-Match 200).
+- **Tests** — 3 new Rust integration tests (settings ETag, stale-if-match 409, fresh-if-match 200), 3 Rust rate-limit unit tests (under-limit pass, `0` disables, buckets keyed by identity), 2 Rust audit rotation tests; 4 new Python tests (settings etag roundtrip/conflict, per-identity buckets, client-identity hashing, audit rotation). All gates green: 111 pytest, 67+19 cargo tests, clippy `-D warnings`, both smoke scripts.
+
 ## [1.5.0] — 2026-08-01
 
 ### Changed (hardening batch from the 2026-08-01 audit)

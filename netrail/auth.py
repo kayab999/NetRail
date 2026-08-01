@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import os
 
 from netrail.errors import NetRailError
@@ -39,6 +41,30 @@ def check_request_token(authorization: str | None, x_token: str | None) -> None:
         "Valid NETRAIL_API_TOKEN required (Authorization: Bearer or X-NetRail-Token).",
         status=401,
     )
+
+
+def client_identity(authorization: str | None, x_token: str | None) -> str:
+    """Stable per-client rate-limit bucket key (A9).
+
+    With token auth on, the key is the SHA-256 of the presented token — never
+    the token itself — so each client gets its own per-minute budget. Without
+    auth, everything shares one "anonymous" budget per process.
+    """
+    if not token_required():
+        return "anonymous"
+    token: str | None = None
+    if authorization:
+        auth = authorization.strip()
+        for prefix in ("Bearer ", "bearer "):
+            if auth.startswith(prefix):
+                token = auth[len(prefix) :].strip()
+                break
+    if token is None and x_token:
+        token = x_token.strip()
+    if not token:
+        return "anonymous"
+    digest = hashlib.sha256(token.encode()).digest()
+    return f"token:{base64.b64encode(digest).decode()}"
 
 
 def path_requires_token(path: str) -> bool:

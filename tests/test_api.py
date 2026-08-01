@@ -198,3 +198,88 @@ def test_token_injection_csp_allows_script_hash(monkeypatch):
         "base-uri 'self'; form-action 'self'"
     )
     assert "NETRAIL_API_TOKEN" not in response.text
+
+
+def _valid_settings_body() -> dict:
+    return {
+        "search_strategy": "fanout",
+        "backend_order": ["ddgs"],
+        "ddgs_enabled": True,
+        "searxng_url": None,
+        "brave_enabled": False,
+        "history_enabled": True,
+        "history_encrypt": False,
+        "history_ttl_days": 90,
+        "max_results": 25,
+    }
+
+
+def test_settings_etag_roundtrip_and_conflict(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    r = client.get("/api/settings")
+    assert r.status_code == 200
+    etag = r.headers.get("etag")
+    assert etag and etag.startswith('"')
+
+    stale = client.put(
+        "/api/settings",
+        json=_valid_settings_body(),
+        headers={"If-Match": '"stale-etag"'},
+    )
+    assert stale.status_code == 409
+    assert stale.json()["code"] == "SETTINGS_CONFLICT"
+
+    fresh = client.put(
+        "/api/settings",
+        json=_valid_settings_body(),
+        headers={"If-Match": etag},
+    )
+    assert fresh.status_code == 200
+    assert fresh.headers.get("etag") and fresh.headers["etag"] != etag
+
+    plain = client.put("/api/settings", json=_valid_settings_body())
+    assert plain.status_code == 200
+
+
+def test_rate_limit_buckets_are_per_identity():
+    import pytest
+    from netrail.errors import NetRailError
+
+    rate_limit.set_test_limits(search=1, open_limit=100, mutate=100)
+    try:
+        rate_limit._try_acquire("search", "alice")
+        with pytest.raises(NetRailError) as exc:
+            rate_limit._try_acquire("search", "alice")
+        assert exc.value.code == "RATE_LIMITED"
+        rate_limit._try_acquire("search", "bob")
+    finally:
+        rate_limit.set_test_limits()
+
+
+def test_client_identity_is_token_hash_or_anonymous(monkeypatch):
+    from netrail.auth import client_identity
+
+    monkeypatch.setenv("NETRAIL_API_TOKEN", "secret")
+    assert client_identity(None, None) == "anonymous"
+    a = client_identity("Bearer secret", None)
+    b = client_identity("Bearer other", None)
+    assert a != b
+    assert a.startswith("token:") and b.startswith("token:")
+    assert client_identity("Bearer secret", None) == a
+    assert client_identity(None, "secret") == a
+    monkeypatch.delenv("NETRAIL_API_TOKEN", raising=False)
+    assert client_identity("Bearer secret", None) == "anonymous"
+
+
+def test_audit_log_rotates_at_max_bytes(monkeypatch, tmp_path):
+    import netrail.audit as audit
+
+    audit.reset_for_tests()
+    monkeypatch.setenv("NETRAIL_AUDIT_LOG_PATH", str(tmp_path / "audit.log"))
+    monkeypatch.setenv("NETRAIL_AUDIT_MAX_BYTES", "512")
+    monkeypatch.setenv("NETRAIL_AUDIT_MAX_FILES", "2")
+    for i in range(10):
+        audit.log_event("test.action", {"i": i})
+    assert (tmp_path / "audit.log.1").exists()
+    assert (tmp_path / "audit.log").stat().st_size < 512
+    audit.reset_for_tests()
