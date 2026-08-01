@@ -262,6 +262,7 @@ Do not force-push. Do not push unless I ask.
 | [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | Packaging |
 | [docs/MANUAL.md](docs/MANUAL.md) | User manual |
 | [docs/AUDIT_ENTERPRISE_2026-07-31.md](docs/AUDIT_ENTERPRISE_2026-07-31.md) | Post-GA enterprise audit + workplan |
+| [docs/AUDIT_ARCH_2026-08-01.md](docs/AUDIT_ARCH_2026-08-01.md) | Architecture-level audit (code-as-built, both stacks, enterprise readiness) |
 | [docs/AUDIT_ADVERSARIAL_QA_2026-07-12.md](docs/AUDIT_ADVERSARIAL_QA_2026-07-12.md) | Hostile Q&A (historical) |
 | [docs/AUDIT_RC_2026-07-12.md](docs/AUDIT_RC_2026-07-12.md) | RC audit |
 | [CHANGELOG.md](CHANGELOG.md) | Semver history |
