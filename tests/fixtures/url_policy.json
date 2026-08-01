@@ -132,6 +132,66 @@
       "url": "http://metadata.google.internal/",
       "expect": "block",
       "code": "OPEN_URL_CLOUD_METADATA"
+    },
+    {
+      "id": "reject_trailing_dot_loopback",
+      "url": "http://127.0.0.1./admin",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_trailing_dot_decimal_loopback",
+      "url": "http://2130706433./",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_trailing_dot_short_loopback",
+      "url": "http://127.1./",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_trailing_dot_hex_loopback",
+      "url": "http://0x7f.0.0.1./",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_trailing_dot_octal_loopback",
+      "url": "http://127.000.000.001./",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_trailing_dot_loopback_port",
+      "url": "http://127.0.0.1.:8080/admin",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_trailing_dot_private",
+      "url": "http://192.168.1.1./",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_trailing_dot_private_10",
+      "url": "http://10.0.0.1./",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "ddg_unwrap_trailing_dot_blocks_localhost",
+      "url": "https://duckduckgo.com./l/?uddg=http%3A%2F%2F127.0.0.1%2F",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_malformed_ipv6_bracket",
+      "url": "http://[::ffff:7f00:1]./",
+      "expect": "block",
+      "code": "OPEN_URL_INVALID"
     }
   ],
   "backend_url": [
@@ -182,6 +242,26 @@
       "url": "http://metadata.google.internal/",
       "expect": "block",
       "code": "BACKEND_URL_CLOUD_METADATA"
+    },
+    {
+      "id": "reject_strict_trailing_dot_loopback_backend",
+      "url": "http://127.0.0.1.:8080",
+      "expect": "block",
+      "code": "BACKEND_URL_STRICT_PRIVATE",
+      "strict": true
+    },
+    {
+      "id": "reject_strict_trailing_dot_private_backend",
+      "url": "http://192.168.1.1.:8080",
+      "expect": "block",
+      "code": "BACKEND_URL_STRICT_PRIVATE",
+      "strict": true
+    },
+    {
+      "id": "allow_trailing_dot_localhost_backend_nonstrict",
+      "url": "http://127.0.0.1.:8080",
+      "expect": "allow",
+      "normalized": "http://127.0.0.1.:8080"
     }
   ]
 }

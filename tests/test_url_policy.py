@@ -46,13 +46,14 @@ def test_open_url_golden(case: dict):
 @pytest.mark.parametrize("case", _backend_cases())
 def test_backend_url_golden(case: dict):
     url = case["url"]
+    strict = bool(case.get("strict", False))
     if case["expect"] == "allow":
-        got = validate_backend_url(url)
+        got = validate_backend_url(url, strict=strict)
         if "normalized" in case:
             assert got == case["normalized"]
     elif case["expect"] == "block":
         with pytest.raises(NetRailError) as exc:
-            validate_backend_url(url)
+            validate_backend_url(url, strict=strict)
         if "code" in case:
             assert exc.value.code == case["code"]
     else:

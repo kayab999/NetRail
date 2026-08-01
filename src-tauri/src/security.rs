@@ -48,7 +48,8 @@ fn validate_open_url_inner(raw: &str, depth: u8) -> NetRailResult<String> {
 
     if let Some(host) = parsed.host_str() {
         let host_lower = host.to_lowercase();
-        if is_ddg_host(&host_lower) {
+        let host_norm = host_lower.trim_end_matches('.');
+        if is_ddg_host(host_norm) {
             if let Some((_, uddg)) = parsed.query_pairs().find(|(k, _)| k == "uddg") {
                 return validate_open_url_inner(&uddg, depth + 1);
             }
@@ -187,7 +188,7 @@ fn is_cloud_metadata_host(host: &str) -> bool {
 }
 
 fn block_unsafe_host(host: &str) -> NetRailResult<()> {
-    let host_lower = host.to_lowercase();
+    let host_lower = host.trim_end_matches('.').to_lowercase();
 
     if matches!(
         host_lower.as_str(),
@@ -311,7 +312,7 @@ pub fn validate_backend_url_with_options(raw: &str, strict: bool) -> NetRailResu
 }
 
 fn block_backend_host(host: &str, strict: bool) -> NetRailResult<()> {
-    let host_lower = host.to_lowercase();
+    let host_lower = host.trim_end_matches('.').to_lowercase();
 
     if is_dns_rebinding_helper(&host_lower) {
         return Err(NetRailError::InvalidBackendUrl {
@@ -471,9 +472,10 @@ mod tests {
             let id = case["id"].as_str().unwrap_or("?");
             let url = case["url"].as_str().expect("url");
             let expect = case["expect"].as_str().expect("expect");
+            let strict = case["strict"].as_bool().unwrap_or(false);
             match expect {
                 "allow" => {
-                    let got = validate_backend_url(url).unwrap_or_else(|e| {
+                    let got = validate_backend_url_with_options(url, strict).unwrap_or_else(|e| {
                         panic!("backend_url {id}: expected allow, got {e:?}")
                     });
                     if let Some(normalized) = case["normalized"].as_str() {
@@ -481,7 +483,8 @@ mod tests {
                     }
                 }
                 "block" => {
-                    let err = validate_backend_url(url).expect_err(&format!("backend_url {id}"));
+                    let err = validate_backend_url_with_options(url, strict)
+                        .expect_err(&format!("backend_url {id}"));
                     if let Some(code) = case["code"].as_str() {
                         assert_eq!(err.error_code(), code, "backend_url {id}");
                     }

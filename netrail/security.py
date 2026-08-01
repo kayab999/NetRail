@@ -27,6 +27,14 @@ def _is_ddg_host(host: str) -> bool:
     return host in _DDG_HOSTS or any(host.endswith(f".{h}") for h in _DDG_HOSTS)
 
 
+def _normalize_host(host: str) -> str:
+    """WHATWG-style host normalization: percent-decode, lowercase, strip
+    FQDN-root trailing dots (browsers strip the final '.' at DNS resolution,
+    so `127.0.0.1.` and `duckduckgo.com.` must be treated as their base host).
+    """
+    return unquote(host).lower().rstrip(".")
+
+
 def _is_dns_rebinding_helper(host: str) -> bool:
     host = host.lower()
     return host in _DNS_REBINDING_HELPERS or any(
@@ -153,7 +161,7 @@ def _is_non_public_v6(ip: ipaddress.IPv6Address) -> bool:
 
 
 def _block_unsafe_host(host: str) -> None:
-    host_lower = host.lower()
+    host_lower = _normalize_host(host)
     if host_lower in {"127.0.0.1", "localhost", "::1", "0.0.0.0", "[::1]"}:
         raise NetRailError(
             "OPEN_URL_LOCALHOST",
@@ -216,7 +224,10 @@ def _validate_open_url_inner(url: str, depth: int) -> str:
     if depth > _MAX_REDIRECT_DEPTH:
         raise NetRailError("OPEN_URL_REDIRECT_DEPTH", "Too many redirect wrappers.")
 
-    parsed = urlparse(url.strip())
+    try:
+        parsed = urlparse(url.strip())
+    except ValueError:
+        raise NetRailError("OPEN_URL_INVALID", "Invalid URL.") from None
 
     if parsed.scheme not in {"http", "https"}:
         if parsed.scheme in _BLOCKED_SCHEMES:
@@ -235,7 +246,7 @@ def _validate_open_url_inner(url: str, depth: int) -> str:
             "URLs with embedded credentials are not allowed.",
         )
 
-    host = (parsed.hostname or "").lower()
+    host = _normalize_host(parsed.hostname or "")
     if not host:
         raise NetRailError("OPEN_URL_NO_HOST", "URL must include a host.")
 
@@ -256,7 +267,7 @@ def validate_open_url(url: str) -> str:
 
 
 def _block_backend_host(host: str, *, strict: bool = False) -> None:
-    host_lower = host.lower()
+    host_lower = _normalize_host(host)
     if _is_dns_rebinding_helper(host_lower):
         raise NetRailError(
             "BACKEND_URL_DNS_REBINDING",
@@ -310,7 +321,11 @@ def validate_backend_url(url: str, *, strict: bool = False) -> str:
     if not trimmed:
         raise NetRailError("BACKEND_URL_EMPTY", "Backend URL cannot be empty.")
 
-    parsed = urlparse(trimmed)
+    try:
+        parsed = urlparse(trimmed)
+    except ValueError:
+        raise NetRailError("BACKEND_URL_INVALID", "Invalid backend URL.") from None
+
     if parsed.scheme not in {"http", "https"}:
         raise NetRailError(
             "BACKEND_URL_INVALID_SCHEME",
@@ -322,7 +337,7 @@ def validate_backend_url(url: str, *, strict: bool = False) -> str:
             "Backend URLs with embedded credentials are not allowed.",
         )
 
-    host = (parsed.hostname or "").lower()
+    host = _normalize_host(parsed.hostname or "")
     if not host:
         raise NetRailError("BACKEND_URL_NO_HOST", "Backend URL must include a host.")
 
