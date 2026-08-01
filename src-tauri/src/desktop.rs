@@ -1,9 +1,8 @@
-use crate::history;
 use crate::server;
 use tauri::{
     menu::{MenuBuilder, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent},
-    Emitter, Manager,
+    Manager,
 };
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
@@ -40,15 +39,6 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            let settings = crate::config::load_settings();
-            history::init_history_on_startup(&settings);
-            if history::encryption_degraded() {
-                let _ = app.handle().emit(
-                    "security:encryption-degraded",
-                    history::encryption_degraded_message(),
-                );
-            }
-
             tauri::async_runtime::spawn(async move {
                 if let Err(err) = server::start().await {
                     tracing::error!("API server failed: {err}");
@@ -140,9 +130,9 @@ fn focus_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     let _ = window.set_always_on_top(false);
 
     // Spotlight UX: put the caret in the query box after the OS settles focus.
-    // Prefer emit (when the webview has Tauri event APIs); eval matches the
-    // docs/donate bridge and works with withGlobalTauri: false.
-    let _ = window.emit("focus-search", ());
+    // The webview is bridged via eval only (withGlobalTauri: false), matching
+    // the docs/donate bridge. Tauri event emit is dead without the Tauri API
+    // in the page, so it is intentionally not used here (A7).
     let _ = window.eval(
         "window.setTimeout(function(){if(window.netrailFocusSearch)window.netrailFocusSearch();},50)",
     );

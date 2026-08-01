@@ -4,7 +4,7 @@ use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use fernet::Fernet;
 use netrail_lib::config::{BackendConfig, Settings};
-use netrail_lib::history::init_history_on_startup;
+use netrail_lib::history::SharedStore;
 use netrail_lib::http_client::build_http_client;
 use netrail_lib::server::{build_router, AppState};
 use std::sync::Arc;
@@ -12,11 +12,12 @@ use tempfile::TempDir;
 use tower::ServiceExt;
 
 fn test_state(settings: Settings) -> AppState {
-    init_history_on_startup(&settings);
+    let store = Arc::new(SharedStore::new(&settings));
     AppState {
         http_client: build_http_client(),
         settings_fn: Arc::new(move || settings.clone()),
         rate_limiter: netrail_lib::rate_limit::RateLimiter::from_env(),
+        store,
     }
 }
 

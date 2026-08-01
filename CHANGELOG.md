@@ -4,6 +4,15 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 
 ## [Unreleased]
 
+### Changed (1.5.0 hardening batch from the 2026-08-01 audit)
+
+- **Persistent history store (A3, Rust)** — one SQLite connection now lives in `AppState` (`SharedStore`) for the process lifetime instead of reopening per request; reopened only when history/encryption settings change. The dead `STORE` singleton cell and `get_store`/`with_store` helpers were removed, and visit recording moved from `browsers::open_url` into the `open_link` handler (Python parity). TTL purge runs at store open instead of per request.
+- **WAL + busy_timeout (dual-stack, A3)** — `journal_mode=WAL` and a 5 s busy timeout on both `connect()` implementations; `SQLITE_BUSY` risk under concurrent writes (rapid searches, search+visit) is gone.
+- **Graceful shutdown (A4, Rust)** — `server::start` now waits for SIGINT/SIGTERM and drains in-flight requests (`with_graceful_shutdown`); verified live: SIGTERM → clean exit 0 (Docker/systemd `stop` no longer risks losing the last writes).
+- **Schema versioning (A11, dual-stack)** — `PRAGMA user_version` migration framework (`SCHEMA_VERSION = 1`, ordered steps); existing databases migrate idempotently on open; tests assert the version stamp and WAL mode on both stacks.
+- **Dead desktop-bridge code removed (A7)** — the inert `focus-search` / `security:encryption-degraded` `emit` calls and the `__TAURI__` listeners in app.js (unreachable with `withGlobalTauri: false`) were removed; the eval bridge and the health-driven encryption banner remain.
+- **Tests** — 2 new Rust history unit tests (WAL/version, shared-store settings toggle), 1 Python db test, `SharedStore` wired into `api_error_codes` harness.
+
 ## [1.4.2] — 2026-08-01
 
 ### Fixed

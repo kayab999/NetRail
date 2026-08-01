@@ -2,7 +2,7 @@ import pytest
 from cryptography.fernet import Fernet
 
 from netrail.backends.types import SearchResult
-from netrail.history.db import connect
+from netrail.history.db import SCHEMA_VERSION, connect
 from netrail.history.store import HistoryStore
 
 
@@ -72,3 +72,13 @@ def test_purge_expired(temp_store):
     temp_store.record_search("old query", "web", ["ddgs"], [])
     purged = temp_store.purge_expired(0)
     assert purged >= 0
+
+
+def test_connect_enables_wal_and_stamps_schema_version(tmp_path, monkeypatch):
+    monkeypatch.setenv("NETRAIL_DB_PATH", str(tmp_path / "n.db"))
+    conn = connect()
+    try:
+        assert conn.execute("PRAGMA journal_mode").fetchone()[0] == "wal"
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+    finally:
+        conn.close()

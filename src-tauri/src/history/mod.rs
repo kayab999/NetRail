@@ -3,7 +3,6 @@ use crate::config::Settings;
 use crate::error::{NetRailError, NetRailResult};
 use crate::crypto::{decrypt_text, encrypt_text, ensure_encryption_key, encryption_active};
 use chrono::Utc;
-use once_cell::sync::OnceCell;
 use parking_lot::Mutex;
 use rusqlite::{params, Connection, OptionalExtension};
 use std::collections::HashMap;
@@ -28,7 +27,7 @@ fn mark_encryption_degraded() {
     ENCRYPTION_DEGRADED.store(true, Ordering::Relaxed);
 }
 
-static STORE: OnceCell<Mutex<Option<HistoryStore>>> = OnceCell::new();
+const SCHEMA_VERSION: i64 = 1;
 
 const SCHEMA_SQL: &str = r#"
 PRAGMA foreign_keys = ON;
@@ -112,8 +111,22 @@ pub fn connect() -> Result<Connection, rusqlite::Error> {
         let _ = std::fs::create_dir_all(parent);
     }
     let conn = Connection::open(path)?;
-    conn.execute_batch(SCHEMA_SQL)?;
+    conn.busy_timeout(std::time::Duration::from_secs(5))?;
+    let _mode: String = conn.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))?;
+    migrate(&conn)?;
     Ok(conn)
+}
+
+/// Schema versioning via `PRAGMA user_version`. Version 0 (fresh DB or any
+/// pre-migration database) applies the full idempotent schema and stamps 1.
+/// Future schema changes append `if current < N { ...; user_version = N }`.
+fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
+    let current: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+    if current < SCHEMA_VERSION {
+        conn.execute_batch(SCHEMA_SQL)?;
+        conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
+    }
+    Ok(())
 }
 
 pub struct HistoryStore {
@@ -588,26 +601,57 @@ fn csv_escape(value: &str) -> String {
     }
 }
 
-pub fn get_store(settings: &Settings) -> Option<HistoryStore> {
-    if !settings.history_enabled {
-        return None;
-    }
-    HistoryStore::open(settings).ok()
+/// Shared, process-lifetime history store (A3). One SQLite connection is opened
+/// at server startup and reused for every request, instead of reopening the DB
+/// per request. WAL + busy_timeout in `connect()` absorb multi-process churn.
+/// The store is reopened only when history/encryption settings change, which
+/// is also when the TTL purge in `HistoryStore::open` runs again.
+pub struct SharedStore {
+    state: Mutex<SharedStoreInner>,
 }
 
-pub fn init_history_on_startup(settings: &Settings) {
-    let cell = STORE.get_or_init(|| Mutex::new(None));
-    let mut guard = cell.lock();
-    if guard.is_none() {
-        *guard = get_store(settings);
-    }
+struct SharedStoreInner {
+    store: Option<HistoryStore>,
+    enabled: bool,
+    encrypt: bool,
 }
 
-pub fn with_store<F, T>(settings: &Settings, f: F) -> Option<T>
-where
-    F: FnOnce(&HistoryStore) -> T,
-{
-    get_store(settings).map(|store| f(&store))
+impl SharedStore {
+    pub fn new(settings: &Settings) -> Self {
+        let shared = Self {
+            state: Mutex::new(SharedStoreInner {
+                store: None,
+                enabled: false,
+                encrypt: false,
+            }),
+        };
+        shared.ensure(settings);
+        shared
+    }
+
+    fn ensure(&self, settings: &Settings) {
+        let mut guard = self.state.lock();
+        if guard.store.is_some()
+            && guard.enabled == settings.history_enabled
+            && guard.encrypt == settings.history_encrypt
+        {
+            return;
+        }
+        guard.enabled = settings.history_enabled;
+        guard.encrypt = settings.history_encrypt;
+        guard.store = if settings.history_enabled {
+            HistoryStore::open(settings).ok()
+        } else {
+            None
+        };
+    }
+
+    /// Run `f` with the history store when enabled for `settings`.
+    pub fn with_store<T>(&self, settings: &Settings, f: impl FnOnce(&HistoryStore) -> T) -> Option<T> {
+        self.ensure(settings);
+        let guard = self.state.lock();
+        guard.store.as_ref().map(f)
+    }
 }
 
 #[cfg(test)]
@@ -756,6 +800,51 @@ conn.commit()
         assert_eq!(url_map.len(), 2);
         let listed = store.list_history(None, 10, 0).unwrap();
         assert_eq!(listed["items"][0]["query"], "python tutorial");
+        std::env::remove_var("NETRAIL_DB_KEY");
+        std::env::remove_var("NETRAIL_DB_PATH");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn connect_enables_wal_and_stamps_schema_version() {
+        let dir = TempDir::new().unwrap();
+        std::env::set_var(
+            "NETRAIL_DB_PATH",
+            dir.path().join("n.db").to_string_lossy().as_ref(),
+        );
+        let conn = connect().unwrap();
+        let mode: String = conn.query_row("PRAGMA journal_mode", [], |r| r.get(0)).unwrap();
+        assert_eq!(mode, "wal");
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+        std::env::remove_var("NETRAIL_DB_PATH");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn shared_store_reopens_on_history_settings_change() {
+        let dir = TempDir::new().unwrap();
+        let key = Fernet::generate_key();
+        std::env::set_var("NETRAIL_DB_KEY", &key);
+        std::env::set_var(
+            "NETRAIL_DB_PATH",
+            dir.path().join("n.db").to_string_lossy().as_ref(),
+        );
+
+        let mut settings = Settings {
+            history_encrypt: false,
+            ..Settings::default()
+        };
+        let shared = SharedStore::new(&settings);
+        assert!(shared.with_store(&settings, |_| true).unwrap());
+
+        settings.history_enabled = false;
+        assert!(shared.with_store(&settings, |_| ()).is_none());
+
+        settings.history_enabled = true;
+        settings.history_encrypt = true;
+        assert!(shared.with_store(&settings, |_| true).unwrap());
+
         std::env::remove_var("NETRAIL_DB_KEY");
         std::env::remove_var("NETRAIL_DB_PATH");
     }

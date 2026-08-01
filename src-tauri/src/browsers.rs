@@ -201,7 +201,7 @@ pub struct OpenResult {
     pub sandbox: String,
 }
 
-pub fn open_url(url: &str, settings: &Settings, result_id: Option<i64>) -> NetRailResult<OpenResult> {
+pub fn open_url(url: &str, settings: &Settings) -> NetRailResult<OpenResult> {
     let browser = find_browser(settings.browser_id.as_deref()).ok_or_else(|| {
         NetRailError::Internal {
             code: "BROWSER_NOT_FOUND",
@@ -224,12 +224,6 @@ pub fn open_url(url: &str, settings: &Settings, result_id: Option<i64>) -> NetRa
     } else {
         "normal"
     };
-
-    if settings.history_enabled {
-        if let Ok(store) = crate::history::HistoryStore::open(settings) {
-            let _ = store.record_visit(url, result_id, settings.browser_id.as_deref(), private);
-        }
-    }
 
     Ok(OpenResult {
         browser: browser.name,

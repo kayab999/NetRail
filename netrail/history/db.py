@@ -72,14 +72,32 @@ CREATE VIRTUAL TABLE IF NOT EXISTS queries_fts USING fts5(
 """
 
 
+SCHEMA_VERSION = 1
+
+
 def normalize_url(url: str) -> str:
     return url.strip().rstrip("/").lower()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Version schema via PRAGMA user_version (Rust parity).
+
+    Version 0 (fresh DB or any pre-migration database) applies the full
+    idempotent schema and stamps 1. Future schema changes append
+    `if version < N: ...; conn.execute("PRAGMA user_version = N")`.
+    """
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version < SCHEMA_VERSION:
+        conn.executescript(SCHEMA_SQL)
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
 
 def connect() -> sqlite3.Connection:
     path = db_path()
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path, check_same_thread=False)
+    conn = sqlite3.connect(path, check_same_thread=False, timeout=5)
     conn.row_factory = sqlite3.Row
-    conn.executescript(SCHEMA_SQL)
+    conn.execute("PRAGMA busy_timeout = 5000")
+    conn.execute("PRAGMA journal_mode = WAL")
+    _migrate(conn)
     return conn

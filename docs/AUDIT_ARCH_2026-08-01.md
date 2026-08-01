@@ -137,7 +137,7 @@
 | Rate limits | 90/120/60 per min (rate_limit.rs:10-13) | same consts (rate_limit.py:11-13) | ✅ |
 | CSP | security.rs:386 | main.py:39-48 | ✅ identical |
 | Request validation | axum extractors | pydantic | **✗ A1 (drift)** |
-| Store lifecycle | per-request reopen | process singleton | **✗ A3 (drift)** |
+| Store lifecycle | shared in AppState (WAL + busy_timeout) | process singleton (WAL + busy_timeout) | ✅ (A3 closed) |
 | Graceful shutdown | none | none | ✗ (shared gap A4) |
 
 ---
@@ -170,13 +170,13 @@ Severity key: **P0** ship/stop · **P1** real bypass/contract break/feature-defe
 | A1 | P1 | Rust 422 responses break the typed-error contract | Live: missing/`Content-Type`-less/type-mismatched bodies → plain-text 422 (`Failed to deserialize…`, `Expected request with Content-Type…`); Python maps to typed 400 codes (main.py:72-129); neither api_error_codes.rs nor parity harness covers it | **✅ Closed 2026-08-01** — axum `JsonRejection`/`QueryRejection` → `ApiError` mapping (field-aware, mirrors Python), explicit `CONFIG_MAX_RESULTS` range check on search, 7 new integration tests + 5 parity probes |
 | A2 | P1 | Token injection defeats itself via CSP `script-src 'self'` | Live: `/` with `NETRAIL_API_TOKEN` serves inline token script under a CSP that blocks inline scripts; UI then fails all API calls with 401 | **✅ Closed 2026-08-01** — `'sha256-…'` hash of the exact script added to `script-src` on the index response (Rust + Python); middleware inserts defaults only when absent; verified live (hash matches header) + tests |
 | A15 | P1 | DNS pin on open unresolved (SEC-2026-04) | security.rs validates syntax only; browser resolves after validation | Roadmap: resolve-at-open with DNS-over-HTTPS + compare against blocklist before spawn; or hand browser a host-only URL and pin |
-| A3 | P2 | Per-request SQLite reopen + dead singleton; no WAL/busy_timeout | history/mod.rs:31, 109-117, 143-144, 591-611; db.py:82 | Open one store in `AppState`; enable `journal_mode=WAL`, `busy_timeout`; drop `STORE`/`with_store` dead code; sync Python singleton behavior |
-| A4 | P2 | No graceful shutdown / signal handling | mod.rs:88; desktop.rs:52-56; bin/netrail-api.rs:12-18 | `with_graceful_shutdown` + tokio signal; close DB conn; document systemd unit pattern |
+| A3 | P2 | Per-request SQLite reopen + dead singleton; no WAL/busy_timeout | history/mod.rs:31, 109-117, 143-144, 591-611; db.py:82 | **✅ Closed 2026-08-01** — `SharedStore` in `AppState` (one connection for process lifetime, reopened only on history/encryption settings change); `journal_mode=WAL` + 5 s `busy_timeout` in both stacks; dead `STORE` cell/`get_store`/`with_store` removed; visit recording moved to `open_link` handler (Python parity); TTL purge now runs at store open (startup/settings change) |
+| A4 | P2 | No graceful shutdown / signal handling | mod.rs:88; desktop.rs:52-56; bin/netrail-api.rs:12-18 | **✅ Closed 2026-08-01** — `with_graceful_shutdown` + SIGINT/SIGTERM tokio signal in `server::start` (drains in-flight requests, clean exit verified live); SQLite WAL checkpoints on close; systemd unit pattern stays documented in DISTRIBUTION |
 | A5 | P2 | No observability; audit log unbounded | audit.rs:39-56; tracing fmt everywhere | Optional JSON/OTLP logging sink; audit rotation (size/date) + retention env; request IDs |
 | A6 | P2 | Settings last-writer-wins, per-request re-parse | config.rs:112-122; put_settings mod.rs:295-304 | Version/ETag on settings; keep stateless re-read (it's a feature) |
 | A9 | P2 | Rate limits per-process, fixed-window, disableable | rate_limit.rs:10-47 | Document multi-process limits; optional shared store; per-token buckets when auth is on |
-| A11 | P2 | No schema migrations | history/mod.rs:33-92 vs db.py:13-72 | `PRAGMA user_version` + ordered migration list in both stacks |
-| A7 | P3 | Dead `focus-search` emit path (`withGlobalTauri:false`) | tauri.conf.json:14; app.js:949-955; desktop.rs:145 | Remove emit or enable `withGlobalTauri`; keep eval; add webview E2E |
+| A11 | P2 | No schema migrations | history/mod.rs:33-92 vs db.py:13-72 | **✅ Closed 2026-08-01** — `PRAGMA user_version` framework in both stacks (`SCHEMA_VERSION = 1`, ordered `if current < N` steps); existing DBs migrate idempotently on open; tests assert version stamp + WAL mode |
+| A7 | P3 | Dead `focus-search` emit path (`withGlobalTauri:false`) | tauri.conf.json:14; app.js:949-955; desktop.rs:145 | **✅ Closed 2026-08-01** — dead `emit` calls (focus-search, security:encryption-degraded) and the inert `__TAURI__` listeners removed; eval bridge + health-driven banner kept; webview E2E still open (see matrix #9) |
 | A8 | P3 | Python event-loop blocking in sync handlers | main.py:366-382, 428-436 | `def` handlers (threadpool) or `run_in_executor` for store IO |
 | A10 | P3 | CSP gaps (`upgrade-insecure-requests`, img-src) | security.rs:386 | Add upgrade directive; keep R7 documented |
 | A12 | P3 | api_contract is a literal, not versioning | mod.rs:239; main.py:304 | Centralize contract const; document add-only evolution rule |
@@ -190,14 +190,16 @@ Severity key: **P0** ship/stop · **P1** real bypass/contract break/feature-defe
 |---|--------|-------|--------|------|
 | 1 | Typed 422 mapping + harness vectors | A1 | S | H |
 | 2 | CSP nonce for injected token + token-mode E2E | A2 | S | H |
-| 3 | Persistent store in AppState + WAL + busy_timeout | A3 | M | M |
-| 4 | Graceful shutdown + signal handling | A4 | S | M |
-| 5 | Audit log rotation + structured logging option | A5 | M | M |
-| 6 | Settings ETag/version | A6 | S | L |
-| 7 | Schema `user_version` migrations | A11 | S | M |
-| 8 | DNS-pin roadmap (resolve+verify before spawn) | A15 | L | H |
-| 9 | Webview E2E for focus-search/docs bridge | A7 + handoff P1 | M | M |
-| 10 | CI: `cargo audit` + `npm audit` + artifact signing | — | S–M | L |
+| 3 | Persistent store in AppState + WAL + busy_timeout | A3 | M | M | **done 2026-08-01** |
+| 4 | Graceful shutdown + signal handling | A4 | S | M | **done 2026-08-01** |
+| 5 | Audit log rotation + structured logging option | A5 | M | M | open |
+| 6 | Settings ETag/version | A6 | S | L | open |
+| 7 | Schema `user_version` migrations | A11 | S | M | **done 2026-08-01** |
+| 8 | DNS-pin roadmap (resolve+verify before spawn) | A15 | L | H | open |
+| 9 | Webview E2E for focus-search/docs bridge | A7 + handoff P1 | M | M | open |
+| 10 | CI: `cargo audit` + `npm audit` + artifact signing | — | S–M | L | open |
+
+**Recommended sequence:** 1–2 (1.4.2 hotfix) — **done 2026-08-01**, see closure notes in §6 — then 3–4–7 (1.5.0 hardening) — **done 2026-08-01** — then 5–6–9 (1.6.0 ops), 8 (enterprise readiness gate, before any multi-user story).
 
 **Recommended sequence:** 1–2 (1.4.2 hotfix) — **done 2026-08-01**, see closure notes in §6 — then 3–4–7 (1.5.0 hardening), 5–6–9 (1.6.0 ops), 8 (enterprise readiness gate, before any multi-user story).
 

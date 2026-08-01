@@ -5,7 +5,7 @@ use crate::browsers::{discover_browsers, open_url};
 use crate::config::{is_flatpak, load_settings, save_settings, static_dir, Settings, HOST, PORT, VERSION};
 use crate::crypto::{encryption_active, ensure_encryption_key};
 use crate::docs;
-use crate::history::{get_store, init_history_on_startup, HistoryStore};
+use crate::history::SharedStore;
 use crate::error::NetRailError;
 use crate::http_client::build_http_client;
 use crate::rate_limit::RateLimiter;
@@ -36,6 +36,7 @@ pub struct AppState {
     pub http_client: Client,
     pub settings_fn: Arc<dyn Fn() -> Settings + Send + Sync>,
     pub rate_limiter: RateLimiter,
+    pub store: Arc<SharedStore>,
 }
 
 pub fn build_router(state: AppState) -> Router {
@@ -68,12 +69,12 @@ pub fn build_router(state: AppState) -> Router {
 }
 
 pub async fn start() -> Result<(), String> {
-    init_history_on_startup(&load_settings());
-
+    let settings = load_settings();
     let state = AppState {
         http_client: build_http_client(),
         settings_fn: Arc::new(load_settings),
         rate_limiter: RateLimiter::from_env(),
+        store: Arc::new(SharedStore::new(&settings)),
     };
 
     let app = build_router(state);
@@ -88,8 +89,29 @@ pub async fn start() -> Result<(), String> {
         "NetRail API listening on http://{HOST}:{PORT}"
     );
     axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
         .await
         .map_err(|e| e.to_string())
+}
+
+/// Wait for SIGINT (Ctrl-C) or SIGTERM, then let in-flight requests drain
+/// before axum::serve returns (A4). Docker sends SIGTERM; shells send SIGINT.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        let mut sigterm =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+                .expect("install SIGTERM handler");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = sigterm.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
+    tracing::info!("shutdown signal received — draining in-flight requests");
 }
 
 async fn security_headers(request: Request<axum::body::Body>, next: Next) -> Response {
@@ -225,10 +247,9 @@ async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
         ensure_encryption_key();
     }
     let encryption_ok = encryption_active();
-    let store = get_store(&settings);
-    let mut history = store
-        .as_ref()
-        .map(|s| s.stats())
+    let mut history = state
+        .store
+        .with_store(&settings, |store| store.stats())
         .unwrap_or_else(|| serde_json::json!({ "enabled": false }));
     if let serde_json::Value::Object(ref mut map) = history {
         map.insert("encrypt_requested".into(), encrypt_requested.into());
@@ -329,7 +350,6 @@ async fn put_settings(
     let Json(body) = body?;
     state.rate_limiter.check_mutate()?;
     let saved = save_settings(&body)?;
-    init_history_on_startup(&saved);
     audit::log_event("settings.put", serde_json::json!({ "ok": true }));
     Ok(Json(saved))
 }
@@ -379,6 +399,7 @@ async fn run_search(
         &body.mode,
         body.max_results,
         &settings,
+        &state.store,
     )
     .await?;
     audit::log_event(
@@ -416,7 +437,15 @@ async fn open_link(
         settings.private_mode = true;
     }
 
-    let result = open_url(&safe_url, &settings, body.result_id)?;
+    let result = open_url(&safe_url, &settings)?;
+    state.store.with_store(&settings, |store| {
+        let _ = store.record_visit(
+            &safe_url,
+            body.result_id,
+            settings.browser_id.as_deref(),
+            settings.private_mode,
+        );
+    });
     audit::log_event(
         "open",
         serde_json::json!({
@@ -458,13 +487,14 @@ async fn get_history(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let Query(params) = params?;
     let settings = (state.settings_fn)();
-    let store = require_store(&settings)?;
     let fts_q = params.q.as_deref().map(fts_query);
-    let payload = store.list_history(
-        fts_q.as_deref(),
-        params.limit.clamp(1, 200),
-        params.offset,
-    )?;
+    let payload = state
+        .store
+        .with_store(&settings, |store| {
+            store.list_history(fts_q.as_deref(), params.limit.clamp(1, 200), params.offset)
+        })
+        .ok_or_else(history_disabled_error)?
+        ?;
     Ok(Json(payload))
 }
 
@@ -474,8 +504,12 @@ async fn delete_history_entry(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     state.rate_limiter.check_mutate()?;
     let settings = (state.settings_fn)();
-    let store = require_store(&settings)?;
-    if !store.delete_history_entry(query_id)? {
+    let deleted = state
+        .store
+        .with_store(&settings, |store| store.delete_history_entry(query_id))
+        .ok_or_else(history_disabled_error)?
+        ?;
+    if !deleted {
         return Err(NetRailError::NotFound {
             code: "HISTORY_ENTRY_NOT_FOUND",
             entity: format!("history entry {query_id}"),
@@ -495,8 +529,11 @@ async fn delete_history_entry(
 async fn purge_history(State(state): State<AppState>) -> Result<Json<serde_json::Value>, ApiError> {
     state.rate_limiter.check_mutate()?;
     let settings = (state.settings_fn)();
-    let store = require_store(&settings)?;
-    let count = store.purge_all_history()?;
+    let count = state
+        .store
+        .with_store(&settings, |store| store.purge_all_history())
+        .ok_or_else(history_disabled_error)?
+        ?;
     audit::log_event("history.purge", serde_json::json!({ "purged": count }));
     Ok(Json(serde_json::json!({
         "status": "ok",
@@ -513,8 +550,11 @@ async fn list_collections(
     State(state): State<AppState>,
 ) -> Result<Json<Vec<serde_json::Value>>, ApiError> {
     let settings = (state.settings_fn)();
-    let store = require_store(&settings)?;
-    let items = store.list_collections()?;
+    let items = state
+        .store
+        .with_store(&settings, |store| store.list_collections())
+        .ok_or_else(history_disabled_error)?
+        ?;
     Ok(Json(items))
 }
 
@@ -525,7 +565,6 @@ async fn create_collection(
     let Json(body) = body?;
     state.rate_limiter.check_mutate()?;
     let settings = (state.settings_fn)();
-    let store = require_store(&settings)?;
     let name = body.name.trim();
     if name.is_empty() || name.len() > 120 {
         return Err(NetRailError::InvalidConfig {
@@ -534,7 +573,11 @@ async fn create_collection(
         }
         .into());
     }
-    let created = store.create_collection(name)?;
+    let created = state
+        .store
+        .with_store(&settings, |store| store.create_collection(name))
+        .ok_or_else(history_disabled_error)?
+        ?;
     audit::log_event("collection.create", serde_json::json!({ "name_len": name.len() }));
     Ok(Json(created))
 }
@@ -553,7 +596,6 @@ async fn add_collection_item(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let Json(body) = body?;
     let settings = (state.settings_fn)();
-    let store = require_store(&settings)?;
     let safe_url = validate_open_url(&body.url)?;
     let title = body.title.trim();
     if title.is_empty() || title.len() > 500 {
@@ -572,9 +614,14 @@ async fn add_collection_item(
             .into());
         }
     }
-    Ok(Json(
-        store.add_collection_item(collection_id, &safe_url, title, body.notes.as_deref())?,
-    ))
+    let item = state
+        .store
+        .with_store(&settings, |store| {
+            store.add_collection_item(collection_id, &safe_url, title, body.notes.as_deref())
+        })
+        .ok_or_else(history_disabled_error)?
+        ?;
+    Ok(Json(item))
 }
 
 #[derive(Deserialize)]
@@ -627,9 +674,12 @@ async fn export_collection(
 ) -> Result<Response, ApiError> {
     let Query(params) = params?;
     let settings = (state.settings_fn)();
-    let store = require_store(&settings)?;
     let fmt = if params.fmt == "csv" { "csv" } else { "json" };
-    let content = store.export_collection(collection_id, fmt)?;
+    let content = state
+        .store
+        .with_store(&settings, |store| store.export_collection(collection_id, fmt))
+        .ok_or_else(history_disabled_error)?
+        ?;
     let media = if fmt == "csv" {
         "text/csv"
     } else {
@@ -707,14 +757,12 @@ impl From<QueryRejection> for ApiError {
     }
 }
 
-fn require_store(settings: &Settings) -> Result<HistoryStore, ApiError> {
-    get_store(settings).ok_or_else(|| {
-        NetRailError::InvalidConfig {
-            code: "HISTORY_DISABLED",
-            message: "History is disabled in settings.".into(),
-        }
-        .into()
-    })
+fn history_disabled_error() -> ApiError {
+    NetRailError::InvalidConfig {
+        code: "HISTORY_DISABLED",
+        message: "History is disabled in settings.".into(),
+    }
+    .into()
 }
 
 struct ApiError {

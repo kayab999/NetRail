@@ -946,14 +946,4 @@ function focusSearchInput() {
 
 window.netrailFocusSearch = focusSearchInput;
 
-if (window.__TAURI__?.event?.listen) {
-  const tauriListen = window.__TAURI__.event.listen.bind(window.__TAURI__.event);
-  tauriListen("security:encryption-degraded", (event) => {
-    showSecurityBanner(event.payload);
-  }).catch(() => {});
-  tauriListen("focus-search", () => {
-    window.setTimeout(focusSearchInput, 50);
-  }).catch(() => {});
-}
-
 bootstrap().then(handleDocHash);
