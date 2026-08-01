@@ -91,19 +91,19 @@ All security items ship **dual-stack + golden vectors** (invariant 12). Rust rem
 | A4 | Rust regression guard: trailing-dot DDG unwrap + backend strict vectors | `security.rs` tests + fixture | ✅ Live probe: `duckduckgo.com.` / `duck.com.` unwrap → `OPEN_URL_LOCALHOST` |
 | A5 | Confirmed Rust blocks trailing-dot backend strict (`BACKEND_URL_STRICT_PRIVATE`, live PUT probe) — no Rust change needed beyond normalization; regression vectors in fixture | `security.rs` tests | ✅ Rust behavior locked in by fixture vectors |
 
-### Wave B — Harden the harness (0.5 day)
+### Wave B — Harden the harness (0.5 day) ✅ Landed 2026-08-01
 
 | # | Item | Acceptance |
 |---|------|------------|
-| B1 | Add a **fuzz-lite probe** to parity smoke: run a fixed adversarial URL list (trailing dot, zone ids, mapped, decimal/hex/octal, malformed brackets) against Python unit + live Rust binary, assert equal code/status | `scripts/parity-api-smoke.sh` + small vector list (fixture-driven) |
-| B2 | Document in `docs/ARCHITECTURE.md` / handoff that fixture = policy SSOT and must grow with each security change | Doc note; no code |
+| B1 | Drive Rust live parity probes from the shared fixture (was hardcoded list) | ✅ `scripts/parity-api-smoke.sh` now loops every `open_url` vector in `url_policy.json` against the live Rust binary (32 vectors), asserting code+status; Python side covered by `test_url_policy.py`. Any fixture addition automatically gates both stacks |
+| B2 | Fixture = policy SSOT (documented in Wave A notes + this file) | ✅ Doc note; no code |
 
-### Wave C — Residual risk documentation & operator hardening (backlog, not blocking)
+### Wave C — Residual risk documentation & operator hardening (backlog, not blocking) ✅ Doc items landed 2026-08-01
 
 | # | Item | Notes |
 |---|------|-------|
-| C1 | Document token-in-`/`-page tradeoff (Q10) in `SECURITY.md` + `docs/DISTRIBUTION.md` | Honesty; no behavior change (env-readable anyway) |
-| C2 | Strengthen Docker guidance: token **on by default** in compose example; strict backends on | Config/doc only; desktop default unchanged |
+| C1 | Document token-in-`/`-page tradeoff (Q10) in `SECURITY.md` + `docs/DISTRIBUTION.md` | ✅ New "Optional API token" section in SECURITY.md (inject-on default, local readers can fetch it, same-user malware reads env anyway); DISTRIBUTION env table row expanded |
+| C2 | Strengthen Docker guidance: token **on by default** in compose example; strict backends on | ✅ compose: token/strict/audit recommended + rust profile pass-throughs; `.env` example updated; pre-existing YAML break fixed (quoted DB_KEY guard) |
 | C3 | DNS-pin on open (SEC-2026-04): keep documented residual; add "resolve-and-warn" experimental flag if ever funded | Expensive/UX-sensitive; do not build now |
 | C4 | Images mode: optional `images:off` / proxy as product decision (R7) | Product call, not security fix |
 
@@ -118,8 +118,8 @@ All security items ship **dual-stack + golden vectors** (invariant 12). Rust rem
 
 | Release | Scope |
 |---------|--------|
-| **1.4.1 (patch)** | Wave A (N1–N3 + fixture) — single dual-stack security PR |
-| **1.4.2 / 1.5** | Wave B + C1/C2 (harness + docs) if desired |
+| **1.4.1 (patch)** | Wave A + B + C — landed on `main` (commits `f3fd306`, `4a43935`, `b091b1c`); tag/push only on human request |
+| **1.5** | Remaining residuals: C3 DNS-pin flag, C4 images-off, dual-stack golden growth |
 | **2.x** | Only with owned-corpus / multi-user redesign (bind+auth) — out of model unless human asks |
 
 ### Explicit non-goals (this workplan)
