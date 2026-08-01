@@ -23,7 +23,7 @@ Search results and `/api/open` reject:
 
 - Non-`http`/`https` schemes (`javascript:`, `data:`, `file:`, …)
 - Embedded credentials
-- Loopback / localhost (including **decimal, hex, octal, and short IPv4 forms** browsers may resolve to `127.0.0.1`)
+- Loopback / localhost (including **decimal, hex, octal, short IPv4, and FQDN-root trailing-dot** forms browsers may resolve to `127.0.0.1`, e.g. `2130706433`, `0x7f000001`, `127.1`, `127.0.0.1.`)
 - Link-local and **private / non-public** addresses (RFC1918, ULA, multicast, …)
 - Known DNS-rebinding helper domains — apex and subdomains (`nip.io`, `sslip.io`, `xip.io`, `localtest.me`)
 - Cloud metadata hostnames (`metadata.google.internal`, `metadata`, `instance-data`) and IMDS IPs (`169.254.169.254`, `fd00:ec2::254`)
@@ -33,6 +33,12 @@ Search results and `/api/open` reject:
 Backend HTTP clients **do not follow redirects**, so a SearXNG/Brave hop cannot bounce NetRail onto private targets via 30x.
 
 **Backend URLs** (e.g. self-hosted SearXNG) still **allow** localhost and private LAN hosts so operators can point at home instances. Cloud metadata and rebinding hostnames remain blocked.
+
+## Optional API token
+
+`NETRAIL_API_TOKEN` requires `Authorization: Bearer …` or `X-NetRail-Token: …` on `/api/*` (health is exempt). It is a guard against **accidental cross-process access** (other users' processes, browser extensions, containers sharing the loopback) — **not** a defense against malware already running as your user.
+
+Important tradeoff: when the token is set, `NETRAIL_INJECT_UI_TOKEN` (default **on**) injects the token into the HTML of the **unauthenticated** `/` page so the web UI can authenticate. Any local HTTP client can `GET http://127.0.0.1:7421/` and read it. Since same-user malware can read `NETRAIL_API_TOKEN` from the environment anyway, this does not weaken the threat model — but do not treat the token as a secret that survives local readers. For Docker/multi-process hosts, set `NETRAIL_INJECT_UI_TOKEN=0` and supply the token to the UI via `localStorage` only if you understand the consequence (the UI cannot authenticate until you do).
 
 ## History encryption
 

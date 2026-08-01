@@ -157,7 +157,9 @@ Set in `.env`:
 ```
 SEARXNG_URL=http://searxng:8080
 NETRAIL_DB_KEY=...   # required for encrypted history
-# NETRAIL_API_TOKEN=...  # recommended if you ever publish the port beyond pure single-user trust
+NETRAIL_API_TOKEN=...  # recommended for Docker: guards against other containers/processes
+NETRAIL_STRICT_BACKEND_URLS=1  # recommended: forbid private/loopback backend URLs
+NETRAIL_AUDIT_LOG=1            # optional: JSONL audit of search/open/settings/history
 ```
 
 ### Security warning
@@ -180,7 +182,7 @@ Build Rust image directly: `docker build -f Dockerfile.rust -t netrail-api .`
 | `NETRAIL_AUTO_OPEN` | Open browser on start (`true`/`false`) |
 | `NETRAIL_RATE_LIMIT` | `0` / `false` disables local 90/120/60 per-minute caps |
 | `NETRAIL_API_TOKEN` | Optional API token; require Bearer / `X-NetRail-Token` on `/api/*` (except health) |
-| `NETRAIL_INJECT_UI_TOKEN` | When token set, inject into served HTML for UI (default on) |
+| `NETRAIL_INJECT_UI_TOKEN` | When token set, inject into served HTML for UI (default on). Note: the injected page (`/`) is unauthenticated, so any local HTTP client can read the token from it — see SECURITY.md. Set `0` and supply via `localStorage` if you need tighter behavior |
 | `NETRAIL_STRICT_BACKEND_URLS` | `1` rejects private/loopback SearXNG/backend URLs |
 | `NETRAIL_AUDIT_LOG` | `1` appends JSON lines to XDG data `netrail/audit.log` |
 | `NETRAIL_AUDIT_LOG_PATH` | Explicit audit log path |
