@@ -86,7 +86,7 @@ print('$method', '$path', j['code'], status)
 "
 }
 
-echo "== Rust live parity probes =="
+echo "== Rust live parity probes (fixture-driven) =="
 health="$(curl -sf http://127.0.0.1:7421/api/health)"
 echo "$health" | "$PY" -c "
 import sys, json
@@ -99,11 +99,46 @@ print('health ok', h['version'])
 "
 
 probe POST /api/search '{"query":"","mode":"web"}' QUERY_INVALID 400
-probe POST /api/open '{"url":"http://127.0.0.1/"}' OPEN_URL_LOCALHOST 400
-probe POST /api/open '{"url":"http://192.168.1.1/"}' OPEN_URL_PRIVATE 400
-probe POST /api/open '{"url":"https://duck.com/l/?uddg=http%3A%2F%2F127.0.0.1%2F"}' OPEN_URL_LOCALHOST 400
-probe POST /api/open '{"url":"http://localtest.me/"}' OPEN_URL_DNS_REBINDING 400
-probe POST /api/open '{"url":"http://metadata.google.internal/"}' OPEN_URL_CLOUD_METADATA 400
+
+# Every open_url vector in the shared golden fixture must behave identically
+# on the live Rust binary. Python parity is covered by test_url_policy.py.
+"$PY" - "$ROOT/tests/fixtures/url_policy.json" <<'PYEOF'
+import json, subprocess, sys, urllib.request
+
+fixture = json.load(open(sys.argv[1]))
+vecs = [c for c in fixture["open_url"]]
+fails = []
+for c in vecs:
+    url = c["url"]
+    req = urllib.request.Request(
+        "http://127.0.0.1:7421/api/open",
+        data=json.dumps({"url": url}).encode(),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req) as resp:
+            status, body = resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        status, body = e.code, json.loads(e.read())
+    expect = "allow" if c["expect"] == "allow" else "block"
+    got = "allow" if status == 200 else f"block:{body.get('code')}"
+    if expect == "block":
+        ok = status != 200 and (not c.get("code") or body.get("code") == c["code"])
+    else:
+        ok = status == 200
+    tag = "ok " if ok else "FAIL"
+    print(f"{tag} {c['id']:42s} {got}")
+    if not ok:
+        fails.append((c["id"], url, status, body))
+if fails:
+    print("FIXTURE-DRIVEN PARITY FAILURES:")
+    for f in fails:
+        print("  ", f)
+    sys.exit(1)
+print(f"fixture open_url vectors: {len(vecs)} passed")
+PYEOF
+
 probe GET /api/docs/nope '' DOC_NOT_FOUND 404
 
 echo "PARITY SMOKE OK (Python + Rust $BIN)"
