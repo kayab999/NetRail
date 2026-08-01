@@ -2,9 +2,9 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.5.0] — 2026-08-01
 
-### Changed (1.5.0 hardening batch from the 2026-08-01 audit)
+### Changed (hardening batch from the 2026-08-01 audit)
 
 - **Persistent history store (A3, Rust)** — one SQLite connection now lives in `AppState` (`SharedStore`) for the process lifetime instead of reopening per request; reopened only when history/encryption settings change. The dead `STORE` singleton cell and `get_store`/`with_store` helpers were removed, and visit recording moved from `browsers::open_url` into the `open_link` handler (Python parity). TTL purge runs at store open instead of per request.
 - **WAL + busy_timeout (dual-stack, A3)** — `journal_mode=WAL` and a 5 s busy timeout on both `connect()` implementations; `SQLITE_BUSY` risk under concurrent writes (rapid searches, search+visit) is gone.
