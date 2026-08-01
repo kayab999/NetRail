@@ -254,6 +254,7 @@ Do not force-push. Do not push unless I ask.
 
 | Doc | Role |
 |-----|------|
+| [docs/HANDOFF_OPENCODE_2026-08-01.md](docs/HANDOFF_OPENCODE_2026-08-01.md) | **OpenCode handoff** — enterprise analysis + session WIP (Spotlight + card CSS) |
 | [README.md](README.md) | Install + pitch |
 | [SECURITY.md](SECURITY.md) | Threat model |
 | [docs/API_ERRORS.md](docs/API_ERRORS.md) | Error codes |
