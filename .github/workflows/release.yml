@@ -85,13 +85,7 @@ jobs:
             echo "version=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")"
             echo ""
             echo "## Rust (Cargo.lock packages)"
-            python3 - <<'PY'
-import re
-text=open("src-tauri/Cargo.lock").read()
-pkgs=re.findall(r'name = "([^"]+)"\nversion = "([^"]+)"', text)
-for name, ver in sorted(set(pkgs)):
-    print(f"{name}@{ver}")
-PY
+            awk '/^name = /{n=$3} /^version = /{print n "@" $3}' src-tauri/Cargo.lock | tr -d '"' | sort -u
             echo ""
             echo "## Python (requirements.txt)"
             cat requirements.txt
