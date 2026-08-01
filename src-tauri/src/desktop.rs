@@ -138,6 +138,14 @@ fn focus_main_window<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     // Wayland compositors sometimes ignore set_focus; briefly pin on top.
     let _ = window.set_always_on_top(true);
     let _ = window.set_always_on_top(false);
+
+    // Spotlight UX: put the caret in the query box after the OS settles focus.
+    // Prefer emit (when the webview has Tauri event APIs); eval matches the
+    // docs/donate bridge and works with withGlobalTauri: false.
+    let _ = window.emit("focus-search", ());
+    let _ = window.eval(
+        "window.setTimeout(function(){if(window.netrailFocusSearch)window.netrailFocusSearch();},50)",
+    );
 }
 
 fn quit_app<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {

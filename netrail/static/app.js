@@ -935,12 +935,25 @@ window.addEventListener("hashchange", handleDocHash);
 window.netrailOpenDoc = openDocView;
 window.netrailDonate = openDonate;
 
+/** Spotlight-style: focus + select query after tray / hotkey / second-instance. */
+function focusSearchInput() {
+  if (!els.query) return;
+  // Skip when a modal dialog owns the surface.
+  if (els.docDialog?.open || els.saveDialog?.open) return;
+  els.query.focus();
+  els.query.select();
+}
+
+window.netrailFocusSearch = focusSearchInput;
+
 if (window.__TAURI__?.event?.listen) {
-  window.__TAURI__.event
-    .listen("security:encryption-degraded", (event) => {
-      showSecurityBanner(event.payload);
-    })
-    .catch(() => {});
+  const tauriListen = window.__TAURI__.event.listen.bind(window.__TAURI__.event);
+  tauriListen("security:encryption-degraded", (event) => {
+    showSecurityBanner(event.payload);
+  }).catch(() => {});
+  tauriListen("focus-search", () => {
+    window.setTimeout(focusSearchInput, 50);
+  }).catch(() => {});
 }
 
 bootstrap().then(handleDocHash);

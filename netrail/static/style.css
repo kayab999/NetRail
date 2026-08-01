@@ -489,8 +489,11 @@ select {
 }
 
 .result-card {
+  /* Body always takes free space; actions stay content-sized.
+     Without a thumb, two children map to 1fr | auto (not auto | 1fr | …),
+     which previously stretched ★ / Open on short snippets. */
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 0.85rem;
   align-items: start;
   padding: 0.9rem 1rem;
@@ -505,7 +508,7 @@ select {
 }
 
 .result-card.image-card {
-  grid-template-columns: 96px 1fr auto;
+  grid-template-columns: 96px minmax(0, 1fr) auto;
 }
 
 .thumb {
@@ -518,7 +521,7 @@ select {
 }
 
 .result-body {
-  min-width: 0;
+  min-width: 0; /* allow URL ellipsis inside the 1fr track */
 }
 
 .result-body h3 {
@@ -612,6 +615,11 @@ select {
   flex-direction: column;
   gap: 0.35rem;
   align-items: stretch;
+  /* Freeze the actions column: never absorb free horizontal space */
+  flex: 0 0 auto;
+  width: max-content;
+  min-width: 4.75rem; /* covers "Open" / "Open private" without sprawl */
+  justify-self: end;
 }
 
 .open-btn {
@@ -623,6 +631,8 @@ select {
   font-size: 0.8rem;
   cursor: pointer;
   white-space: nowrap;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .icon-btn {
@@ -633,6 +643,8 @@ select {
   padding: 0.35rem 0.5rem;
   font-size: 0.85rem;
   cursor: pointer;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .ghost-btn {
@@ -949,6 +961,11 @@ select {
   .result-card,
   .result-card.image-card {
     grid-template-columns: 1fr;
+  }
+
+  .result-actions {
+    justify-self: start;
+    width: max-content;
   }
 
   .open-btn {
