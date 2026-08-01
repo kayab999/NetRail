@@ -4,6 +4,20 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 
 ## [Unreleased]
 
+## [1.4.2] — 2026-08-01
+
+### Fixed
+
+- **Typed errors on malformed request bodies (Rust)** — axum extractor rejections (missing fields, wrong types, broken JSON, bad query params) previously returned plain-text HTTP 422; they now map to the `{code, detail, status}` contract with field-aware codes mirroring Python: `QUERY_INVALID`, `OPEN_URL_INVALID`, `CONFIG_MAX_RESULTS`, `COLLECTION_NAME_INVALID`, `COLLECTION_ITEM_TITLE_INVALID`, `COLLECTION_ITEM_NOTES_INVALID`, `REQUEST_INVALID` (all 400). Found by the 2026-08-01 architecture audit (A1).
+- **`max_results` out-of-range parity (Rust)** — `/api/search` with `max_results` outside 1–50 now returns `CONFIG_MAX_RESULTS` 400 instead of silently clamping (Python already errored).
+- **Token mode UI broken by CSP (dual-stack)** — the injected `window.NETRAIL_API_TOKEN` script was blocked by the page's own `script-src 'self'`, so token mode 401'd on every API call. The index response CSP now whitelists the exact script via its `sha256-…` hash — token mode works while all other inline scripts stay blocked. Found by the architecture audit (A2).
+
+### Changed
+
+- **Architecture audit published** — `docs/AUDIT_ARCH_2026-08-01.md`: first code-as-built audit of both stacks (module inventory, flows, concurrency, parity, security, enterprise readiness), 15 findings registered (A1–A13, A15), P1s closed in this release.
+- **Parity harness hardened** — 5 live probes for malformed bodies (missing field, wrong type, broken JSON, out-of-range `max_results`, missing `url`); both stacks must return typed 400s.
+- **Tests** — 7 new Rust integration tests (`api_error_codes.rs`), 2 CSP unit tests, Python typed-body + token/CSP tests. Gates: pytest 106 · cargo lib 62 + integration 16 · clippy `-D warnings` clean · parity smoke OK · e2e smoke OK.
+
 ## [1.4.1] — 2026-08-01
 
 ### Security
