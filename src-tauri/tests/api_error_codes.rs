@@ -255,3 +255,69 @@ async fn search_total_fanout_failure_returns_fanout_total_failure() {
     assert_eq!(status, StatusCode::BAD_GATEWAY);
     assert_api_error(&json, "FANOUT_TOTAL_FAILURE", 502);
 }
+
+#[tokio::test]
+async fn search_missing_field_returns_typed_query_invalid() {
+    let settings = Settings::default();
+    let mut app = build_router(test_state(settings));
+    let (status, json) = request_json(&mut app, "POST", "/api/search", Some(r#"{}"#)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_api_error(&json, "QUERY_INVALID", 400);
+}
+
+#[tokio::test]
+async fn search_wrong_type_returns_typed_query_invalid() {
+    let settings = Settings::default();
+    let mut app = build_router(test_state(settings));
+    let (status, json) = request_json(
+        &mut app,
+        "POST",
+        "/api/search",
+        Some(r#"{"query":123}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_api_error(&json, "QUERY_INVALID", 400);
+}
+
+#[tokio::test]
+async fn search_malformed_json_returns_typed_request_invalid() {
+    let settings = Settings::default();
+    let mut app = build_router(test_state(settings));
+    let (status, json) = request_json(&mut app, "POST", "/api/search", Some(r#"{bad"#)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_api_error(&json, "REQUEST_INVALID", 400);
+}
+
+#[tokio::test]
+async fn search_out_of_range_max_results_returns_config_max_results() {
+    let settings = Settings::default();
+    let mut app = build_router(test_state(settings));
+    let (status, json) = request_json(
+        &mut app,
+        "POST",
+        "/api/search",
+        Some(r#"{"query":"rust","max_results":999}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_api_error(&json, "CONFIG_MAX_RESULTS", 400);
+}
+
+#[tokio::test]
+async fn open_missing_field_returns_typed_open_url_invalid() {
+    let settings = Settings::default();
+    let mut app = build_router(test_state(settings));
+    let (status, json) = request_json(&mut app, "POST", "/api/open", Some(r#"{}"#)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_api_error(&json, "OPEN_URL_INVALID", 400);
+}
+
+#[tokio::test]
+async fn collection_missing_name_returns_typed_collection_name_invalid() {
+    let settings = Settings::default();
+    let mut app = build_router(test_state(settings));
+    let (status, json) = request_json(&mut app, "POST", "/api/collections", Some(r#"{}"#)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_api_error(&json, "COLLECTION_NAME_INVALID", 400);
+}

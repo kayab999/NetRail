@@ -43,6 +43,8 @@ tower = "0.5"
 http = "1"
 parking_lot = "0.12"
 futures = "0.3"
+sha2 = "0.10"
+base64 = "0.22"
 
 [[bin]]
 name = "netrail"

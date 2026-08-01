@@ -13,7 +13,7 @@ use crate::search;
 use crate::security::{validate_open_url, CSP};
 use reqwest::Client;
 use axum::{
-    extract::{Path, Query, State},
+    extract::{rejection::{JsonRejection, QueryRejection}, Path, Query, State},
     http::{header, HeaderValue, Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -23,6 +23,8 @@ use axum::{
 use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::Deserialize;
+use sha2::Digest;
+use base64::Engine;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::services::ServeDir;
@@ -93,18 +95,25 @@ pub async fn start() -> Result<(), String> {
 async fn security_headers(request: Request<axum::body::Body>, next: Next) -> Response {
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
-    headers.insert(
-        header::CONTENT_SECURITY_POLICY,
-        HeaderValue::from_static(CSP),
-    );
-    headers.insert(
-        header::X_CONTENT_TYPE_OPTIONS,
-        HeaderValue::from_static("nosniff"),
-    );
-    headers.insert(
-        header::REFERRER_POLICY,
-        HeaderValue::from_static("no-referrer"),
-    );
+    // Handlers may set a more specific CSP (e.g. token injection adds a script hash).
+    if !headers.contains_key(header::CONTENT_SECURITY_POLICY) {
+        headers.insert(
+            header::CONTENT_SECURITY_POLICY,
+            HeaderValue::from_static(CSP),
+        );
+    }
+    if !headers.contains_key(header::X_CONTENT_TYPE_OPTIONS) {
+        headers.insert(
+            header::X_CONTENT_TYPE_OPTIONS,
+            HeaderValue::from_static("nosniff"),
+        );
+    }
+    if !headers.contains_key(header::REFERRER_POLICY) {
+        headers.insert(
+            header::REFERRER_POLICY,
+            HeaderValue::from_static("no-referrer"),
+        );
+    }
     response
 }
 
@@ -126,27 +135,42 @@ async fn api_auth_middleware(request: Request<axum::body::Body>, next: Next) -> 
     next.run(request).await
 }
 
-fn inject_token_script(html: &str) -> String {
-    let Some(token) = auth::api_token_from_env() else {
-        return html.to_string();
-    };
-    if !inject_ui_token() {
-        return html.to_string();
-    }
+/// Inline token script + its CSP sha256 hash, so `script-src 'self'` can
+/// whitelist exactly this script (blocking every other inline script).
+fn token_script_parts(token: &str) -> (String, String) {
     // Escape for JS string in double quotes.
     let escaped = token.replace('\\', "\\\\").replace('"', "\\\"");
-    let snippet = format!(
-        r#"<script>window.NETRAIL_API_TOKEN="{escaped}";</script>"#
-    );
+    let content = format!("window.NETRAIL_API_TOKEN=\"{escaped}\";");
+    let snippet = format!("<script>{content}</script>");
+    let digest = sha2::Sha256::digest(content.as_bytes());
+    let b64 = base64::engine::general_purpose::STANDARD.encode(digest);
+    (snippet, format!("'sha256-{b64}'"))
+}
+
+/// Inject the API token into the UI page. Returns the HTML plus the CSP
+/// script hash when injection happened (None otherwise).
+fn inject_token_script(html: &str) -> (String, Option<String>) {
+    let Some(token) = auth::api_token_from_env() else {
+        return (html.to_string(), None);
+    };
+    if !inject_ui_token() {
+        return (html.to_string(), None);
+    }
+    let (snippet, csp_hash) = token_script_parts(&token);
     if let Some(idx) = html.find("</head>") {
         let mut out = String::with_capacity(html.len() + snippet.len());
         out.push_str(&html[..idx]);
         out.push_str(&snippet);
         out.push_str(&html[idx..]);
-        out
+        (out, Some(csp_hash))
     } else {
-        format!("{snippet}{html}")
+        (format!("{snippet}{html}"), Some(csp_hash))
     }
+}
+
+fn csp_with_script_hash(csp_hash: &str) -> HeaderValue {
+    let csp = CSP.replace("script-src 'self'", &format!("script-src 'self' {csp_hash}"));
+    HeaderValue::from_str(&csp).unwrap_or_else(|_| HeaderValue::from_static(CSP))
 }
 
 async fn index() -> impl IntoResponse {
@@ -154,13 +178,19 @@ async fn index() -> impl IntoResponse {
     match tokio::fs::read(&path).await {
         Ok(bytes) => {
             let html = String::from_utf8_lossy(&bytes);
-            let body = inject_token_script(&html);
-            (
+            let (body, script_hash) = inject_token_script(&html);
+            let mut response = (
                 StatusCode::OK,
                 [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
                 body,
             )
-                .into_response()
+                .into_response();
+            if let Some(hash) = script_hash {
+                response
+                    .headers_mut()
+                    .insert(header::CONTENT_SECURITY_POLICY, csp_with_script_hash(&hash));
+            }
+            response
         }
         Err(err) => {
             tracing::error!(
@@ -294,8 +324,9 @@ async fn get_settings(State(state): State<AppState>) -> Json<Settings> {
 
 async fn put_settings(
     State(state): State<AppState>,
-    Json(body): Json<Settings>,
+    body: Result<Json<Settings>, JsonRejection>,
 ) -> Result<Json<Settings>, ApiError> {
+    let Json(body) = body?;
     state.rate_limiter.check_mutate()?;
     let saved = save_settings(&body)?;
     init_history_on_startup(&saved);
@@ -322,8 +353,9 @@ fn default_max_results() -> u32 {
 
 async fn run_search(
     State(state): State<AppState>,
-    Json(body): Json<SearchRequest>,
+    body: Result<Json<SearchRequest>, JsonRejection>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let Json(body) = body?;
     state.rate_limiter.check_search()?;
     let query = body.query.trim();
     if query.is_empty() || query.len() > 500 {
@@ -333,12 +365,19 @@ async fn run_search(
         }
         .into());
     }
+    if !(1..=50).contains(&body.max_results) {
+        return Err(NetRailError::InvalidConfig {
+            code: "CONFIG_MAX_RESULTS",
+            message: "max_results must be between 1 and 50.".into(),
+        }
+        .into());
+    }
     let settings = (state.settings_fn)();
     let payload = search::search(
         &state.http_client,
         query,
         &body.mode,
-        body.max_results.clamp(1, 50),
+        body.max_results,
         &settings,
     )
     .await?;
@@ -347,7 +386,7 @@ async fn run_search(
         serde_json::json!({
             "mode": body.mode,
             "query_len": query.len(),
-            "max_results": body.max_results.clamp(1, 50),
+            "max_results": body.max_results,
         }),
     );
     Ok(Json(payload))
@@ -364,8 +403,9 @@ struct OpenRequest {
 
 async fn open_link(
     State(state): State<AppState>,
-    Json(body): Json<OpenRequest>,
+    body: Result<Json<OpenRequest>, JsonRejection>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let Json(body) = body?;
     state.rate_limiter.check_open()?;
     let safe_url = validate_open_url(&body.url)?;
     let mut settings = (state.settings_fn)();
@@ -414,8 +454,9 @@ fn fts_query(q: &str) -> String {
 
 async fn get_history(
     State(state): State<AppState>,
-    Query(params): Query<HistoryQuery>,
+    params: Result<Query<HistoryQuery>, QueryRejection>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let Query(params) = params?;
     let settings = (state.settings_fn)();
     let store = require_store(&settings)?;
     let fts_q = params.q.as_deref().map(fts_query);
@@ -479,8 +520,9 @@ async fn list_collections(
 
 async fn create_collection(
     State(state): State<AppState>,
-    Json(body): Json<CollectionCreate>,
+    body: Result<Json<CollectionCreate>, JsonRejection>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let Json(body) = body?;
     state.rate_limiter.check_mutate()?;
     let settings = (state.settings_fn)();
     let store = require_store(&settings)?;
@@ -507,8 +549,9 @@ struct CollectionItemCreate {
 async fn add_collection_item(
     State(state): State<AppState>,
     Path(collection_id): Path<i64>,
-    Json(body): Json<CollectionItemCreate>,
+    body: Result<Json<CollectionItemCreate>, JsonRejection>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    let Json(body) = body?;
     let settings = (state.settings_fn)();
     let store = require_store(&settings)?;
     let safe_url = validate_open_url(&body.url)?;
@@ -580,8 +623,9 @@ async fn get_doc_asset(Path(filename): Path<String>) -> Result<Response, ApiErro
 async fn export_collection(
     State(state): State<AppState>,
     Path(collection_id): Path<i64>,
-    Query(params): Query<ExportQuery>,
+    params: Result<Query<ExportQuery>, QueryRejection>,
 ) -> Result<Response, ApiError> {
+    let Query(params) = params?;
     let settings = (state.settings_fn)();
     let store = require_store(&settings)?;
     let fmt = if params.fmt == "csv" { "csv" } else { "json" };
@@ -597,6 +641,70 @@ async fn export_collection(
         content,
     )
         .into_response())
+}
+
+/// Map axum JSON extractor rejections onto the typed error contract, mirroring
+/// Python's `request_validation_handler` (netrail/main.py). Every 4xx from the
+/// API must be `{code, detail, status}` — never plain-text extractor output.
+impl From<JsonRejection> for ApiError {
+    fn from(rejection: JsonRejection) -> Self {
+        let text = rejection.body_text();
+        let lower = text.to_lowercase();
+        let err: NetRailError = if lower.contains("missing field `query`")
+            || (lower.contains("query") && !lower.contains("max_results"))
+        {
+            NetRailError::InvalidQuery {
+                code: "QUERY_INVALID",
+                message: "Query must be 1-500 characters.".into(),
+            }
+        } else if lower.contains("missing field `url`") {
+            NetRailError::InvalidOpenUrl {
+                code: "OPEN_URL_INVALID",
+                message: "URL is required.".into(),
+            }
+        } else if lower.contains("max_results") {
+            NetRailError::InvalidConfig {
+                code: "CONFIG_MAX_RESULTS",
+                message: "max_results must be between 1 and 50.".into(),
+            }
+        } else if lower.contains("`mode`") {
+            NetRailError::InvalidQuery {
+                code: "QUERY_INVALID",
+                message: "mode must be 'web' or 'images'.".into(),
+            }
+        } else if lower.contains("missing field `name`") {
+            NetRailError::InvalidConfig {
+                code: "COLLECTION_NAME_INVALID",
+                message: "Collection name must be 1-120 characters.".into(),
+            }
+        } else if lower.contains("title") {
+            NetRailError::InvalidConfig {
+                code: "COLLECTION_ITEM_TITLE_INVALID",
+                message: "Title must be 1-500 characters.".into(),
+            }
+        } else if lower.contains("notes") {
+            NetRailError::InvalidConfig {
+                code: "COLLECTION_ITEM_NOTES_INVALID",
+                message: "Notes must be at most 2000 characters.".into(),
+            }
+        } else {
+            NetRailError::InvalidConfig {
+                code: "REQUEST_INVALID",
+                message: text,
+            }
+        };
+        err.into()
+    }
+}
+
+impl From<QueryRejection> for ApiError {
+    fn from(rejection: QueryRejection) -> Self {
+        NetRailError::InvalidConfig {
+            code: "REQUEST_INVALID",
+            message: rejection.body_text(),
+        }
+        .into()
+    }
 }
 
 fn require_store(settings: &Settings) -> Result<HistoryStore, ApiError> {
@@ -633,5 +741,44 @@ impl IntoResponse for ApiError {
             "status": self.status.as_u16(),
         });
         (self.status, Json(body)).into_response()
+    }
+}
+
+#[cfg(test)]
+mod token_csp_tests {
+    use super::*;
+
+    #[test]
+    fn csp_hash_matches_injected_script_content() {
+        let (snippet, hash) = token_script_parts("tok-42\"quote\\back");
+        let content = snippet
+            .strip_prefix("<script>")
+            .and_then(|s| s.strip_suffix("</script>"))
+            .expect("script wrapper");
+        let digest = sha2::Sha256::digest(content.as_bytes());
+        let b64 = base64::engine::general_purpose::STANDARD.encode(digest);
+        assert_eq!(hash, format!("'sha256-{b64}'"));
+    }
+
+    #[test]
+    fn csp_with_script_hash_keeps_other_directives() {
+        let csp = csp_with_script_hash("'sha256-abc'").to_str().unwrap().to_string();
+        assert!(csp.contains("script-src 'self' 'sha256-abc'"));
+        assert!(csp.contains("img-src 'self' https: data:"));
+        assert!(csp.contains("connect-src 'self'"));
+        // script-src must not regain unsafe-inline; style-src keeps it for the UI.
+        assert!(!csp.contains("script-src 'self' 'unsafe-inline'"));
+    }
+
+    #[test]
+    fn no_token_means_no_injection() {
+        let prev = auth::api_token_from_env();
+        std::env::remove_var("NETRAIL_API_TOKEN");
+        let (html, hash) = inject_token_script("<!DOCTYPE html><head></head><body></body>");
+        assert_eq!(html, "<!DOCTYPE html><head></head><body></body>");
+        assert!(hash.is_none());
+        if let Some(token) = prev {
+            std::env::set_var("NETRAIL_API_TOKEN", token);
+        }
     }
 }

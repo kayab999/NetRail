@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import os
 import re
 import threading
@@ -146,9 +148,12 @@ async def api_auth_middleware(request: Request, call_next) -> Response:
 @app.middleware("http")
 async def security_headers(request: Request, call_next) -> Response:
     response = await call_next(request)
-    response.headers["Content-Security-Policy"] = CSP
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["Referrer-Policy"] = "no-referrer"
+    if "Content-Security-Policy" not in response.headers:
+        response.headers["Content-Security-Policy"] = CSP
+    if "X-Content-Type-Options" not in response.headers:
+        response.headers["X-Content-Type-Options"] = "nosniff"
+    if "Referrer-Policy" not in response.headers:
+        response.headers["Referrer-Policy"] = "no-referrer"
     return response
 
 
@@ -225,6 +230,15 @@ def _fts_query(q: str) -> str:
     return " ".join(f'"{part}"' for part in cleaned.split())
 
 
+def _token_script_csp_hash(token: str) -> str:
+    """CSP sha256 hash of the exact inline token script, so `script-src 'self'`
+    can whitelist it while still blocking every other inline script."""
+    escaped = token.replace("\\", "\\\\").replace('"', '\\"')
+    content = f'window.NETRAIL_API_TOKEN="{escaped}";'
+    digest = hashlib.sha256(content.encode("utf-8")).digest()
+    return f"'sha256-{base64.b64encode(digest).decode()}'"
+
+
 @app.get("/")
 async def index() -> Response:
     path = STATIC_DIR / "index.html"
@@ -235,6 +249,7 @@ async def index() -> Response:
         )
     html = path.read_text(encoding="utf-8")
     token = api_token_from_env()
+    headers: dict[str, str] = {}
     if token and inject_ui_token():
         escaped = token.replace("\\", "\\\\").replace('"', '\\"')
         snippet = f'<script>window.NETRAIL_API_TOKEN="{escaped}";</script>'
@@ -242,7 +257,11 @@ async def index() -> Response:
             html = html.replace("</head>", snippet + "</head>", 1)
         else:
             html = snippet + html
-    return HTMLResponse(html)
+        headers["Content-Security-Policy"] = CSP.replace(
+            "script-src 'self'",
+            f"script-src 'self' {_token_script_csp_hash(token)}",
+        )
+    return HTMLResponse(html, headers=headers)
 
 
 @app.get("/api/health")

@@ -151,3 +151,50 @@ def test_strict_backend_rejects_localhost(monkeypatch):
     with pytest.raises(NetRailError) as exc:
         validate_backend_url("http://127.0.0.1:8080", strict=True)
     assert exc.value.code == "BACKEND_URL_STRICT_PRIVATE"
+
+
+def test_malformed_bodies_return_typed_codes():
+    missing = client.post("/api/search", content=b"{}", headers={"Content-Type": "application/json"})
+    assert missing.status_code == 400
+    assert missing.json()["code"] == "QUERY_INVALID"
+
+    wrong_type = client.post(
+        "/api/search",
+        content=b'{"query": 123}',
+        headers={"Content-Type": "application/json"},
+    )
+    assert wrong_type.status_code == 400
+    assert wrong_type.json()["code"] == "QUERY_INVALID"
+
+    bad_json = client.post("/api/search", content=b"{bad", headers={"Content-Type": "application/json"})
+    assert bad_json.status_code == 400
+    assert bad_json.json()["code"] == "REQUEST_INVALID"
+
+    out_of_range = client.post(
+        "/api/search",
+        content=b'{"query": "rust", "max_results": 999}',
+        headers={"Content-Type": "application/json"},
+    )
+    assert out_of_range.status_code == 400
+    assert out_of_range.json()["code"] == "CONFIG_MAX_RESULTS"
+
+    missing_url = client.post("/api/open", content=b"{}", headers={"Content-Type": "application/json"})
+    assert missing_url.status_code == 400
+    assert missing_url.json()["code"] == "OPEN_URL_INVALID"
+
+
+def test_token_injection_csp_allows_script_hash(monkeypatch):
+    monkeypatch.setenv("NETRAIL_API_TOKEN", "hash-test-token")
+    response = client.get("/")
+    csp = response.headers.get("Content-Security-Policy", "")
+    assert "script-src 'self' 'sha256-" in csp, csp
+    assert "NETRAIL_API_TOKEN=\"hash-test-token\"" in response.text
+    assert "script-src 'self' 'unsafe-inline'" not in csp
+    monkeypatch.delenv("NETRAIL_API_TOKEN", raising=False)
+    response = client.get("/")
+    assert response.headers.get("Content-Security-Policy") == (
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'; "
+        "base-uri 'self'; form-action 'self'"
+    )
+    assert "NETRAIL_API_TOKEN" not in response.text

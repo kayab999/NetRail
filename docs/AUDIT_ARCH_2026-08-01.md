@@ -167,8 +167,8 @@ Severity key: **P0** ship/stop · **P1** real bypass/contract break/feature-defe
 
 | ID | Sev | Title | Evidence | Fix direction |
 |----|-----|-------|----------|---------------|
-| A1 | P1 | Rust 422 responses break the typed-error contract | Live: missing/`Content-Type`-less/type-mismatched bodies → plain-text 422 (`Failed to deserialize…`, `Expected request with Content-Type…`); Python maps to typed 400 codes (main.py:72-129); neither api_error_codes.rs nor parity harness covers it | Axum custom extractor rejection → `ApiError` mapping (400/422→typed codes); add malformed-body vectors to parity harness + both test suites |
-| A2 | P1 | Token injection defeats itself via CSP `script-src 'self'` | Live: `/` with `NETRAIL_API_TOKEN` serves inline token script under a CSP that blocks inline scripts; UI then fails all API calls with 401 | Add a per-response CSP nonce for the injected script (or serve the token via `X-NetRail-Token`-compatible `<meta>`/JS file), then E2E-verify token mode; update SECURITY.md |
+| A1 | P1 | Rust 422 responses break the typed-error contract | Live: missing/`Content-Type`-less/type-mismatched bodies → plain-text 422 (`Failed to deserialize…`, `Expected request with Content-Type…`); Python maps to typed 400 codes (main.py:72-129); neither api_error_codes.rs nor parity harness covers it | **✅ Closed 2026-08-01** — axum `JsonRejection`/`QueryRejection` → `ApiError` mapping (field-aware, mirrors Python), explicit `CONFIG_MAX_RESULTS` range check on search, 7 new integration tests + 5 parity probes |
+| A2 | P1 | Token injection defeats itself via CSP `script-src 'self'` | Live: `/` with `NETRAIL_API_TOKEN` serves inline token script under a CSP that blocks inline scripts; UI then fails all API calls with 401 | **✅ Closed 2026-08-01** — `'sha256-…'` hash of the exact script added to `script-src` on the index response (Rust + Python); middleware inserts defaults only when absent; verified live (hash matches header) + tests |
 | A15 | P1 | DNS pin on open unresolved (SEC-2026-04) | security.rs validates syntax only; browser resolves after validation | Roadmap: resolve-at-open with DNS-over-HTTPS + compare against blocklist before spawn; or hand browser a host-only URL and pin |
 | A3 | P2 | Per-request SQLite reopen + dead singleton; no WAL/busy_timeout | history/mod.rs:31, 109-117, 143-144, 591-611; db.py:82 | Open one store in `AppState`; enable `journal_mode=WAL`, `busy_timeout`; drop `STORE`/`with_store` dead code; sync Python singleton behavior |
 | A4 | P2 | No graceful shutdown / signal handling | mod.rs:88; desktop.rs:52-56; bin/netrail-api.rs:12-18 | `with_graceful_shutdown` + tokio signal; close DB conn; document systemd unit pattern |
@@ -199,7 +199,7 @@ Severity key: **P0** ship/stop · **P1** real bypass/contract break/feature-defe
 | 9 | Webview E2E for focus-search/docs bridge | A7 + handoff P1 | M | M |
 | 10 | CI: `cargo audit` + `npm audit` + artifact signing | — | S–M | L |
 
-**Recommended sequence:** 1–2 (1.4.2 hotfix), 3–4–7 (1.5.0 hardening), 5–6–9 (1.6.0 ops), 8 (enterprise readiness gate, before any multi-user story).
+**Recommended sequence:** 1–2 (1.4.2 hotfix) — **done 2026-08-01**, see closure notes in §6 — then 3–4–7 (1.5.0 hardening), 5–6–9 (1.6.0 ops), 8 (enterprise readiness gate, before any multi-user story).
 
 ---
 

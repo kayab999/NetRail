@@ -100,6 +100,14 @@ print('health ok', h['version'])
 
 probe POST /api/search '{"query":"","mode":"web"}' QUERY_INVALID 400
 
+# Typed-error contract on malformed bodies (A1): both stacks must return
+# {code, detail, status} — never plain-text extractor output.
+probe POST /api/search '{}' QUERY_INVALID 400
+probe POST /api/search '{"query":123}' QUERY_INVALID 400
+probe POST /api/search '{bad' REQUEST_INVALID 400
+probe POST /api/search '{"query":"x","max_results":999}' CONFIG_MAX_RESULTS 400
+probe POST /api/open '{}' OPEN_URL_INVALID 400
+
 # Every open_url vector in the shared golden fixture must behave identically
 # on the live Rust binary. Python parity is covered by test_url_policy.py.
 "$PY" - "$ROOT/tests/fixtures/url_policy.json" <<'PYEOF'
