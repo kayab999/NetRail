@@ -4,16 +4,19 @@
 |-------|--------|
 | **Audience** | OpenCode / any zero-context coding agent |
 | **Product** | NetRail — local privacy-first research console (Linux) |
-| **Version (SSOT)** | **1.6.1** (`scripts/check-versions.sh`, 5 files) |
+| **Version (SSOT)** | **1.6.4** (`scripts/check-versions.sh`, 5 files) |
 | **License** | AGPL-3.0 |
 | **Repo** | https://github.com/kayab999/NetRail |
-| **Handoff date** | 2026-08-02 (supersedes `HANDOFF_OPENCODE_2026-08-01.md`) |
-| **Audit refresh** | 2026-08-02 post-v1.6.3 — findings **NR-01..NR-07** in §6A (remediations deferred) |
-| **HEAD (at audit)** | `bc63068` — `docs: post-1.6.3 refresh — release closed (R3/R4), backlog now don't-build only` |
-| **Branch** | `main` **in sync with `origin/main`** (at audit start) |
-| **Working tree** | Audit wrote **only** this handoff (§6A / §9 P0 / resume prompt); remediations not started |
-| **Releases** | `v1.6.0` + `v1.6.1` published on GitHub (assets: AppImage/deb/rpm/netrail-api/SBOM.txt/SHA256SUMS + sigstore `.sig`/`.pem`, signature verified) |
+| **Handoff date** | 2026-08-02 (supersedes earlier same-day snapshots) |
+| **HEAD** | `a12dbed` — `chore(release): consolidate AppImage-first Linux packaging for 1.6.4` |
+| **Prior commit** | `e436e6d` — `feat(1.6.4): close audit remediations NR-01..NR-14` |
+| **Branch** | `main` **== `origin/main`** (pushed) |
+| **Working tree** | Clean (except uncommitted handoff refresh if editing now) |
+| **Tag** | **`v1.6.4`** on `a12dbed` (pushed) |
+| **GitHub Release assets** | ⚠️ **Not published yet** — Release workflow run `30771210870` **failed** at Tauri AppImage / `linuxdeploy` (deb+rpm stages succeeded before fail). See §9 P0. |
 | **Primary path** | Rust Axum API + Tauri 2 desktop; Python FastAPI for Docker/Flatpak/tests |
+| **Official ship artifact** | **AppImage** (CI authority); secondaries `.deb` / `.rpm` / `netrail-api` |
+| **Packaging SSOT** | [packaging/README.md](../packaging/README.md) + `scripts/build-desktop-linux.sh` |
 | **API bind** | `127.0.0.1:7421` only |
 | **UI** | Vanilla HTML/CSS/JS in `netrail/static/` (no React/Vue; no PySide6/Qt) |
 | **api_contract** | **1.4** |
@@ -22,11 +25,12 @@
 
 1. This handoff  
 2. [HANDOVER.md](../HANDOVER.md) — freeze invariants + resume prompt  
-3. [docs/AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) — architecture/reliability audit (A1–A15, all closed)  
-4. [docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md) — adversarial findings (N1–N4 closed) + residuals register  
-5. [SECURITY.md](../SECURITY.md) — threat model  
-6. [docs/API_ERRORS.md](API_ERRORS.md) — typed error contract (incl. `READONLY_MODE`)  
-7. Previous handoff: `docs/HANDOFF_OPENCODE_2026-08-01.md` (historical session record)
+3. [packaging/README.md](../packaging/README.md) — AppImage-first distribution contract  
+4. [docs/AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) — A1–A15 closed  
+5. [docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md) — N1–N4 closed + residuals  
+6. [SECURITY.md](../SECURITY.md) — threat model (incl. readonly)  
+7. [docs/API_ERRORS.md](API_ERRORS.md) — typed errors (incl. `READONLY_MODE`, `CONFIG_SAVE_FAILED`)  
+8. [docs/RELEASE_v1.6.4.md](RELEASE_v1.6.4.md) — 1.6.4 notes
 
 ---
 
@@ -44,32 +48,36 @@ You are continuing **NetRail**, a single-user Linux research console: **query �
 
 ## 1. Executive verdict (enterprise-grade)
 
-### 1.1 Product posture (post-1.6.1)
+### 1.1 Product posture (post-1.6.4)
 
 | Dimension | Score (0–10) | Assessment |
 |-----------|-------------:|------------|
 | Core job (search → rail → open) | **9** | End-to-end path solid on both stacks |
-| Threat-model fit (single-user local) | **9** | Localhost API by design; DNS pin on open (A15) |
-| Security vs local attacker | **7.5** | Token (1.4.0) + DNS pin (1.6.1) + read-only gate (1.6.2-unreleased); default still open on loopback by design |
-| Dual-stack parity | **9** | N1–N4 fixture + live parity harness drive both stacks from one SSOT |
-| Correctness / tests | **9** | 162 pytest, 113 cargo tests, clippy `-D warnings`, webview E2E (matrix #9), CSS layout guard (E3) |
-| Ops / packaging | **8.5** | deb/rpm/AppImage/CI + cosign-signed releases; systemd unit + backup script + read-only mode (unreleased) |
-| Docs truth | **9** | Audit passes re-verified claims; residuals honestly documented |
-| Enterprise multi-user / SOC2-ish | **3.5** | Out of stated model; token + audit + read-only are optional footholds only |
-| Desktop UX polish | **8** | Keyboard rail, recovery UX, Spotlight focus, tray/hotkey |
-| **Overall (v1 desktop product)** | **~8.6** | Soft GA; post-1.6.3 audit found 2×P2 (NR-01 rate-limit hole, NR-02 non-atomic settings) — see §6A |
+| Threat-model fit (single-user local) | **9** | Localhost API; DNS pin (A15); readonly gate |
+| Security / correctness | **9** | NR-01..NR-14 closed (rate-limit hole, atomic settings race, audit, constant-time token, docs) |
+| Dual-stack parity | **9** | Fixture + live parity harness |
+| Correctness / tests | **9** | 166 pytest, 85 lib + 31 integration cargo (approx), clippy `-D warnings` |
+| Ops / packaging **contract** | **9** | AppImage-first SSOT, build script, desktop metadata, XDG documented |
+| Ops / packaging **published assets** | **6** | **v1.6.4 GitHub Release not published** — CI AppImage/`linuxdeploy` failed (see §9) |
+| Docs truth | **9** | Residuals honest; packaging SSOT live |
+| Enterprise multi-user / SOC2-ish | **3.5** | Out of stated model |
+| Desktop UX polish | **8** | Keyboard rail, recovery UX, Spotlight, tray/hotkey |
+| **Overall (v1 desktop product)** | **~8.8 code / ~8.0 ship** | Product + pipeline defined; **finish release CI** to close the ship gap |
 
-**Verdict:** NetRail is a **credible single-user localhost research console** with production-quality open-URL controls (including resolve-and-pin before browser spawn), typed errors, rate limits, optional auth/audit/read-only gates, and a Rust-primary engine. Residual risk clusters around (1) unauthenticated default localhost API (by design, token optional), (2) dual-stack maintenance cost, (3) DDGS/provider fragility, (4) time-based DNS rebinding (documented), (5) remote image CDN loads (R7).
+**Verdict:** NetRail 1.6.4 on `main` is a **distributable product contract**: audit closed, dual-stack remediations landed, single official packaging path (Tauri AppImage), XDG data outside the bundle, no telemetry. What remains operational is **making CI publish the v1.6.4 assets** after the `linuxdeploy` failure.
 
 ### 1.2 Release / git posture (critical for agents)
 
 | Fact | Detail |
 |------|--------|
-| Committed product version | **1.6.1** on `main`, released + published (tag `v1.6.1` → `807bd51`) |
-| Remote | `main` == `origin/main` (**everything pushed**) |
-| Working tree | **Clean** |
-| CI pins (verified live on v1.6.1) | `cargo-audit 0.22.2` (0.21.x can't parse CVSS 4.0), cosign verify needs `--certificate-identity-regexp` + `--certificate-oidc-issuer` |
-| Policy | No force-push; no amend of published history; version bumps touch all 5 SSOT files or CI fails |
+| Committed product version | **1.6.4** on `main` |
+| Commits (traceable stack) | `e436e6d` remediations → `a12dbed` packaging |
+| Tag | `v1.6.4` → `a12dbed` (pushed) |
+| Remote | `main` == `origin/main` |
+| Working tree | Clean after handoff commit |
+| GitHub Release page | **missing** until workflow succeeds |
+| CI pins | `cargo-audit 0.22.2`; cosign verify needs identity-regexp + OIDC issuer |
+| Policy | No force-push; no amend of published history; version SSOT 5 files |
 
 ### 1.3 What “enterprise” means here
 
@@ -84,9 +92,11 @@ Enterprise *readiness for the stated threat model* ≠ multi-tenant SaaS. For Ne
 | Optional API token | ✅ `NETRAIL_API_TOKEN` (default off) |
 | Audit log (JSONL, rotated) | ✅ Opt-in; rotation + JSON logs since 1.6.0 (A5) |
 | Strict backend URLs | ✅ Opt-in (homelab vs cloud split) |
-| **Read-only mode** | ✅ `NETRAIL_READONLY=1` → `403 READONLY_MODE` on all mutations (unreleased, dual-stack + tests) |
-| Systemd unit + DB backup | ✅ `packaging/netrail-api.service`, `scripts/backup-db.sh` (unreleased) |
-| SBOM / dep audit in CI | ✅ SBOM.txt per release; cargo-audit/npm-audit/pip-audit gated; **pinned** in every binary (`--sbom`) + in the deb/rpm/AppImage (E2, 2026-08-02) |
+| **Read-only mode** | ✅ `NETRAIL_READONLY=1` → `403 READONLY_MODE` on admin mutations; search/visit history still recorded (documented) |
+| Systemd unit + DB backup | ✅ `packaging/netrail-api.service`, `scripts/backup-db.sh` |
+| SBOM / dep audit in CI | ✅ Embedded `--sbom` + package path; audits gated |
+| AppImage-first packaging SSOT | ✅ `packaging/README.md`, `scripts/build-desktop-linux.sh`, desktop template |
+| v1.6.4 signed GitHub assets | ⚠️ **Blocked** on Release CI AppImage/`linuxdeploy` failure |
 | Formal SDL / multi-user RBAC | ❌ Out of scope |
 
 ---
@@ -365,34 +375,44 @@ Source of truth: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) (A1–A15 
 
 ---
 
-## 6B. Post-remediation verification — 2026-08-02 (Antigravity + full sweep)
+## 6B. Post-remediation + packaging — **closed on main** (2026-08-02)
 
 | Field | Value |
 |-------|--------|
-| **Tree** | SSOT **1.6.4**. Working tree **dirty / uncommitted** until human asks to commit |
-| **Full sweep** | NR-01..NR-14 closed in tree (NR-07 residual; NR-15 = commit/release process) |
-| **Verdict** | Ready to commit; cut **1.6.4** after commit + CI green. No known open P2. |
+| **Tree** | SSOT **1.6.4**, HEAD `a12dbed`, `main` == `origin/main` |
+| **Commits** | `e436e6d` NR-01..NR-14 · `a12dbed` AppImage-first packaging |
+| **Tag** | `v1.6.4` pushed |
+| **Verdict** | Code + packaging **contract** shipped to git. **GitHub Release assets not published** (CI fail). |
 
 ### 6B.1 NR checklist (final)
 
 | ID | Status | Evidence |
 |----|--------|----------|
-| **NR-01** | ✅ | Dual-stack `check_mutate` on collection item add; Python + Rust 429 tests |
-| **NR-02/08** | ✅ | Unique temps: Python `mkstemp`; Rust `pid.seq.nanos` + rename; concurrent tests both stacks |
-| **NR-03** | ✅ | `collection.item.add` audit dual-stack + Python test |
-| **NR-04** | ✅ | SECURITY.md + DISTRIBUTION + API_ERRORS (history still logged under readonly) |
-| **NR-05** | ✅ | Constant-time token compare dual-stack; `hmac` top-level import |
-| **NR-06** | ✅ | CONTEXT_DUMP SSOT **1.6.4** |
-| **NR-07** | ✅ residual | DNS-pin class; documented |
-| **NR-09..14** | ✅ | SECURITY, dump version, hygiene, CONFIG_SAVE→500 Internal, Rust save + rate-limit tests |
-| **NR-15** | open process | Commit + tag when human requests |
+| **NR-01** | ✅ on main | Dual-stack `check_mutate` on collection item add; Python + Rust 429 tests |
+| **NR-02/08** | ✅ on main | Unique temps (`mkstemp` / `pid.seq.nanos`); concurrent tests |
+| **NR-03** | ✅ on main | `collection.item.add` audit dual-stack |
+| **NR-04** | ✅ on main | SECURITY + DISTRIBUTION + API_ERRORS (history still logged under readonly) |
+| **NR-05** | ✅ on main | Constant-time token compare |
+| **NR-06** | ✅ on main | CONTEXT_DUMP **1.6.4** |
+| **NR-07** | ✅ residual | DNS-pin / homoglyph class; documented |
+| **NR-09..14** | ✅ on main | Docs, hygiene, CONFIG_SAVE→500, Rust tests |
+| **NR-15** | ✅ git | Committed + tagged + pushed |
+| **NR-16** | ⚠️ open | **Release CI failed** — see §9 P0 |
 
-### 6B.2 Residual (accepted / process only)
+### 6B.2 Packaging contract (official path)
 
-| Item | Notes |
-|------|-------|
-| Q16 TTL rebinding, R7 images, unauth localhost default, FTS plaintext | Unchanged accepted residuals |
-| 1.6.4 not yet committed/tagged | Process — not a code defect |
+| Item | Path / command |
+|------|----------------|
+| SSOT | `packaging/README.md` |
+| One-shot build | `bash scripts/build-desktop-linux.sh` (`npm run package:linux`) |
+| Desktop template | `packaging/linux/netrail.desktop.hbs` |
+| Tauri metadata | `bundle.category: Utility`, short/longDescription |
+| Legacy non-ship | `packaging/appimage/build.sh` (PyInstaller) — **do not ship** |
+| User data | XDG only: `~/.config/netrail/`, `~/.local/share/netrail/` |
+
+### 6B.3 Accepted residuals (unchanged)
+
+Q16 TTL rebinding · R7 image CDN · unauth localhost default · FTS plaintext · fixed-window rate limits · dual-stack cost · multi-user out of scope.
 
 ---
 
@@ -429,11 +449,14 @@ bash scripts/webview-e2e.sh
 # Desktop dev
 npm ci && npm run dev
 
-# Desktop release (AppImage needs patchelf)
-APPIMAGE_EXTRACT_AND_RUN=1 npm run build
+# Official Linux release tree → dist/release/
+bash scripts/build-desktop-linux.sh
+# or: npm run package:linux
+# AppImage needs patchelf; without it expect AppImage fail (deb/api may still build)
 ```
 
-Gates as of 2026-08-02 (post backlog E2/E3/E5): **162 pytest · 113 cargo tests · clippy `-D warnings` clean · parity + E2E smokes green**.
+Gates at 1.6.4 land: **166 pytest · ~85 cargo lib · ~31 cargo integration · clippy `-D warnings`**.  
+Release CI (tag `v1.6.4`): **failed** at AppImage/`linuxdeploy` — re-run after fix (§9 P0).
 
 ### Useful env
 
@@ -478,24 +501,33 @@ Gates as of 2026-08-02 (post backlog E2/E3/E5): **162 pytest · 113 cargo tests 
 
 ---
 
-## 9. Remaining work points (established 2026-08-02; **audit refresh same day**)
+## 9. Remaining work points (post-1.6.4 push)
 
-### P0 — Full sweep status (see §6B)
+### P0 — Unblock GitHub Release for v1.6.4 (**do this next**)
 
-| # | Item | Status |
-|---|------|--------|
-| NR-01..NR-14 | Code + docs + tests | ✅ closed in working tree |
-| NR-15 | Commit + push + tag **1.6.4** | ⏳ human request |
+| # | Item | Status / notes |
+|---|------|----------------|
+| **NR-16** | Fix Release workflow AppImage step | Run `30771210870` **failed**: `failed to run linuxdeploy` after deb+rpm bundled successfully. Same class of failure seen locally without healthy AppImage toolchain. |
+| R5a | Re-run or re-tag after fix | Prefer diagnose → patch if code/config → `gh workflow run` / delete+repush tag only if policy allows; **no force-push of main**. Target assets: AppImage, deb, rpm, netrail-api, SBOM, SHA256SUMS, cosign. |
+| R5b | Post-release doc refresh | After green: HANDOVER HEAD + handoff “assets published”; optional README pin to exact artifact names. |
 
-### P1 — Release hygiene (next release)
+**Debug starting points for NR-16:**
+
+```bash
+gh run view 30771210870 --log-failed
+# Local (needs patchelf + webkit deps):
+bash scripts/build-desktop-linux.sh --skip-tests
+# Suspects: desktop template comments / Categories string; linuxdeploy download;
+# compare working v1.6.3 AppImage path vs 1.6.4 tauri.conf desktopTemplate
+```
+
+### P1 — Release hygiene (history)
 
 | # | Item | Acceptance |
 |---|------|------------|
-| ~~R1~~ | ~~Cut the next release from [Unreleased] delta~~ | **✅ Done 2026-08-02** — v1.6.2 cut (read-only mode + systemd unit + backup script) with the standard SSOT bump + tag; workflow green, cosign verified |
-| ~~R2~~ | ~~Post-release doc refresh~~ | **✅ Done 2026-08-02** — DISTRIBUTION version headers; HANDOVER HEAD note; CHANGELOG [1.6.2] |
-| ~~R3~~ | ~~Cut v1.6.3~~ | **✅ Done 2026-08-02** — reproducibility & supply chain: E2 SBOM-in-bundle + E5 fixture growth + E3 CSS guard + `docs/RELEASE_ASSURANCE.md`. SSOT 1.6.2→1.6.3 in 5 files; CHANGELOG [1.6.3]; tag `v1.6.3`. First live run of the SBOM-in-bundle verify step **failed** on a real finding (generator emitted a `generated=<timestamp>` → the two job generations differed) → fixed to deterministic commit-provenance (`b68e4d9`), re-tagged; green. Assets: rpm/deb/AppImage/netrail-api/SBOM.txt/SHA256SUMS(.sig/.pem); cosign "Verified OK"; deb/AppImage bundled SBOM byte-identical to the asset (rpm verified in CI); binary `--sbom` == SBOM Rust section (570 pkgs, `netrail@1.6.3`) |
-| ~~R4~~ | ~~Post-1.6.3 doc refresh~~ | **✅ Done 2026-08-02** — DISTRIBUTION (no version headers needed); HANDOVER HEAD note + doc index; handoff release row + resume prompt; CHANGELOG [1.6.3] |
-| R5 | Cut patch **1.6.4** after full-sweep commit + CI green | NR-08 fixed; gates must pass |
+| ~~R1–R4~~ | 1.6.2 / 1.6.3 cuts + doc refresh | ✅ Done earlier 2026-08-02 |
+| ~~R5 code~~ | 1.6.4 remediations + packaging on main + tag | ✅ `e436e6d` + `a12dbed` + tag pushed |
+| R5 assets | Publish signed GitHub Release for `v1.6.4` | ⚠️ **open — NR-16** |
 
 ### P2 — Engineering backlog (not blocking)
 
@@ -540,23 +572,24 @@ Gates as of 2026-08-02 (post backlog E2/E3/E5): **162 pytest · 113 cargo tests 
 
 ---
 
-## 11. Scorecard (post-1.6.1 + enterprise batch)
+## 11. Scorecard (post-1.6.4 on main)
 
 | Criterion | Score | One-liner |
 |-----------|------:|-----------|
 | Core job completeness | 9 | Search → rail → open solid |
-| Safety / data-loss | 9 | Purge confirm; WAL; backup script; read-only gate |
-| Correctness of mutations | 9 | ETag/If-Match settings; typed collection errors; readonly gate tested |
-| Performance | 8 | Load harness + slope + dual-stack benchmarks (Rust ≈573 rps/p50 23 ms; Python ≈295 rps/p50 39 ms) |
-| Usability | 8.5 | Spotlight focus; keyboard rail; recovery UX |
-| Recoverability | 8.5 | Partial fanout, wiki fallback, hide-to-tray, DB backup/restore |
+| Safety / data-loss | 9 | Purge confirm; WAL; backup; readonly gate |
+| Correctness of mutations | 9 | ETag; rate-limit on all mutates incl. collection items; concurrent-safe settings |
+| Performance | 8 | Dual-stack benches on record |
+| Usability | 8.5 | Spotlight; keyboard rail; recovery UX |
+| Recoverability | 8.5 | Fanout partial, wiki fallback, tray, DB backup |
 | Architecture | 8.5 | Clear modules; dual-stack residual cost |
-| Code quality | 8.5 | Small surface; typed errors; clippy clean |
-| Tests | 9 | 162 pytest + 113 cargo + CSS layout guard + webview E2E + live parity smokes |
-| Security (model-fit) | 9 | Open-URL + DNS pin + optional token/audit/readonly |
-| Docs / claims | 9 | Audit truth waves landed; residuals honest |
-| Packaging | 8.5 | CI primary; cosign-signed releases; systemd unit |
-| **Overall** | **~8.8** | Soft GA + active hardening |
+| Code quality | 8.5 | Typed errors; clippy clean |
+| Tests | 9 | Expanded pytest/cargo + concurrent settings tests |
+| Security (model-fit) | 9 | Open-URL + DNS pin + token/audit/readonly |
+| Docs / claims | 9 | Packaging SSOT + honest CI failure note |
+| Packaging contract | 9 | AppImage-first defined; legacy path excluded |
+| Packaging published | 6 | **v1.6.4 Release assets blocked on linuxdeploy** |
+| **Overall** | **~8.7 code / ship pending** | Product ready; finish NR-16 |
 
 ---
 
@@ -566,47 +599,46 @@ Gates as of 2026-08-02 (post backlog E2/E3/E5): **162 pytest · 113 cargo tests 
 You are continuing NetRail (Linux local research console).
 
 READ FIRST:
-  docs/HANDOFF_OPENCODE_2026-08-02.md  ← especially §6A (new audit findings NR-01..07) and §9 P0
+  docs/HANDOFF_OPENCODE_2026-08-02.md  ← §6B closed work + §9 P0 (NR-16 release CI)
+  packaging/README.md                  ← AppImage-first SSOT
   HANDOVER.md
-  docs/AUDIT_ARCH_2026-08-01.md (closed A1–A15) + docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md (residuals)
+  docs/AUDIT_ARCH_2026-08-01.md + docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md (residuals only)
 
-Version: 1.6.3 SSOT. HEAD at audit time = bc63068 (or later if remediations landed).
-main == origin/main when clean. Releases: v1.6.1–v1.6.3 cosign-signed.
+Version: 1.6.4 SSOT. HEAD = a12dbed. main == origin/main. Tag v1.6.4 pushed.
+Commits: e436e6d (NR-01..14 remediations) → a12dbed (packaging consolidation).
+GitHub Release for v1.6.4: NOT published — workflow 30771210870 FAILED at
+  "failed to run linuxdeploy" during AppImage bundle (deb/rpm had started OK).
 
 Stack:
   Rust Axum primary + Tauri 2 desktop; Python FastAPI for Docker/Flatpak/tests.
   UI = netrail/static vanilla JS (NO React, NO PySide6).
   withGlobalTauri: false → prefer window.eval bridges.
+  Official ship path: Tauri AppImage (NOT packaging/appimage PyInstaller).
 
 Invariants:
-  localhost-only :7421; no telemetry; open-URL blocks (encoded loopback, private, rebinding, DDG uddg,
-  trailing-dot normalization, DNS pin at open A15); no Brave key on disk; version SSOT via
-  scripts/check-versions.sh; dual-stack security in both languages; typed errors {code,detail,status}
-  (incl. READONLY_MODE); NETRAIL_READONLY=1 gates ALL mutations; packaged static under /usr/share/netrail/static/.
+  localhost-only :7421; no telemetry; open-URL + DNS pin A15; no Brave key on disk;
+  version SSOT (5 files); dual-stack security; typed errors {code,detail,status};
+  NETRAIL_READONLY gates admin mutations (history still recorded on search/open);
+  XDG data outside bundle; packaged static under /usr/share/netrail/static/.
 
-THIS SESSION / NEXT WORK (audit-only pass already done — remediations):
-  P0 from handoff §9 / §6A:
-    NR-01 P2: rate-limit POST /api/collections/{id}/items (Rust+Python) + 429 tests
-    NR-02 P2: atomic settings write (temp+rename) dual-stack; fix false "atomic" doc claim
-    NR-03 P3: audit event on collection item add
-    NR-04 P3: document or change readonly vs history writes (ask human before behavior change)
-    NR-05 P3: constant-time token compare (optional)
-    NR-06 P3: refresh CONTEXT_DUMP version/sprint drift
-  Do NOT re-open closed A1–A15 / N1–N4 without new evidence.
-  Do NOT build accepted residuals (Q16 rebinding, R7 images, multi-user) unless asked.
+NEXT WORK (P0):
+  NR-16: fix Release CI AppImage/linuxdeploy so v1.6.4 assets publish
+    (AppImage, deb, rpm, netrail-api, SBOM, SHA256SUMS, cosign).
+  Do NOT re-open closed A1–A15 / N1–N4 / NR-01..15 without new evidence.
+  Do NOT build accepted residuals (Q16, R7, multi-user) unless asked.
+  After green: post-release handoff/HANDOVER refresh only.
 
 Bootstrap:
   bash scripts/check-versions.sh
   source .venv/bin/activate && pytest tests/ -q
   cd src-tauri && cargo clippy --all-targets -- -D warnings && cargo test
-  cargo build --release --bin netrail-api --no-default-features
-  NETRAIL_RATE_LIMIT=0 bash scripts/e2e-api-smoke.sh && bash scripts/parity-api-smoke.sh
+  bash scripts/build-desktop-linux.sh --skip-tests   # needs patchelf for AppImage
+  gh run view 30771210870 --log-failed
 
-Must not break: search/open, static packaging, Fernet interop, error shape, read-only gate coverage.
+Must not break: search/open, static packaging, Fernet interop, error shape, read-only gate.
 
-Out of scope unless asked: owned corpus, local AI, multi-user auth productization, non-Linux.
-
-Do not force-push. Do not amend published history. Commit + push when the human asks for the batch.
+Out of scope unless asked: owned corpus, local AI, multi-user, non-Linux.
+Do not force-push. Do not amend published history.
 ```
 
 ---
@@ -615,31 +647,31 @@ Do not force-push. Do not amend published history. Commit + push when the human 
 
 | Doc | Role |
 |-----|------|
-| [README.md](../README.md) | Install + pitch |
+| [README.md](../README.md) | Install + pitch (AppImage-first 1.6.4) |
 | [HANDOVER.md](../HANDOVER.md) | Zero-context freeze resume |
-| [SECURITY.md](../SECURITY.md) | Threat model |
-| [CHANGELOG.md](../CHANGELOG.md) | Semver history (1.6.3 released) |
-| [docs/ARCHITECTURE.md](ARCHITECTURE.md) | Lifecycle / design roadmap (current state + next milestones) |
-| [docs/RELEASE_ASSURANCE.md](RELEASE_ASSURANCE.md) | Non-technical trust map |
-| [docs/DISTRIBUTION.md](DISTRIBUTION.md) | Packaging + env table + systemd + backup/restore |
+| [packaging/README.md](../packaging/README.md) | **Packaging SSOT** |
+| [SECURITY.md](../SECURITY.md) | Threat model + readonly |
+| [CHANGELOG.md](../CHANGELOG.md) | Semver history (**1.6.4** on main) |
+| [docs/ARCHITECTURE.md](ARCHITECTURE.md) | Design roadmap |
+| [docs/RELEASE_ASSURANCE.md](RELEASE_ASSURANCE.md) | Trust map |
+| [docs/DISTRIBUTION.md](DISTRIBUTION.md) | Ops, env, systemd, backup |
 | [docs/MANUAL.md](MANUAL.md) | End-user manual |
-| [docs/API_ERRORS.md](API_ERRORS.md) | Error codes (incl. `READONLY_MODE`) |
-| [docs/RELEASE_v1.6.0.md](RELEASE_v1.6.0.md) | 1.6.0 notes |
-| [docs/AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) | Architecture audit (A1–A15 closed) |
-| [docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md) | Adversarial audit (N1–N4 closed, residuals register) |
-| [docs/HANDOFF_OPENCODE_2026-08-01.md](HANDOFF_OPENCODE_2026-08-01.md) | Previous handoff (historical) |
+| [docs/API_ERRORS.md](API_ERRORS.md) | Error codes |
+| [docs/RELEASE_v1.6.4.md](RELEASE_v1.6.4.md) | 1.6.4 notes |
+| [docs/AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) | A1–A15 closed |
+| [docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md) | N1–N4 + residuals |
 | **This file** | OpenCode handoff (current) |
 
 ---
 
 ## 14. Honest closing
 
-NetRail **1.6.3** is a **mature single-user product** for its model: link-first search, hardened open-URL pipeline (syntax + DNS pin), optional operator controls (token, audit, strict backends, read-only, JSON logs), cosign-signed releases, SBOM-in-bundle, and dual entrypoints (desktop + headless). Prior audits closed A1–A15 and N1–N4.
+NetRail **1.6.4 on `main`** is no longer “a version with fixes only”: it is a **distributable product with an operational contract** — audit remediations closed (NR-01..NR-14), AppImage-first packaging SSOT, desktop metadata, XDG boundaries, CI as publish authority.
 
-**This audit (2026-08-02 post-1.6.3)** found **no P0/P1 regressions**, but **two P2 bugs** still open for remediation: incomplete mutate rate-limit on collection item add (**NR-01**), and non-atomic settings persistence despite docs claiming atomic (**NR-02**). P3 hygiene (audit event, readonly semantics docs, constant-time token, CONTEXT_DUMP drift) and accepted residuals (Q16, R7, unauth default) remain.
+What is **not** done yet is the **published GitHub Release** for `v1.6.4`: workflow `30771210870` failed at AppImage/`linuxdeploy` after deb/rpm bundling started. Code and tag are on the remote; **assets and cosign signatures are not**.
 
-OpenCode should treat **§6A + §9 P0 as the work plan**, preserve dual-stack discipline, keep the read-only gate on every new mutation handler, and refuse scope that turns NetRail into multi-tenant SaaS.
+Next agent work is **NR-16** (unblock release), not feature work. Keep dual-stack discipline; do not revive PyInstaller as the ship path; do not re-open closed audit items without new evidence.
 
 ---
 
-*Handoff for OpenCode / human continuity — NetRail 1.6.3 — audit refresh 2026-08-02 — be honest, no scope creep, prefer durable repo state.*
+*Handoff for OpenCode / human continuity — NetRail 1.6.4 on main — 2026-08-02 — be honest: code shipped, Release CI still red (NR-16).*

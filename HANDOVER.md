@@ -3,12 +3,12 @@
 | Field | Value |
 |-------|--------|
 | **Product** | Local privacy-first research console for Linux |
-| **Version** | **1.6.2** (`scripts/check-versions.sh`; hardening Sprints 2–4: chaos/fault injection, resource stability, dual-stack benchmarks) |
+| **Version** | **1.6.4** (`scripts/check-versions.sh`) |
 | **Primary path** | Rust Axum API + Tauri 2 desktop; Python for Docker/Flatpak/tests |
 | **License** | AGPL-3.0 |
 | **Repo** | https://github.com/kayab999/NetRail |
 | **Freeze date** | 2026-07-12 (invariants; state refreshed 2026-08-02) |
-| **HEAD note** | **1.6.3** released — reproducibility & supply chain (SBOM pinned in bundle: embedded in every binary via `--sbom` + packaged in deb/rpm/AppImage at `/usr/share/netrail/SBOM.txt`, release CI asserts both; golden URL-policy fixture grown 43→68 vectors + live backend parity + `ftp://` scheme-code fix; CSS regression guard `tests/test_ui_css.py`; new non-technical trust doc `docs/RELEASE_ASSURANCE.md`). 1.6.2 = hardening Sprints 2–4 (chaos/fault-injection suite + fixes, resource-stability load harness, dual-stack benchmarks; read-only mode + systemd + backup from 1.6.1 enterprise batch). 1.6.1 shipped DNS pin A15, webview E2E matrix #9, cosign-signed CI matrix #10, FTS sync fix A13, typed 422s A1, CSP-safe token A2, ETag settings A6, per-identity rate limits A9, audit rotation A5, WAL + graceful shutdown A4, schema versioning A11. Audit: [docs/AUDIT_ARCH_2026-08-01.md](docs/AUDIT_ARCH_2026-08-01.md) + [docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md) + [docs/hardening-report-v1.6.1.md](docs/hardening-report-v1.6.1.md) |
+| **HEAD note** | **1.6.4 on main** (`a12dbed` packaging + `e436e6d` NR remediations; tag `v1.6.4` pushed). Audit NR-01..NR-14 closed (collection item rate-limit, concurrent-safe atomic settings, audit event, constant-time token, readonly docs, etc.). Official distribution: **AppImage-first** — [packaging/README.md](packaging/README.md), `scripts/build-desktop-linux.sh`. **GitHub Release assets for v1.6.4 not yet published** — Release CI run failed at AppImage/`linuxdeploy` (see handoff §9 NR-16). Prior: 1.6.3 SBOM-in-bundle + fixture growth + CSS guard; 1.6.2 chaos/load/bench; 1.6.1 DNS pin A15 + E2E. Full agent handoff: [docs/HANDOFF_OPENCODE_2026-08-02.md](docs/HANDOFF_OPENCODE_2026-08-02.md). Audits: [AUDIT_ARCH](docs/AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE](docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). |
 
 ---
 
@@ -226,27 +226,30 @@ Non-happy-path covered: empty query, bad mode/settings, open localhost/private/e
 ```
 You are continuing NetRail (Linux local research console, Rust-primary + Python fallback).
 
-Read HANDOVER.md first. Repo: NetRail. Version 1.6.3 (HEAD on main, tree clean, all pushed). Remaining work: the don't-build backlog only (DNS resolve-and-warn C3, images-off C4, multi-user/RBAC, egress proxy/TLS pinning, metrics/SLO, Windows/macOS) — see docs/HANDOFF_OPENCODE_2026-08-02.md §9 and docs/ARCHITECTURE.md "Current state".
+Read first:
+  docs/HANDOFF_OPENCODE_2026-08-02.md  (§6B closed work, §9 P0 NR-16)
+  packaging/README.md
+  HANDOVER.md
 
-Invariants: localhost-only API, no telemetry, open-URL blocks (incl. encoded loopback + private IPs + trailing-dot normalization + DNS pin at open), no Brave key on disk, version SSOT via scripts/check-versions.sh, typed errors {code,detail,status}, NETRAIL_READONLY=1 gates all mutations.
+Version 1.6.4 SSOT. HEAD a12dbed on main (pushed). Tag v1.6.4 pushed.
+GitHub Release assets for v1.6.4 NOT published — CI failed at linuxdeploy/AppImage (NR-16).
+
+Invariants: localhost-only API, no telemetry, open-URL + DNS pin, no Brave key on disk,
+version SSOT, typed errors, NETRAIL_READONLY gates admin mutations (history still on search/open),
+XDG data outside bundle, AppImage-first ship path (not PyInstaller).
+
+NEXT: fix Release CI AppImage/linuxdeploy and publish v1.6.4 assets. Then post-release doc refresh.
+Do not re-open closed audits without evidence. Don't-build backlog only if asked (Q16, R7, multi-user).
 
 Bootstrap:
   bash scripts/check-versions.sh
   source .venv/bin/activate && pytest tests/ -q
   cd src-tauri && cargo clippy --all-targets -- -D warnings && cargo test
-  cargo build --release --bin netrail-api --no-default-features
-  NETRAIL_RATE_LIMIT=0 bash scripts/e2e-api-smoke.sh
-  NETRAIL_RATE_LIMIT=0 bash scripts/parity-api-smoke.sh
+  bash scripts/build-desktop-linux.sh --skip-tests
+  gh run view 30771210870 --log-failed
 
-Primary risks: privacy of queries to backends; local process abuse of :7421; history encryption degrade.
-
-Must not break: search/open, static UI packaging, Fernet interop, typed errors.
-
-Out of scope unless asked: owned corpus, local AI, multi-user auth, non-Linux.
-
-Last freeze residual: publish tag v1.2.2; AppImage needs patchelf locally; dual-stack maintenance.
-
-Do not force-push. Do not push unless I ask.
+Must not break: search/open, static packaging, Fernet interop, typed errors, read-only gate.
+Do not force-push. Do not amend published history.
 ```
 
 ---
@@ -255,13 +258,15 @@ Do not force-push. Do not push unless I ask.
 
 | Doc | Role |
 |-----|------|
-| [docs/HANDOFF_OPENCODE_2026-08-02.md](docs/HANDOFF_OPENCODE_2026-08-02.md) | **OpenCode handoff** — enterprise analysis + remaining work plan (backlog, residuals) |
+| [docs/HANDOFF_OPENCODE_2026-08-02.md](docs/HANDOFF_OPENCODE_2026-08-02.md) | **OpenCode handoff** — 1.6.4 state + NR-16 release CI |
+| [packaging/README.md](packaging/README.md) | **Packaging SSOT** (AppImage-first) |
 | [README.md](README.md) | Install + pitch |
 | [SECURITY.md](SECURITY.md) | Threat model |
 | [docs/API_ERRORS.md](docs/API_ERRORS.md) | Error codes |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Lifecycle roadmap (current state + next milestones) |
-| [docs/RELEASE_ASSURANCE.md](docs/RELEASE_ASSURANCE.md) | Non-technical trust map (what the project guarantees + where) |
-| [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | Packaging |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Lifecycle roadmap |
+| [docs/RELEASE_ASSURANCE.md](docs/RELEASE_ASSURANCE.md) | Non-technical trust map |
+| [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | Ops packaging + env |
+| [docs/RELEASE_v1.6.4.md](docs/RELEASE_v1.6.4.md) | 1.6.4 notes |
 | [docs/MANUAL.md](docs/MANUAL.md) | User manual |
 | [docs/AUDIT_ENTERPRISE_2026-07-31.md](docs/AUDIT_ENTERPRISE_2026-07-31.md) | Post-GA enterprise audit + workplan |
 | [docs/AUDIT_ARCH_2026-08-01.md](docs/AUDIT_ARCH_2026-08-01.md) | Architecture-level audit (code-as-built, both stacks, enterprise readiness) |
