@@ -4,6 +4,10 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 
 ## [Unreleased]
 
+### Added
+
+- **Webview E2E harness (audit matrix #9)** — `scripts/webview-e2e.sh` + `tests/webview_e2e.py` drive the real Tauri/WebKitGTK desktop webview through tauri-driver + WebKitWebDriver + selenium and cover the eval bridges that replaced the dead `__TAURI__` emits: page load, `window.netrailFocusSearch` (focus + select, dialog guard), the xdotool global-shortcut pipeline (`ctrl+shift+s`), and `window.netrailOpenDoc` (manual render + bad-slug error path). The harness isolates `XDG_CONFIG_HOME`/`XDG_DATA_HOME`/`XDG_CACHE_HOME` — the WebKit HTTP cache otherwise serves a stale cached `app.js` (verified: old blob matched commit `0072d34`, `transferSize: 0` cache hit) and the bridges under test are missing. 6/6 checks green.
+
 ### Changed
 
 - **CI hardening (audit matrix #10)** — the release workflow now gates on `cargo audit` and `npm audit --audit-level=high`, and signs the release `SHA256SUMS` with a sigstore keyless signature (`cosign sign-blob` over GitHub OIDC; `SHA256SUMS.sig` + `SHA256SUMS.pem` ship as release assets, verification instructions in DISTRIBUTION.md). `Swatinem/rust-cache` added (cuts the ~11 min build).
