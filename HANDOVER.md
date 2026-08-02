@@ -3,12 +3,12 @@
 | Field | Value |
 |-------|--------|
 | **Product** | Local privacy-first research console for Linux |
-| **Version** | **1.4.0** (`scripts/check-versions.sh`) |
+| **Version** | **1.6.1** (`scripts/check-versions.sh`; [Unreleased] = read-only mode + systemd unit + backup script) |
 | **Primary path** | Rust Axum API + Tauri 2 desktop; Python for Docker/Flatpak/tests |
 | **License** | AGPL-3.0 |
 | **Repo** | https://github.com/kayab999/NetRail |
-| **Freeze date** | 2026-07-12 |
-| **HEAD note** | **1.4.0** Waves 3–5: optional API token, strict backends, mutation rate limits, audit log, Rust Docker, dep audits, parity smoke. Audit: [docs/AUDIT_ENTERPRISE_2026-07-31.md](docs/AUDIT_ENTERPRISE_2026-07-31.md) |
+| **Freeze date** | 2026-07-12 (invariants; state refreshed 2026-08-02) |
+| **HEAD note** | **1.6.1** released (DNS pin A15, webview E2E matrix #9, cosign-signed CI matrix #10, FTS sync fix A13, typed 422s A1, CSP-safe token A2, ETag settings A6, per-identity rate limits A9, audit rotation A5, WAL + graceful shutdown A4, schema versioning A11). HEAD `abaf661`, main == origin/main, tree clean. Audit: [docs/AUDIT_ARCH_2026-08-01.md](docs/AUDIT_ARCH_2026-08-01.md) + [docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md) |
 
 ---
 
@@ -226,16 +226,17 @@ Non-happy-path covered: empty query, bad mode/settings, open localhost/private/e
 ```
 You are continuing NetRail (Linux local research console, Rust-primary + Python fallback).
 
-Read HANDOVER.md first. Repo: NetRail. Version 1.4.0.
+Read HANDOVER.md first. Repo: NetRail. Version 1.6.1 (HEAD `abaf661`, tree clean, all pushed). See docs/HANDOFF_OPENCODE_2026-08-02.md for the remaining work plan.
 
-Invariants: localhost-only API, no telemetry, open-URL blocks (incl. encoded loopback + private IPs), no Brave key on disk, version SSOT via scripts/check-versions.sh.
+Invariants: localhost-only API, no telemetry, open-URL blocks (incl. encoded loopback + private IPs + trailing-dot normalization + DNS pin at open), no Brave key on disk, version SSOT via scripts/check-versions.sh, typed errors {code,detail,status}, NETRAIL_READONLY=1 gates all mutations.
 
 Bootstrap:
   bash scripts/check-versions.sh
   source .venv/bin/activate && pytest tests/ -q
   cd src-tauri && cargo clippy --all-targets -- -D warnings && cargo test
   cargo build --release --bin netrail-api --no-default-features
-  bash scripts/package-smoke.sh
+  NETRAIL_RATE_LIMIT=0 bash scripts/e2e-api-smoke.sh
+  NETRAIL_RATE_LIMIT=0 bash scripts/parity-api-smoke.sh
 
 Primary risks: privacy of queries to backends; local process abuse of :7421; history encryption degrade.
 
@@ -254,7 +255,7 @@ Do not force-push. Do not push unless I ask.
 
 | Doc | Role |
 |-----|------|
-| [docs/HANDOFF_OPENCODE_2026-08-01.md](docs/HANDOFF_OPENCODE_2026-08-01.md) | **OpenCode handoff** — enterprise analysis + session WIP (Spotlight + card CSS) |
+| [docs/HANDOFF_OPENCODE_2026-08-02.md](docs/HANDOFF_OPENCODE_2026-08-02.md) | **OpenCode handoff** — enterprise analysis + remaining work plan (release cut 1.6.2, backlog, residuals) |
 | [README.md](README.md) | Install + pitch |
 | [SECURITY.md](SECURITY.md) | Threat model |
 | [docs/API_ERRORS.md](docs/API_ERRORS.md) | Error codes |
