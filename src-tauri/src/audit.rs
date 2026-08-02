@@ -172,4 +172,42 @@ mod tests {
         std::env::remove_var("NETRAIL_AUDIT_MAX_FILES");
         reset_for_tests();
     }
+
+    #[test]
+    #[serial]
+    fn external_rotation_while_writing_does_not_lose_entries() {
+        // logrotate-style external rotation: the active file is moved away
+        // while the app keeps writing. Every append must recreate the file and
+        // no JSON line may be lost; log_event never panics.
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("audit.log");
+        std::env::set_var("NETRAIL_AUDIT_LOG_PATH", &path);
+        std::env::set_var("NETRAIL_AUDIT_MAX_BYTES", "1073741824"); // effectively off
+        std::env::set_var("NETRAIL_AUDIT_MAX_FILES", "1");
+        reset_for_tests();
+
+        for i in 0..3 {
+            log_event("pre.rotation", serde_json::json!({ "i": i }));
+        }
+        let rotated = dir.path().join("audit.log.rotated");
+        std::fs::rename(&path, &rotated).expect("external move of audit.log");
+        for i in 0..3 {
+            log_event("post.rotation", serde_json::json!({ "i": i }));
+        }
+        reset_for_tests();
+
+        let count_lines = |p: &PathBuf| {
+            std::fs::read_to_string(p)
+                .map(|s| s.lines().filter(|l| !l.trim().is_empty()).count())
+                .unwrap_or(0)
+        };
+        assert_eq!(count_lines(&rotated), 3, "pre-rotation entries must survive");
+        assert_eq!(count_lines(&path), 3, "post-rotation entries must land in a fresh file");
+        assert_eq!(count_lines(&rotated) + count_lines(&path), 6);
+
+        std::env::remove_var("NETRAIL_AUDIT_LOG_PATH");
+        std::env::remove_var("NETRAIL_AUDIT_MAX_BYTES");
+        std::env::remove_var("NETRAIL_AUDIT_MAX_FILES");
+        reset_for_tests();
+    }
 }
