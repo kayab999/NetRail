@@ -260,6 +260,15 @@ CI fails on drift: `bash scripts/check-versions.sh`.
 - **E4** — decision (no code): kept `show_menu_on_left_click(true)`.
 - Docs refresh `536d32e`: HANDOVER HEAD note + HANDOFF tables; gates now **162 pytest · 113 cargo**.
 
+### 5.5 Batch 5 — v1.6.3 release (tag `v1.6.3`)
+
+- **Scope discipline:** strictly reproducibility & supply chain (E2 SBOM-in-bundle, E5 fixtures, E3 CSS guard) — no architecture, no new APIs, no security-model changes.
+- **`docs/RELEASE_ASSURANCE.md`** (new): non-technical trust map (security / resilience / concurrency / performance / quality / supply chain with evidence anchors) + release-identity table.
+- SSOT 1.6.2→1.6.3 in 5 files; CHANGELOG [1.6.3]; `docs/RELEASE_v1.6.3.md`; commit `f8645c6`.
+- **Live finding on first tag:** the new SBOM-in-bundle verify step failed — `scripts/generate-sbom.sh` emitted `generated=<date>` so the two SBOM generations in the job differed by a timestamp (`cmp` failed). Fixed: deterministic commit-SHA provenance (SOURCE_DATE_EPOCH first), `b68e4d9`; re-tagged; workflow green.
+- **Post-verify:** assets rpm/deb/AppImage/netrail-api/SBOM.txt/SHA256SUMS(.sig/.pem); deb + AppImage bundled `SBOM.txt` byte-identical to the release asset; `netrail-api --sbom` == SBOM Rust section (570 pkgs, `netrail@1.6.3`); SHA256SUMS integrity checked; cosign keyless **"Verified OK"** in-job.
+- Docs refresh `7a47510`/this edit: HANDOVER HEAD note + doc index + `RELEASE_ASSURANCE.md`; handoff R3/R4 closed; gates **162 pytest · 113 cargo**.
+
 **The 08-01 handoff's Spotlight/CSS WIP shipped in the 1.5.0 series** (tray focus places caret in `#query`; result-card grid `minmax(0,1fr) auto`) — no longer a continuity surface.
 
 ---
@@ -368,8 +377,8 @@ Gates as of 2026-08-02 (post backlog E2/E3/E5): **162 pytest · 113 cargo tests 
 |---|------|------------|
 | ~~R1~~ | ~~Cut the next release from [Unreleased] delta~~ | **✅ Done 2026-08-02** — v1.6.2 cut (read-only mode + systemd unit + backup script) with the standard SSOT bump + tag; workflow green, cosign verified |
 | ~~R2~~ | ~~Post-release doc refresh~~ | **✅ Done 2026-08-02** — DISTRIBUTION version headers; HANDOVER HEAD note; CHANGELOG [1.6.2] |
-| R3 | **Cut v1.6.3** from the current [Unreleased] delta (E2 SBOM-in-bundle + E5 fixture growth + E3 CSS guard) | Bump SSOT 1.6.2 → **1.6.3** in 5 files (`package.json`, `Cargo.toml`, `tauri.conf.json`, `netrail/__init__.py`, `src-tauri/src/config.rs`); `check-versions.sh` green; CHANGELOG [Unreleased] → [1.6.3]; tag; release workflow — **first live exercise of the new "SBOM embedded in bundles" verify step** (dpkg-deb/rpm) and the pre-bundle SBOM generation ordering; verify cosign + offline signature like v1.6.1 |
-| R4 | Post-1.6.3 doc refresh | DISTRIBUTION.md version headers; doc index; this handoff's release row; README screenshots/version badges if touched |
+| ~~R3~~ | ~~Cut v1.6.3~~ | **✅ Done 2026-08-02** — reproducibility & supply chain: E2 SBOM-in-bundle + E5 fixture growth + E3 CSS guard + `docs/RELEASE_ASSURANCE.md`. SSOT 1.6.2→1.6.3 in 5 files; CHANGELOG [1.6.3]; tag `v1.6.3`. First live run of the SBOM-in-bundle verify step **failed** on a real finding (generator emitted a `generated=<timestamp>` → the two job generations differed) → fixed to deterministic commit-provenance (`b68e4d9`), re-tagged; green. Assets: rpm/deb/AppImage/netrail-api/SBOM.txt/SHA256SUMS(.sig/.pem); cosign "Verified OK"; deb/AppImage bundled SBOM byte-identical to the asset (rpm verified in CI); binary `--sbom` == SBOM Rust section (570 pkgs, `netrail@1.6.3`) |
+| ~~R4~~ | ~~Post-1.6.3 doc refresh~~ | **✅ Done 2026-08-02** — DISTRIBUTION (no version headers needed); HANDOVER HEAD note + doc index; handoff release row + resume prompt; CHANGELOG [1.6.3] |
 
 ### P2 — Engineering backlog (not blocking)
 
@@ -444,9 +453,9 @@ READ FIRST:
   HANDOVER.md
   docs/AUDIT_ARCH_2026-08-01.md (closed findings) + docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md (residuals only)
 
-Version: 1.6.2 SSOT. HEAD = 536d32e, main == origin/main (everything pushed), tree CLEAN.
-Releases: v1.6.1, v1.6.2 published (cosign-signed). [Unreleased] holds E2 SBOM-in-bundle,
-  E5 fixture growth, E3 CSS guard → next cut is 1.6.3 (see handoff §9 R3).
+Version: 1.6.3 SSOT. HEAD = b68e4d9, main == origin/main (everything pushed), tree CLEAN.
+Releases: v1.6.1, v1.6.2, v1.6.3 published (cosign-signed). [Unreleased] empty;
+  next work is only the don't-build backlog (see handoff §9 P2/P3).
 
 Stack:
   Rust Axum primary + Tauri 2 desktop; Python FastAPI for Docker/Flatpak/tests.
@@ -485,8 +494,9 @@ Do not force-push. Do not amend published history. Commit + push when the human 
 | [README.md](../README.md) | Install + pitch |
 | [HANDOVER.md](../HANDOVER.md) | Zero-context freeze resume |
 | [SECURITY.md](../SECURITY.md) | Threat model |
-| [CHANGELOG.md](../CHANGELOG.md) | Semver history (1.6.2 released; [Unreleased] = E2/E3/E5) |
+| [CHANGELOG.md](../CHANGELOG.md) | Semver history (1.6.3 released) |
 | [docs/ARCHITECTURE.md](ARCHITECTURE.md) | Lifecycle / design roadmap (current state + next milestones) |
+| [docs/RELEASE_ASSURANCE.md](RELEASE_ASSURANCE.md) | Non-technical trust map |
 | [docs/DISTRIBUTION.md](DISTRIBUTION.md) | Packaging + env table + systemd + backup/restore |
 | [docs/MANUAL.md](MANUAL.md) | End-user manual |
 | [docs/API_ERRORS.md](API_ERRORS.md) | Error codes (incl. `READONLY_MODE`) |

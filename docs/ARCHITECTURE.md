@@ -256,19 +256,19 @@ The roadmap is organized into **phases** with explicit goals, deliverables, exit
 
 ### Current state (2026-08-02)
 
-Released: **v1.6.2** (hardening Sprints 2–4: chaos/fault-injection suite + fixes, resource-stability load harness, dual-stack benchmarks; read-only mode + systemd + backup from 1.6.1 enterprise batch; DNS pin A15 + webview E2E + cosign-signed CI from 1.6.1).
+Released: **v1.6.3** (reproducibility & supply chain: SBOM pinned in bundle — embedded in every binary via `--sbom` + packaged in deb/rpm/AppImage, release CI asserts both; golden URL-policy fixture grown 43→68 vectors + live backend parity; CSS regression guard for the `.result-card` grid). **v1.6.2** = hardening Sprints 2–4 (chaos/fault-injection suite + fixes, resource-stability load harness, dual-stack benchmarks; read-only mode + systemd + backup from 1.6.1 enterprise batch). **v1.6.1** = DNS pin A15, webview E2E, cosign-signed CI, FTS sync, typed 422s, CSP token.
 
-Backlog shipped on `main` after 1.6.2 (candidate for the next release):
+Backlog shipped on `main` (all in v1.6.3 / Sprints):
 
 | # | Item | Landed |
 |---|------|--------|
-| E2 | SBOM pinned in bundle (embedded in binary via `--sbom` + packaged in deb/rpm/AppImage) | PR #2 |
-| E5 | Golden URL-policy fixture grown 43→68 vectors + live backend parity + `ftp://` scheme-code fix | PR #3 |
-| E3 | Structural CSS regression guard for the `.result-card` grid contract | PR #4 |
+| E2 | SBOM pinned in bundle (embedded in binary via `--sbom` + packaged in deb/rpm/AppImage) | v1.6.3 |
+| E5 | Golden URL-policy fixture grown 43→68 vectors + live backend parity + `ftp://` scheme-code fix | v1.6.3 |
+| E3 | Structural CSS regression guard for the `.result-card` grid contract | v1.6.3 |
 | E4 | Tray left-click — kept `show_menu_on_left_click(true)` (decision, no change) | closed |
 | E1 | Load / performance check (load harness + slope + dual-stack benchmarks) | Sprints 3–4 |
 
-**Next milestone:** cut **v1.6.3** from the [Unreleased] delta (E2 + E3 + E5) — the first release to exercise the new SBOM-in-bundle CI verify step. Then the remaining backlog is "don't build unless asked": C3 DNS resolve-and-warn flag, C4 images-off flag, multi-user/RBAC, egress proxy/TLS pinning, metrics/SLO, Windows/macOS ports (see [HANDOFF §9](HANDOFF_OPENCODE_2026-08-02.md#9-remaining-work-points-established-2026-08-02)).
+**Next milestone:** the engineering backlog is empty. Remaining work is "don't build unless asked": C3 DNS resolve-and-warn flag, C4 images-off flag, multi-user/RBAC, egress proxy/TLS pinning, metrics/SLO, Windows/macOS ports, then the long-horizon phases below (see [HANDOFF §9](HANDOFF_OPENCODE_2026-08-02.md#9-remaining-work-points-established-2026-08-02)).
 
 ---
 

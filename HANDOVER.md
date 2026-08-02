@@ -8,7 +8,7 @@
 | **License** | AGPL-3.0 |
 | **Repo** | https://github.com/kayab999/NetRail |
 | **Freeze date** | 2026-07-12 (invariants; state refreshed 2026-08-02) |
-| **HEAD note** | **1.6.2** released (Sprints 2–4 hardening: chaos/fault-injection suite + fixes, resource-stability load harness, dual-stack benchmarks; read-only mode + systemd + backup from 1.6.1 enterprise batch). Post-1.6.2 backlog on main: **E2** SBOM pinned in bundle (embedded in binary via `--sbom` + packaged in deb/rpm/AppImage at `/usr/share/netrail/SBOM.txt`, release CI asserts both), **E5** golden URL-policy fixture grown 43→68 vectors (found + fixed a Python `ftp://` scheme-code divergence; parity harness now probes `backend_url` live too), **E3** structural CSS regression guard `tests/test_ui_css.py` for the `.result-card` grid contract, **E4** tray left-click menu already shipped (`show_menu_on_left_click(true)`). 1.6.1 shipped DNS pin A15, webview E2E matrix #9, cosign-signed CI matrix #10, FTS sync fix A13, typed 422s A1, CSP-safe token A2, ETag settings A6, per-identity rate limits A9, audit rotation A5, WAL + graceful shutdown A4, schema versioning A11. Audit: [docs/AUDIT_ARCH_2026-08-01.md](docs/AUDIT_ARCH_2026-08-01.md) + [docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md) + [docs/hardening-report-v1.6.1.md](docs/hardening-report-v1.6.1.md) |
+| **HEAD note** | **1.6.3** released — reproducibility & supply chain (SBOM pinned in bundle: embedded in every binary via `--sbom` + packaged in deb/rpm/AppImage at `/usr/share/netrail/SBOM.txt`, release CI asserts both; golden URL-policy fixture grown 43→68 vectors + live backend parity + `ftp://` scheme-code fix; CSS regression guard `tests/test_ui_css.py`; new non-technical trust doc `docs/RELEASE_ASSURANCE.md`). 1.6.2 = hardening Sprints 2–4 (chaos/fault-injection suite + fixes, resource-stability load harness, dual-stack benchmarks; read-only mode + systemd + backup from 1.6.1 enterprise batch). 1.6.1 shipped DNS pin A15, webview E2E matrix #9, cosign-signed CI matrix #10, FTS sync fix A13, typed 422s A1, CSP-safe token A2, ETag settings A6, per-identity rate limits A9, audit rotation A5, WAL + graceful shutdown A4, schema versioning A11. Audit: [docs/AUDIT_ARCH_2026-08-01.md](docs/AUDIT_ARCH_2026-08-01.md) + [docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md) + [docs/hardening-report-v1.6.1.md](docs/hardening-report-v1.6.1.md) |
 
 ---
 
@@ -226,7 +226,7 @@ Non-happy-path covered: empty query, bad mode/settings, open localhost/private/e
 ```
 You are continuing NetRail (Linux local research console, Rust-primary + Python fallback).
 
-Read HANDOVER.md first. Repo: NetRail. Version 1.6.2 (HEAD on main, tree clean, all pushed). Remaining work: next cut **1.6.3** from [Unreleased] (E2 SBOM-in-bundle + E5 fixture growth + E3 CSS guard), then the don't-build backlog (C3/C4, multi-user/RBAC, egress proxy/TLS pinning, metrics/SLO, Windows/macOS) — see docs/HANDOFF_OPENCODE_2026-08-02.md §9 and docs/ARCHITECTURE.md "Current state".
+Read HANDOVER.md first. Repo: NetRail. Version 1.6.3 (HEAD on main, tree clean, all pushed). Remaining work: the don't-build backlog only (DNS resolve-and-warn C3, images-off C4, multi-user/RBAC, egress proxy/TLS pinning, metrics/SLO, Windows/macOS) — see docs/HANDOFF_OPENCODE_2026-08-02.md §9 and docs/ARCHITECTURE.md "Current state".
 
 Invariants: localhost-only API, no telemetry, open-URL blocks (incl. encoded loopback + private IPs + trailing-dot normalization + DNS pin at open), no Brave key on disk, version SSOT via scripts/check-versions.sh, typed errors {code,detail,status}, NETRAIL_READONLY=1 gates all mutations.
 
@@ -255,11 +255,12 @@ Do not force-push. Do not push unless I ask.
 
 | Doc | Role |
 |-----|------|
-| [docs/HANDOFF_OPENCODE_2026-08-02.md](docs/HANDOFF_OPENCODE_2026-08-02.md) | **OpenCode handoff** — enterprise analysis + remaining work plan (release cut 1.6.3, backlog, residuals) |
+| [docs/HANDOFF_OPENCODE_2026-08-02.md](docs/HANDOFF_OPENCODE_2026-08-02.md) | **OpenCode handoff** — enterprise analysis + remaining work plan (backlog, residuals) |
 | [README.md](README.md) | Install + pitch |
 | [SECURITY.md](SECURITY.md) | Threat model |
 | [docs/API_ERRORS.md](docs/API_ERRORS.md) | Error codes |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Lifecycle roadmap (current state + next milestones) |
+| [docs/RELEASE_ASSURANCE.md](docs/RELEASE_ASSURANCE.md) | Non-technical trust map (what the project guarantees + where) |
 | [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | Packaging |
 | [docs/MANUAL.md](docs/MANUAL.md) | User manual |
 | [docs/AUDIT_ENTERPRISE_2026-07-31.md](docs/AUDIT_ENTERPRISE_2026-07-31.md) | Post-GA enterprise audit + workplan |
