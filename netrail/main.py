@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import re
+import sqlite3
 import threading
 import webbrowser
 from contextlib import asynccontextmanager
@@ -72,6 +73,20 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 @app.exception_handler(NetRailError)
 async def netrail_error_handler(_request: Request, exc: NetRailError) -> JSONResponse:
     return JSONResponse(status_code=exc.status, content=exc.to_dict())
+
+
+@app.exception_handler(sqlite3.Error)
+async def sqlite_error_handler(_request: Request, exc: sqlite3.Error) -> JSONResponse:
+    """Chaos-safe: SQLite faults (BUSY, read-only, IO) must return the typed
+    `{code, detail, status}` contract instead of an untyped 500 (Sprint 2)."""
+    return JSONResponse(
+        status_code=500,
+        content=NetRailError(
+            "DB_ERROR",
+            f"Database error: {exc}",
+            status=500,
+        ).to_dict(),
+    )
 
 
 @app.exception_handler(RequestValidationError)

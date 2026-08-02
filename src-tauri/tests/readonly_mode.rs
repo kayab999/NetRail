@@ -68,6 +68,7 @@ async fn request_json(
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn put_settings_rejected_in_readonly() {
     std::env::set_var("NETRAIL_READONLY", "1");
     let mut app = build_router(test_state(Settings::default()));
@@ -84,6 +85,7 @@ async fn put_settings_rejected_in_readonly() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn purge_history_rejected_in_readonly() {
     std::env::set_var("NETRAIL_READONLY", "1");
     let mut app = build_router(test_state(Settings::default()));
@@ -94,6 +96,7 @@ async fn purge_history_rejected_in_readonly() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn delete_history_entry_rejected_in_readonly() {
     std::env::set_var("NETRAIL_READONLY", "1");
     let mut app = build_router(test_state(Settings::default()));
@@ -104,6 +107,7 @@ async fn delete_history_entry_rejected_in_readonly() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn create_collection_rejected_in_readonly() {
     std::env::set_var("NETRAIL_READONLY", "1");
     let mut app = build_router(test_state(Settings::default()));
@@ -120,6 +124,7 @@ async fn create_collection_rejected_in_readonly() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn add_collection_item_rejected_in_readonly() {
     std::env::set_var("NETRAIL_READONLY", "1");
     let mut app = build_router(test_state(Settings::default()));
@@ -136,6 +141,7 @@ async fn add_collection_item_rejected_in_readonly() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn read_endpoints_keep_working_in_readonly() {
     std::env::set_var("NETRAIL_READONLY", "1");
     let dir = tempfile::TempDir::new().unwrap();

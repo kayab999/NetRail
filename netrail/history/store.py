@@ -366,7 +366,14 @@ def get_store() -> HistoryStore | None:
         use_encrypt = want_encrypt and encryption_active()
         if want_encrypt and not encryption_active():
             _encryption_degraded = True
-        _store = HistoryStore(connect(), encrypt=use_encrypt)
+        try:
+            _store = HistoryStore(connect(), encrypt=use_encrypt)
+        except sqlite3.Error:
+            # Chaos-safe: an unwritable/unopenable database must degrade to
+            # history-disabled (typed HISTORY_DISABLED) instead of a 500 (Rust
+            # SharedStore parity); the next call retries the open.
+            _store = None
+            return None
         ttl = int(settings.get("history_ttl_days", 90))
         _store.purge_expired(ttl)
 
