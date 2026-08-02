@@ -341,3 +341,101 @@ def test_audit_log_rotates_at_max_bytes(monkeypatch, tmp_path):
     assert (tmp_path / "audit.log.1").exists()
     assert (tmp_path / "audit.log").stat().st_size < 512
     audit.reset_for_tests()
+
+
+def test_rate_limit_add_collection_item_returns_429(monkeypatch, tmp_path):
+    from netrail.history.store import reset_store_for_tests
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("NETRAIL_DB_PATH", str(tmp_path / "test.db"))
+    reset_store_for_tests()
+    rate_limit.set_test_limits(search=100, open_limit=100, mutate=1)
+    try:
+        col_res = client.post("/api/collections", json={"name": "AuditCol"})
+        assert col_res.status_code == 200
+        col_id = col_res.json()["id"]
+        # Second mutate call (add item) must trigger 429
+        res = client.post(
+            f"/api/collections/{col_id}/items",
+            json={"url": "https://example.com/item1", "title": "Item 1"},
+        )
+        assert res.status_code == 429
+        assert res.json()["code"] == "RATE_LIMITED"
+    finally:
+        rate_limit.set_test_limits()
+
+
+def test_audit_log_collection_item_add(monkeypatch, tmp_path):
+    import json
+    import netrail.audit as audit
+    from netrail.history.store import reset_store_for_tests
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("NETRAIL_DB_PATH", str(tmp_path / "test.db"))
+    log_file = tmp_path / "audit.jsonl"
+    monkeypatch.setenv("NETRAIL_AUDIT_LOG_PATH", str(log_file))
+    audit.reset_for_tests()
+    reset_store_for_tests()
+
+    col_res = client.post("/api/collections", json={"name": "AuditCol"})
+    assert col_res.status_code == 200
+    col_id = col_res.json()["id"]
+    item = client.post(
+        f"/api/collections/{col_id}/items",
+        json={"url": "https://example.com/test", "title": "Test Title"},
+    )
+    assert item.status_code == 200
+
+    lines = log_file.read_text(encoding="utf-8").strip().splitlines()
+    events = [json.loads(line) for line in lines]
+    add_events = [e for e in events if e.get("action") == "collection.item.add"]
+    assert len(add_events) == 1
+    assert add_events[0]["detail"]["collection_id"] == col_id
+    assert add_events[0]["detail"]["url_host"] == "example.com"
+    audit.reset_for_tests()
+
+
+def test_save_settings_atomic(monkeypatch, tmp_path):
+    from netrail.config import save_settings, load_settings, config_file, config_dir
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    saved = save_settings({"max_results": 42})
+    assert saved["max_results"] == 42
+    assert config_file().is_file()
+    assert load_settings()["max_results"] == 42
+    leftovers = [
+        p
+        for p in config_dir().iterdir()
+        if p.name != "settings.json" and "settings.json" in p.name and p.suffix == ".tmp"
+    ]
+    assert leftovers == []
+
+
+def test_save_settings_concurrent_no_race(monkeypatch, tmp_path):
+    """NR-08: unique temps must not FileNotFoundError under concurrent saves."""
+    import threading
+
+    from netrail.config import save_settings, load_settings, config_file
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    barrier = threading.Barrier(16)
+    errors: list[str] = []
+    results: list[int] = []
+
+    def worker(n: int) -> None:
+        try:
+            barrier.wait()
+            saved = save_settings({"max_results": 1 + (n % 50)})
+            results.append(int(saved["max_results"]))
+        except Exception as exc:  # noqa: BLE001
+            errors.append(repr(exc))
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(16)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert errors == [], f"concurrent save errors: {errors[:5]}"
+    assert len(results) == 16
+    assert config_file().is_file()
+    assert 1 <= load_settings()["max_results"] <= 50

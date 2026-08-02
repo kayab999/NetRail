@@ -34,6 +34,16 @@ Backend HTTP clients **do not follow redirects**, so a SearXNG/Brave hop cannot 
 
 **Backend URLs** (e.g. self-hosted SearXNG) still **allow** localhost and private LAN hosts so operators can point at home instances. Cloud metadata and rebinding hostnames remain blocked.
 
+## Read-only mode
+
+`NETRAIL_READONLY=1` rejects **administrative mutations** with HTTP `403 READONLY_MODE`:
+
+- `PUT /api/settings`
+- history delete / purge
+- collection create / add-item
+
+**By design, search and open still record local history/visits** so the console remains useful as a kiosk/archive viewer with an intact local audit trail. Read endpoints (settings GET, history list, collections list/export, docs, health) keep working. See `docs/API_ERRORS.md` and `docs/DISTRIBUTION.md`.
+
 ## Optional API token
 
 `NETRAIL_API_TOKEN` requires `Authorization: Bearer …` or `X-NetRail-Token: …` on `/api/*` (health is exempt). It is a guard against **accidental cross-process access** (other users' processes, browser extensions, containers sharing the loopback) — **not** a defense against malware already running as your user.
@@ -70,5 +80,6 @@ We aim to acknowledge reports within **72 hours** and ship fixes for confirmed i
 - Optional `NETRAIL_API_TOKEN` (Bearer / `X-NetRail-Token`) for Docker or multi-process hosts
 - Optional `NETRAIL_STRICT_BACKEND_URLS` to forbid private/loopback SearXNG URLs
 - Optional `NETRAIL_AUDIT_LOG` JSON lines for search/open/settings/history mutations
+- Optional `NETRAIL_READONLY=1` to lock settings/history/collections mutations (search/visit logging stays active)
 - Zero telemetry
 - Image result thumbnails request `referrerpolicy=no-referrer`

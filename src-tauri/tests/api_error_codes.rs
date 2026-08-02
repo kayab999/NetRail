@@ -12,11 +12,18 @@ use tempfile::TempDir;
 use tower::ServiceExt;
 
 fn test_state(settings: Settings) -> AppState {
+    test_state_with_limits(settings, netrail_lib::rate_limit::RateLimiter::from_env())
+}
+
+fn test_state_with_limits(
+    settings: Settings,
+    rate_limiter: netrail_lib::rate_limit::RateLimiter,
+) -> AppState {
     let store = Arc::new(SharedStore::new(&settings));
     AppState {
         http_client: build_http_client(),
         settings_fn: Arc::new(move || settings.clone()),
-        rate_limiter: netrail_lib::rate_limit::RateLimiter::from_env(),
+        rate_limiter,
         store,
     }
 }
@@ -412,4 +419,48 @@ async fn settings_put_with_fresh_if_match_succeeds_and_returns_new_etag() {
     assert_eq!(response.status(), StatusCode::OK);
     assert!(response.headers().get("etag").is_some());
     std::env::remove_var("XDG_CONFIG_HOME");
+}
+
+/// NR-01: collection item add shares the mutate rate-limit bucket.
+#[tokio::test]
+#[serial_test::serial]
+async fn add_collection_item_respects_mutate_rate_limit() {
+    let dir = TempDir::new().unwrap();
+    std::env::set_var(
+        "NETRAIL_DB_PATH",
+        dir.path().join("n.db").to_string_lossy().as_ref(),
+    );
+    std::env::remove_var("NETRAIL_READONLY");
+    std::env::remove_var("NETRAIL_DB_KEY");
+
+    let settings = Settings {
+        history_enabled: true,
+        history_encrypt: false,
+        ..Settings::default()
+    };
+    // mutate=1: create_collection consumes the only slot; add-item must 429.
+    let limiter = netrail_lib::rate_limit::RateLimiter::with_limits(0, 0, 1);
+    let mut app = build_router(test_state_with_limits(settings, limiter));
+
+    let (status, json) = request_json(
+        &mut app,
+        "POST",
+        "/api/collections",
+        Some(r#"{"name":"RateLimitCol"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "create collection: {json}");
+    let col_id = json["id"].as_i64().expect("collection id");
+
+    let (status, json) = request_json(
+        &mut app,
+        "POST",
+        &format!("/api/collections/{col_id}/items"),
+        Some(r#"{"url":"https://example.com/item","title":"Item"}"#),
+    )
+    .await;
+    assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+    assert_api_error(&json, "RATE_LIMITED", 429);
+
+    std::env::remove_var("NETRAIL_DB_PATH");
 }

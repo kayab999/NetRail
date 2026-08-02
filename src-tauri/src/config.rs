@@ -4,7 +4,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-pub const VERSION: &str = "1.6.3";
+pub const VERSION: &str = "1.6.4";
 /// Stable API contract version (additive changes only; see docs/AUDIT_ARCH A12).
 pub const API_CONTRACT: &str = "1.4";
 pub const HOST: &str = "127.0.0.1";
@@ -175,8 +175,40 @@ pub fn save_settings(settings: &Settings) -> NetRailResult<Settings> {
     validate_settings(settings)?;
     let dir = config_dir();
     let _ = fs::create_dir_all(&dir);
+    let target = config_file();
+    // Unique per attempt (pid + thread + monotonic counter) so concurrent
+    // PUT /api/settings cannot share a temp path (NR-08).
+    let tmp_file = {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        use std::time::{SystemTime, UNIX_EPOCH};
+        static SAVE_SEQ: AtomicU64 = AtomicU64::new(0);
+        let seq = SAVE_SEQ.fetch_add(1, Ordering::Relaxed);
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        dir.join(format!(
+            "settings.json.tmp.{}.{}.{}",
+            std::process::id(),
+            seq,
+            nanos
+        ))
+    };
     let payload = serde_json::to_string_pretty(settings)?;
-    let _ = fs::write(config_file(), format!("{payload}\n"));
+    if let Err(err) = fs::write(&tmp_file, format!("{payload}\n")) {
+        let _ = fs::remove_file(&tmp_file);
+        return Err(NetRailError::Internal {
+            code: "CONFIG_SAVE_FAILED",
+            message: format!("Failed to write settings temp file: {err}"),
+        });
+    }
+    if let Err(err) = fs::rename(&tmp_file, &target) {
+        let _ = fs::remove_file(&tmp_file);
+        return Err(NetRailError::Internal {
+            code: "CONFIG_SAVE_FAILED",
+            message: format!("Failed to rename settings file: {err}"),
+        });
+    }
     Ok(load_settings())
 }
 
@@ -322,6 +354,77 @@ mod static_dir_tests {
         let resolved = resolve_static_dir();
         assert!(resolved.join("index.html").is_file());
         std::env::remove_var("NETRAIL_STATIC_DIR");
+    }
+}
+
+#[cfg(test)]
+mod save_settings_tests {
+    use super::*;
+    use serial_test::serial;
+    use std::sync::{Arc, Barrier};
+    use std::thread;
+    use tempfile::TempDir;
+
+    #[test]
+    #[serial]
+    fn save_settings_roundtrip_uses_unique_temp_and_final_file() {
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", dir.path());
+        let settings = Settings {
+            max_results: 17,
+            ..Settings::default()
+        };
+        let saved = save_settings(&settings).expect("save");
+        assert_eq!(saved.max_results, 17);
+        assert!(config_file().is_file());
+        assert_eq!(load_settings().max_results, 17);
+        // No leftover temps after a clean save.
+        let leftovers: Vec<_> = config_dir()
+            .read_dir()
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().into_owned();
+                name != "settings.json" && name.contains("settings.json") && name.ends_with(".tmp")
+            })
+            .collect();
+        assert!(
+            leftovers.is_empty(),
+            "unexpected temp leftovers: {leftovers:?}"
+        );
+        std::env::remove_var("XDG_CONFIG_HOME");
+    }
+
+    #[test]
+    #[serial]
+    fn save_settings_concurrent_does_not_race() {
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", dir.path());
+        let barrier = Arc::new(Barrier::new(16));
+        let mut handles = Vec::new();
+        for i in 0..16 {
+            let barrier = Arc::clone(&barrier);
+            handles.push(thread::spawn(move || {
+                barrier.wait();
+                let settings = Settings {
+                    max_results: 1 + (i % 50) as u32,
+                    ..Settings::default()
+                };
+                save_settings(&settings).map(|s| s.max_results)
+            }));
+        }
+        let mut errors = 0u32;
+        for h in handles {
+            match h.join().unwrap() {
+                Ok(_) => {}
+                Err(_) => errors += 1,
+            }
+        }
+        assert_eq!(errors, 0, "concurrent save_settings must not fail");
+        let final_settings = load_settings();
+        assert!((1..=50).contains(&final_settings.max_results));
+        assert!(config_file().is_file());
+        std::env::remove_var("XDG_CONFIG_HOME");
     }
 }
 

@@ -2,6 +2,23 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.6.4] — 2026-08-02
+
+### Added
+
+- **Security Remediations (NR-01..NR-08)** — Completed the prioritized security remediations from the v1.6.3 audit + post-fix hardening:
+  - **NR-01 (P2):** Mutation rate limiting on `POST /api/collections/{collection_id}/items` (Rust + Python) + 429 tests.
+  - **NR-02 / NR-08 (P2):** Atomic settings write via unique same-dir temp + POSIX `rename`/`os.replace` (Python `mkstemp`, Rust pid+seq+nanos). Concurrent multi-thread saves no longer race on a PID-only temp path. `CONFIG_SAVE_FAILED` is HTTP 500 (`Internal`), not 400.
+  - **NR-03 (P3):** `collection.item.add` audit event (`collection_id` + `url_host`).
+  - **NR-04 (P3):** Read-only mode docs: administrative mutations locked; search/visit history still recorded. Clarified in `SECURITY.md`, `DISTRIBUTION.md`, and `API_ERRORS.md`.
+  - **NR-05 (P3):** Constant-time API token compare (Python `hmac.compare_digest`, Rust SHA-256 digest XOR fold).
+  - **NR-06 (P3):** `CONTEXT_DUMP_2026-08-02.md` SSOT + sprint status aligned to 1.6.4 / complete hardening sprints.
+  - **NR-07 (P3):** Homoglyph/Unicode hostname edge cases remain accepted residuals covered by DNS pin (documented).
+- **Linux packaging consolidation** — single reproducible desktop release path:
+  - `scripts/build-desktop-linux.sh` (+ `npm run package:linux`) collects AppImage / `.deb` / `.rpm` / `netrail-api` / SBOM / SHA256SUMS into `dist/release/`
+  - Tauri bundle metadata: `category: Utility`, short/long descriptions; FreeDesktop template `packaging/linux/netrail.desktop.hbs` (fixes empty `Categories=` in prior `.desktop` files)
+  - Packaging SSOT: `packaging/README.md`; README + DISTRIBUTION install paths updated to 1.6.4 AppImage-first; legacy PyInstaller `packaging/appimage/build.sh` marked non-shipping
+
 ## [1.6.3] — 2026-08-02
 
 ### Added

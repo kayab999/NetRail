@@ -29,6 +29,16 @@ pub fn inject_ui_token() -> bool {
         .unwrap_or(true)
 }
 
+fn constant_time_eq(a: &str, b: &str) -> bool {
+    let digest_a = sha2::Sha256::digest(a.as_bytes());
+    let digest_b = sha2::Sha256::digest(b.as_bytes());
+    digest_a
+        .iter()
+        .zip(digest_b.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y))
+        == 0
+}
+
 pub fn check_request_token(auth_header: Option<&str>, x_token: Option<&str>) -> NetRailResult<()> {
     let Some(expected) = api_token_from_env() else {
         return Ok(());
@@ -39,13 +49,13 @@ pub fn check_request_token(auth_header: Option<&str>, x_token: Option<&str>) -> 
             .strip_prefix("Bearer ")
             .or_else(|| auth.strip_prefix("bearer "))
         {
-            if bearer.trim() == expected {
+            if constant_time_eq(bearer.trim(), &expected) {
                 return Ok(());
             }
         }
     }
     if let Some(tok) = x_token {
-        if tok.trim() == expected {
+        if constant_time_eq(tok.trim(), &expected) {
             return Ok(());
         }
     }
@@ -97,6 +107,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[serial_test::serial]
     fn path_health_exempt() {
         // Without env, never required.
         assert!(!path_requires_token("/api/health"));

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -164,10 +165,28 @@ def validate_settings(settings: dict[str, Any]) -> None:
 
 def save_settings(settings: dict[str, Any]) -> dict[str, Any]:
     validate_settings(settings)
-    config_dir().mkdir(parents=True, exist_ok=True)
+    dir_path = config_dir()
+    dir_path.mkdir(parents=True, exist_ok=True)
     payload = DEFAULTS.copy()
     for key in DEFAULTS:
         if key in settings:
             payload[key] = settings[key]
-    config_file().write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    target = config_file()
+    # Unique O_EXCL temp per attempt so concurrent saves cannot race (NR-08).
+    fd, tmp_name = tempfile.mkstemp(
+        prefix="settings.json.",
+        suffix=".tmp",
+        dir=str(dir_path),
+    )
+    tmp_path = Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(json.dumps(payload, indent=2) + "\n")
+        os.replace(tmp_path, target)
+    except Exception:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+        raise
     return _apply_env_overrides(payload)

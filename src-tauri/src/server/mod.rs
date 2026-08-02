@@ -645,11 +645,13 @@ struct CollectionItemCreate {
 
 async fn add_collection_item(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(collection_id): Path<i64>,
     body: Result<Json<CollectionItemCreate>, JsonRejection>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
     ensure_mutable()?;
     let Json(body) = body?;
+    state.rate_limiter.check_mutate(&request_identity(&headers))?;
     let settings = (state.settings_fn)();
     let safe_url = validate_open_url(&body.url)?;
     let title = body.title.trim();
@@ -676,6 +678,13 @@ async fn add_collection_item(
         })
         .ok_or_else(history_disabled_error)?
         ?;
+    audit::log_event(
+        "collection.item.add",
+        serde_json::json!({
+            "collection_id": collection_id,
+            "url_host": url::Url::parse(&safe_url).ok().and_then(|u| u.host_str().map(str::to_string)),
+        }),
+    );
     Ok(Json(item))
 }
 

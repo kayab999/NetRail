@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import hmac
 import os
 
 from netrail.errors import NetRailError
@@ -32,9 +33,11 @@ def check_request_token(authorization: str | None, x_token: str | None) -> None:
     if authorization:
         auth = authorization.strip()
         for prefix in ("Bearer ", "bearer "):
-            if auth.startswith(prefix) and auth[len(prefix) :].strip() == expected:
+            if auth.startswith(prefix) and hmac.compare_digest(
+                auth[len(prefix) :].strip(), expected
+            ):
                 return
-    if x_token and x_token.strip() == expected:
+    if x_token and hmac.compare_digest(x_token.strip(), expected):
         return
     raise NetRailError(
         "AUTH_REQUIRED",

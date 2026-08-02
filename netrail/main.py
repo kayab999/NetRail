@@ -560,16 +560,27 @@ def create_collection(req: Request, body: CollectionCreate) -> dict[str, Any]:
 
 
 @app.post("/api/collections/{collection_id}/items")
-def add_collection_item(collection_id: int, body: CollectionItemCreate) -> dict[str, Any]:
+def add_collection_item(req: Request, collection_id: int, body: CollectionItemCreate) -> dict[str, Any]:
     _ensure_mutable()
+    rate_limit.check_mutate(_request_identity(req))
     store = _require_store()
     safe_url = validate_open_url(body.url)
-    return store.add_collection_item(
+    item = store.add_collection_item(
         collection_id,
         url=safe_url,
         title=body.title,
         notes=body.notes,
     )
+    from urllib.parse import urlparse
+
+    audit.log_event(
+        "collection.item.add",
+        {
+            "collection_id": collection_id,
+            "url_host": urlparse(safe_url).hostname,
+        },
+    )
+    return item
 
 
 @app.get("/api/collections/{collection_id}/export")

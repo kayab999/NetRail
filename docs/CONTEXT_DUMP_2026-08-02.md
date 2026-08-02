@@ -3,7 +3,7 @@
 | Field | Value |
 | :--- | :--- |
 | **Product** | NetRail — Sovereign Local Research Console (Linux) |
-| **Version SSOT** | **1.6.1** (Enforced across 5 configuration files) |
+| **Version SSOT** | **1.6.4** (Enforced across 5 configuration files) |
 | **License** | AGPL-3.0 |
 | **Repository** | https://github.com/kayab999/NetRail |
 | **Primary Stack** | Rust Axum API + Tauri 2 Desktop Shell (`src-tauri/`) |
@@ -34,7 +34,7 @@
      "status": 400
    }
    ```
-5. **Read-Only Mode (`NETRAIL_READONLY=1`):** Gates all state mutations (settings, history deletion, collections) with HTTP `403 READONLY_MODE`.
+5. **Read-Only Mode (`NETRAIL_READONLY=1`):** Gates all administrative/user mutations (settings PUT, history deletion, collections POST/DELETE) with HTTP `403 READONLY_MODE`. Note: In read-only mode, the console is locked against modification of collections or settings, but search queries and page visits are still logged to preserve search console utility and keep the user's local audit trail intact.
 6. **Audit Logging & Rotation (A5):** JSONL audit log capped at 10 MiB with automatic rotation (`audit.log.1..3`).
 
 ---
@@ -42,7 +42,7 @@
 ## 2. Hardening & Verification Program (Sprint Status)
 
 ```
-[S1: Invariants & Fuzzing] (COMPLETE) ──> [S2: Chaos & Faults] (NEXT) ──> [S3: Resource Stability] ──> [S4: Latency & Benchmarks]
+[S1: Invariants & Fuzzing] (COMPLETE) ──> [S2: Chaos & Faults] (COMPLETE) ──> [S3: Resource Stability] (COMPLETE) ──> [S4: Latency & Benchmarks] (COMPLETE)
 ```
 
 ### Sprint 1: Property & Invariant Verification (COMPLETED)
@@ -50,17 +50,17 @@
 - **IPv4 Loose Parser Zero-Panic Guarantee:** `parse_browser_ipv4` fuzzed against invalid byte sequences and edge cases without panics.
 - **Pre-spawn DNS Pinning Invariants:** Verified fail-closed logic on empty DNS responses and automatic block on private IP responses.
 - **Test Metrics:**
-  - **Rust:** 105 tests passed (76 lib + 19 API + 6 readonly + 4 property tests).
-  - **Python:** 129 tests passed (`pytest`).
+  - **Rust:** 113 tests passed (83 lib + 19 API + 6 readonly + 3 integration/chaos + 2 SBOM).
+  - **Python:** 165 tests passed (`pytest`).
   - **Clippy:** Clean (`-D warnings`).
 
-### Sprint 2: Chaos & Fault Injection Testing (UP NEXT)
+### Sprint 2: Chaos & Fault Injection Testing (COMPLETED)
 - Verification of typed error degradation under SQLite locks (`SQLITE_BUSY`), write-restricted filesystems, and abrupt SIGINT signals.
 
-### Sprint 3: Resource Stability & Slope Analysis
+### Sprint 3: Resource Stability & Slope Analysis (COMPLETED)
 - Leak detection across 10,000 requests measuring RSS, File Descriptors (`/proc/self/fd`), Tokio task count, and active sockets.
 
-### Sprint 4: Dual-Stack Capacity & Latency Benchmarks
+### Sprint 4: Dual-Stack Capacity & Latency Benchmarks (COMPLETED)
 - Quantitative benchmarking of Rust (Axum) vs Python (FastAPI) covering p50/p95/p99 latency, throughput, and CPU/memory utilization under saturation.
 
 ---

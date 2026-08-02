@@ -31,13 +31,14 @@ The frontend branches on `code`; `detail` is human-readable. Rust (Tauri / `netr
 | `REQUEST_INVALID` | 400 | Generic request validation failure (malformed body/query params) — both stacks |
 | `RATE_LIMITED` | 429 | Too many search/open/mutation calls in a 60s window (disable with `NETRAIL_RATE_LIMIT=0`) |
 | `SETTINGS_CONFLICT` | 409 | `If-Match` on `PUT /api/settings` doesn't match the current settings `ETag` (settings changed since read; re-fetch and retry) |
-| `READONLY_MODE` | 403 | `NETRAIL_READONLY=1` — mutations (settings PUT, history delete/purge, collection create/add) rejected |
+| `READONLY_MODE` | 403 | `NETRAIL_READONLY=1` — mutations (settings PUT, history delete/purge, collection create/add) rejected. Note that search/visit history logging is still performed in this mode to preserve audit logs. |
 | `AUTH_REQUIRED` | 401 | `NETRAIL_API_TOKEN` set but Bearer / `X-NetRail-Token` missing or wrong |
 | `BACKEND_URL_STRICT_PRIVATE` | 400 | `strict_backend_urls` rejected private/loopback backend host |
 | `OPEN_URL_REDIRECT_DEPTH` | 400 | Too many DDG redirect unwraps |
 | `CONFIG_MAX_RESULTS` | 400 | `max_results` not in 1–50 |
 | `CONFIG_HISTORY_TTL` | 400 | `history_ttl_days` over 3650 |
 | `CONFIG_SEARCH_STRATEGY` | 400 | Strategy not `fanout` or `fallback` |
+| `CONFIG_SAVE_FAILED` | 500 | Settings file I/O failed (temp write / rename); not a client validation error |
 | `BACKEND_URL_EMPTY` | 400 | Empty backend URL |
 | `BACKEND_URL_INVALID` | 400 | Unparseable backend URL |
 | `BACKEND_URL_INVALID_SCHEME` | 400 | Backend URL not http/https |

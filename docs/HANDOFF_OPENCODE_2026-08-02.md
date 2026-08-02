@@ -8,9 +8,10 @@
 | **License** | AGPL-3.0 |
 | **Repo** | https://github.com/kayab999/NetRail |
 | **Handoff date** | 2026-08-02 (supersedes `HANDOFF_OPENCODE_2026-08-01.md`) |
-| **HEAD (committed)** | `abaf661` — `enterprise: read-only mode (NETRAIL_READONLY) + systemd unit + DB backup + audit docs` |
-| **Branch** | `main` **in sync with `origin/main`** (all pushed) |
-| **Working tree** | **Clean** |
+| **Audit refresh** | 2026-08-02 post-v1.6.3 — findings **NR-01..NR-07** in §6A (remediations deferred) |
+| **HEAD (at audit)** | `bc63068` — `docs: post-1.6.3 refresh — release closed (R3/R4), backlog now don't-build only` |
+| **Branch** | `main` **in sync with `origin/main`** (at audit start) |
+| **Working tree** | Audit wrote **only** this handoff (§6A / §9 P0 / resume prompt); remediations not started |
 | **Releases** | `v1.6.0` + `v1.6.1` published on GitHub (assets: AppImage/deb/rpm/netrail-api/SBOM.txt/SHA256SUMS + sigstore `.sig`/`.pem`, signature verified) |
 | **Primary path** | Rust Axum API + Tauri 2 desktop; Python FastAPI for Docker/Flatpak/tests |
 | **API bind** | `127.0.0.1:7421` only |
@@ -56,7 +57,7 @@ You are continuing **NetRail**, a single-user Linux research console: **query �
 | Docs truth | **9** | Audit passes re-verified claims; residuals honestly documented |
 | Enterprise multi-user / SOC2-ish | **3.5** | Out of stated model; token + audit + read-only are optional footholds only |
 | Desktop UX polish | **8** | Keyboard rail, recovery UX, Spotlight focus, tray/hotkey |
-| **Overall (v1 desktop product)** | **~8.8** | Soft GA reached; remaining work is release hygiene + backlog, not a rewrite |
+| **Overall (v1 desktop product)** | **~8.6** | Soft GA; post-1.6.3 audit found 2×P2 (NR-01 rate-limit hole, NR-02 non-atomic settings) — see §6A |
 
 **Verdict:** NetRail is a **credible single-user localhost research console** with production-quality open-URL controls (including resolve-and-pin before browser spawn), typed errors, rate limits, optional auth/audit/read-only gates, and a Rust-primary engine. Residual risk clusters around (1) unauthenticated default localhost API (by design, token optional), (2) dual-stack maintenance cost, (3) DDGS/provider fragility, (4) time-based DNS rebinding (documented), (5) remote image CDN loads (R7).
 
@@ -275,15 +276,123 @@ CI fails on drift: `bash scripts/check-versions.sh`.
 
 ## 6. Findings backlog (audit residuals)
 
-Source of truth: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) (A1–A15 all closed) + [AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md) (N1–N4 closed). Do **not** re-open closed items without new evidence.
+Source of truth: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) (A1–A15 all closed) + [AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md) (N1–N4 closed) + **§6A below (fresh enterprise audit 2026-08-02 post-1.6.3)**. Do **not** re-open closed A/N items without new evidence.
 
 | Status | Items |
 |--------|--------|
-| **Closed (1.4.x–1.6.1)** | SEC-01/02/03/06/07/08/13, PAR-01/02/03/04/07, A1–A15, N1–N4, R8/OPS-03 (webview E2E), matrix #10 (CI audits + signing), enterprise gaps (systemd, backup, read-only, log-json, audit rotation, schema versioning) |
+| **Closed (1.4.x–1.6.3)** | SEC-01/02/03/06/07/08/13, PAR-01/02/03/04/07, A1–A15, N1–N4, R8/OPS-03 (webview E2E), matrix #10 (CI audits + signing), enterprise gaps (systemd, backup, read-only, log-json, audit rotation, schema versioning), E2/E3/E5 |
+| **NEW open (this audit — §6A)** | **NR-01** (P2 rate-limit hole on collection item add), **NR-02** (P2 non-atomic settings write + false “atomic” claim), **NR-03** (P3 no audit on collection item add), **NR-04** (P3 readonly still writes history on search/open), **NR-05** (P3 token `==` not constant-time), **NR-06** (P3 doc drift CONTEXT_DUMP), **NR-07** (P3 Unicode host residual class) |
 | **Still residual (accepted, documented)** | Time-based TTL-flip DNS rebinding (Q16); image CDN loads R7 / SEC-2026-12; unauth localhost default SEC-2026-09 (token optional); FTS plaintext SEC-2026-10; fixed-window rate limits SEC-2026-11 (per-identity since 1.6.0); dual-stack drift cost R3 (parity harness mitigates) |
 | **Backlog (don't build unless asked)** | C3 DNS "resolve-and-warn" flag; C4 images-off flag; multi-user/RBAC; egress proxy/TLS pinning for backends; metrics/SLO; Windows/macOS ports |
 
 **Do not expand scope into:** multi-user OAuth, owned crawl corpus, local LLM, non-Linux ports — unless human explicitly asks.
+
+---
+
+## 6A. Enterprise audit + Q&A — 2026-08-02 (post-v1.6.3) — OPEN findings for OpenCode
+
+| Field | Value |
+|-------|--------|
+| **Tree** | SSOT **1.6.3**, HEAD `bc63068`, `main` == `origin/main`, clean |
+| **Method** | Full security-critical re-walk (auth, open-URL, DNS pin, rate limit, readonly, settings, history, UI XSS sinks, dual-stack parity) + live unit gates + adversarial URL probes |
+| **Gates re-run** | `check-versions.sh` OK · **162 pytest passed** · **cargo test --lib 83 passed** |
+| **Verdict** | Soft-GA product still holds. **No P0/P1 security regression** vs closed A1–A15/N1–N4. **Two P2 correctness/ops bugs** (rate-limit hole; non-atomic settings) need dual-stack fix. Remainder P3 hygiene/docs/residuals. |
+| **Scope of this pass** | Audit only — remediations deferred (OpenCode / next session) |
+
+### 6A.1 Scorecard (delta vs handoff §11)
+
+| Dimension | Score | Notes |
+|-----------|------:|-------|
+| Core job | 9 | Unchanged |
+| Security (model-fit) | 8.5 | −0.5: mutate rate-limit incomplete; settings durability overstated |
+| Correctness / tests | 8.5 | Gates green; gap not covered by tests |
+| Ops / packaging | 8 | Non-atomic settings is ops reliability |
+| Docs truth | 8 | CONTEXT_DUMP stale; AUDIT_ARCH “atomic write” claim false |
+| Enterprise multi-user | 3.5 | Out of model |
+| **Overall** | **~8.6** | Still soft GA; short fix list |
+
+### 6A.2 Open findings (actionable)
+
+| ID | Sev | Finding | Evidence | Impact | Remediation (OpenCode) | Acceptance |
+|----|-----|---------|----------|--------|------------------------|------------|
+| **NR-01** | **P2** | **`POST /api/collections/{id}/items` skips mutate rate limit (dual-stack)** | Rust `server/mod.rs` `add_collection_item` (~646–679): has `ensure_mutable` + URL/title validation, **no** `check_mutate`, **no** `HeaderMap`/`request_identity`. Python `main.py` `add_collection_item` (~562–572): `_ensure_mutable` only — **no** `rate_limit.check_mutate`, no `Request`. Contrast: `create_collection` / purge / settings all call `check_mutate`. | Localhost client (or same-user malware) can flood collection inserts beyond 60/min mutate budget; rate-limit invariant incomplete; audit story incomplete (see NR-03). | Dual-stack: add `check_mutate(request_identity)` before store write; Python take `Request` like create. Add API tests that force mutate limit=1 then second add → 429 `RATE_LIMITED`. | Both stacks return 429 after mutate cap; create still works; readonly still 403 |
+| **NR-02** | **P2** | **Settings persist is not atomic; docs claim atomic** | Rust `config.rs` `save_settings`: `fs::write(config_file(), …)` in place. Python `config.py` `save_settings`: `Path.write_text(...)`. AUDIT_ARCH §1.3 says “atomic file write”. | Crash/power loss mid-write can leave truncated/corrupt `settings.json` → next load falls back to defaults (or partial JSON parse fail → defaults), silent config loss. | Write temp file in same dir + `rename`/`os.replace` (POSIX atomic). Dual-stack. Fix AUDIT_ARCH / any “atomic” claim. Optional chaos: kill mid-write. | Kill during save cannot leave unreadable partial as final path; rename-replace pattern present both stacks |
+| **NR-03** | **P3** | **No audit log event on collection item add** | `collection.create` audited; `add_collection_item` returns without `audit::log_event` / `audit.log_event`. | Incomplete audit trail when `NETRAIL_AUDIT_LOG=1`. | Add `collection.item.add` with host/name lens only (no full URL if policy prefers hosts; match open-event style). Dual-stack. | Audit line appears when audit enabled; still no secrets/queries |
+| **NR-04** | **P3** | **`NETRAIL_READONLY=1` still mutates DB on search/open** | Docs correctly list gated endpoints (settings, history delete/purge, collection create/add). `run_search` still `record_search`; `open_link` still `record_visit`. Readonly tests only assert GET health/settings/history/collections. | Operator expectation “read-only = no writes” is wrong; disk grows under “readonly”. Product decision, not code bug vs docs. | Either document explicitly in SECURITY/DISTRIBUTION/API_ERRORS (“history still recorded”) **or** optionally skip history writes when readonly (product call). | Doc sentence present, or search/open no longer write when readonly + tests |
+| **NR-05** | **P3** | **API token compare is not constant-time** | Rust/Python auth: `bearer.trim() == expected` / `==`. | Theoretical timing leak of token on localhost; low practical risk. | `subtle`/`hmac.compare_digest` dual-stack. | Uses constant-time compare; tests still pass |
+| **NR-06** | **P3** | **Doc drift: `CONTEXT_DUMP_2026-08-02.md`** | Claims SSOT **1.6.1**, Sprint 2 “UP NEXT”; product is **1.6.3**, sprints 2–4 shipped. | Agents bootstrap wrong residual map. | Refresh dump or mark superseded by this handoff §6A. | Version + sprint status match 1.6.3 reality |
+| **NR-07** | **P3** residual | **Unicode / homoglyph hosts pass `validate_open_url`; rely on DNS pin** | Live Python: `http://127。0。0。1/`, `http://①②⑦.0.0.1/` → ALLOW at validate; pin with empty → `OPEN_URL_DNS_UNRESOLVABLE`; pin with 127.0.0.1 → `OPEN_URL_LOCALHOST`. | Same residual class as Q16 if browser normalizes differently than system resolver. | Do **not** expand scope unless asked; document next to Q16 if touching SECURITY.md. | Documented residual only |
+
+### 6A.3 Q&A evaluation (enterprise checklist)
+
+| # | Question | Answer | Evidence |
+|---|----------|--------|----------|
+| Q1 | Localhost-only bind preserved? | **Yes** | `TcpListener::bind(127.0.0.1:7421)`; compose publishes `127.0.0.1:7421` |
+| Q2 | Open-URL SSRF class closed (encoded loopback, private, rebinding, DDG, metadata)? | **Yes** (syntax + pin) | Fixture 68 vectors; DNS pin A15; 162 pytest green |
+| Q3 | Typed errors on 422 / validation? | **Yes** (closed A1) | Python `RequestValidationError` mapper; Rust JsonRejection path (prior closed) |
+| Q4 | Rate limits complete on all mutates? | **No — NR-01** | collection item add missing |
+| Q5 | Readonly gates all documented mutations? | **Yes** for listed endpoints | 6 Rust + 2 Python tests; search/open still write (NR-04 semantic) |
+| Q6 | Dual-stack security parity on open policy? | **Yes** for fixture set | Percent-encoded loopback, trailing-dot, ftp scheme aligned |
+| Q7 | Settings durable under crash? | **No — NR-02** | non-atomic write |
+| Q8 | Secrets on disk? | **No** Brave key env-only; Fernet key keyring/env | config + crypto modules |
+| Q9 | UI XSS from results/history? | **Mostly safe** | `escapeHtml` on titles/snippets/history; docs markdown escaped; images load remote HTTPS (R7) |
+| Q10 | Telemetry? | **None** | no analytics code paths |
+| Q11 | Auth default? | **Off** (by design SEC-2026-09) | token optional |
+| Q12 | Test gates healthy? | **Yes** | 162 pytest / 83 lib cargo this pass; handoff claims 113 total cargo incl. integration |
+| Q13 | Prior P1 findings reopened? | **No** | A1–A15, N1–N4 still closed with evidence |
+| Q14 | Supply chain / SBOM? | **Yes** for 1.6.3 | deterministic SBOM, cosign-signed releases (handoff §5.5) |
+
+### 6A.4 Explicit non-findings (do not re-fix as bugs)
+
+- Trailing-dot / percent-encoded loopback / DDG unwrap / metadata hosts — closed and re-probed.
+- CSP token inject (A2) — hash path present; tests for CSP hash.
+- SharedStore single connection (A3) — present.
+- Graceful shutdown SIGTERM (A4) — present.
+- FTS rebuild on delete (A13) — present + tests.
+- Read-only gate missing on create/purge/settings — **not** missing; only item-add rate limit missing.
+
+### 6A.5 OpenCode remediation order (when quota allows)
+
+1. **NR-01** dual-stack rate limit + tests (smallest, highest correctness value).  
+2. **NR-02** atomic settings write dual-stack + doc claim fix.  
+3. **NR-03** audit event (trivial).  
+4. **NR-04** doc clarification (or product flag — ask human).  
+5. **NR-05** constant-time token (optional hygiene).  
+6. **NR-06** CONTEXT_DUMP refresh.  
+7. Leave **NR-07** / Q16 / R7 as accepted residuals unless asked.
+
+**Must not break:** search/open, static packaging, Fernet interop, error shape, readonly gate coverage, version SSOT.
+
+---
+
+## 6B. Post-remediation verification — 2026-08-02 (Antigravity + full sweep)
+
+| Field | Value |
+|-------|--------|
+| **Tree** | SSOT **1.6.4**. Working tree **dirty / uncommitted** until human asks to commit |
+| **Full sweep** | NR-01..NR-14 closed in tree (NR-07 residual; NR-15 = commit/release process) |
+| **Verdict** | Ready to commit; cut **1.6.4** after commit + CI green. No known open P2. |
+
+### 6B.1 NR checklist (final)
+
+| ID | Status | Evidence |
+|----|--------|----------|
+| **NR-01** | ✅ | Dual-stack `check_mutate` on collection item add; Python + Rust 429 tests |
+| **NR-02/08** | ✅ | Unique temps: Python `mkstemp`; Rust `pid.seq.nanos` + rename; concurrent tests both stacks |
+| **NR-03** | ✅ | `collection.item.add` audit dual-stack + Python test |
+| **NR-04** | ✅ | SECURITY.md + DISTRIBUTION + API_ERRORS (history still logged under readonly) |
+| **NR-05** | ✅ | Constant-time token compare dual-stack; `hmac` top-level import |
+| **NR-06** | ✅ | CONTEXT_DUMP SSOT **1.6.4** |
+| **NR-07** | ✅ residual | DNS-pin class; documented |
+| **NR-09..14** | ✅ | SECURITY, dump version, hygiene, CONFIG_SAVE→500 Internal, Rust save + rate-limit tests |
+| **NR-15** | open process | Commit + tag when human requests |
+
+### 6B.2 Residual (accepted / process only)
+
+| Item | Notes |
+|------|-------|
+| Q16 TTL rebinding, R7 images, unauth localhost default, FTS plaintext | Unchanged accepted residuals |
+| 1.6.4 not yet committed/tagged | Process — not a code defect |
 
 ---
 
@@ -369,7 +478,14 @@ Gates as of 2026-08-02 (post backlog E2/E3/E5): **162 pytest · 113 cargo tests 
 
 ---
 
-## 9. Remaining work points (established 2026-08-02)
+## 9. Remaining work points (established 2026-08-02; **audit refresh same day**)
+
+### P0 — Full sweep status (see §6B)
+
+| # | Item | Status |
+|---|------|--------|
+| NR-01..NR-14 | Code + docs + tests | ✅ closed in working tree |
+| NR-15 | Commit + push + tag **1.6.4** | ⏳ human request |
 
 ### P1 — Release hygiene (next release)
 
@@ -379,6 +495,7 @@ Gates as of 2026-08-02 (post backlog E2/E3/E5): **162 pytest · 113 cargo tests 
 | ~~R2~~ | ~~Post-release doc refresh~~ | **✅ Done 2026-08-02** — DISTRIBUTION version headers; HANDOVER HEAD note; CHANGELOG [1.6.2] |
 | ~~R3~~ | ~~Cut v1.6.3~~ | **✅ Done 2026-08-02** — reproducibility & supply chain: E2 SBOM-in-bundle + E5 fixture growth + E3 CSS guard + `docs/RELEASE_ASSURANCE.md`. SSOT 1.6.2→1.6.3 in 5 files; CHANGELOG [1.6.3]; tag `v1.6.3`. First live run of the SBOM-in-bundle verify step **failed** on a real finding (generator emitted a `generated=<timestamp>` → the two job generations differed) → fixed to deterministic commit-provenance (`b68e4d9`), re-tagged; green. Assets: rpm/deb/AppImage/netrail-api/SBOM.txt/SHA256SUMS(.sig/.pem); cosign "Verified OK"; deb/AppImage bundled SBOM byte-identical to the asset (rpm verified in CI); binary `--sbom` == SBOM Rust section (570 pkgs, `netrail@1.6.3`) |
 | ~~R4~~ | ~~Post-1.6.3 doc refresh~~ | **✅ Done 2026-08-02** — DISTRIBUTION (no version headers needed); HANDOVER HEAD note + doc index; handoff release row + resume prompt; CHANGELOG [1.6.3] |
+| R5 | Cut patch **1.6.4** after full-sweep commit + CI green | NR-08 fixed; gates must pass |
 
 ### P2 — Engineering backlog (not blocking)
 
@@ -449,13 +566,12 @@ Gates as of 2026-08-02 (post backlog E2/E3/E5): **162 pytest · 113 cargo tests 
 You are continuing NetRail (Linux local research console).
 
 READ FIRST:
-  docs/HANDOFF_OPENCODE_2026-08-02.md
+  docs/HANDOFF_OPENCODE_2026-08-02.md  ← especially §6A (new audit findings NR-01..07) and §9 P0
   HANDOVER.md
-  docs/AUDIT_ARCH_2026-08-01.md (closed findings) + docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md (residuals only)
+  docs/AUDIT_ARCH_2026-08-01.md (closed A1–A15) + docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md (residuals)
 
-Version: 1.6.3 SSOT. HEAD = b68e4d9, main == origin/main (everything pushed), tree CLEAN.
-Releases: v1.6.1, v1.6.2, v1.6.3 published (cosign-signed). [Unreleased] empty;
-  next work is only the don't-build backlog (see handoff §9 P2/P3).
+Version: 1.6.3 SSOT. HEAD at audit time = bc63068 (or later if remediations landed).
+main == origin/main when clean. Releases: v1.6.1–v1.6.3 cosign-signed.
 
 Stack:
   Rust Axum primary + Tauri 2 desktop; Python FastAPI for Docker/Flatpak/tests.
@@ -468,15 +584,23 @@ Invariants:
   scripts/check-versions.sh; dual-stack security in both languages; typed errors {code,detail,status}
   (incl. READONLY_MODE); NETRAIL_READONLY=1 gates ALL mutations; packaged static under /usr/share/netrail/static/.
 
+THIS SESSION / NEXT WORK (audit-only pass already done — remediations):
+  P0 from handoff §9 / §6A:
+    NR-01 P2: rate-limit POST /api/collections/{id}/items (Rust+Python) + 429 tests
+    NR-02 P2: atomic settings write (temp+rename) dual-stack; fix false "atomic" doc claim
+    NR-03 P3: audit event on collection item add
+    NR-04 P3: document or change readonly vs history writes (ask human before behavior change)
+    NR-05 P3: constant-time token compare (optional)
+    NR-06 P3: refresh CONTEXT_DUMP version/sprint drift
+  Do NOT re-open closed A1–A15 / N1–N4 without new evidence.
+  Do NOT build accepted residuals (Q16 rebinding, R7 images, multi-user) unless asked.
+
 Bootstrap:
   bash scripts/check-versions.sh
   source .venv/bin/activate && pytest tests/ -q
   cd src-tauri && cargo clippy --all-targets -- -D warnings && cargo test
   cargo build --release --bin netrail-api --no-default-features
   NETRAIL_RATE_LIMIT=0 bash scripts/e2e-api-smoke.sh && bash scripts/parity-api-smoke.sh
-
-Remaining work: see handoff §9 — P1 release cut 1.6.2; P2 load test / SBOM-in-bundle / CSS snapshot /
-  tray left-click / fixture growth; P3 accepted residuals (do not build without being asked).
 
 Must not break: search/open, static packaging, Fernet interop, error shape, read-only gate coverage.
 
@@ -510,10 +634,12 @@ Do not force-push. Do not amend published history. Commit + push when the human 
 
 ## 14. Honest closing
 
-NetRail 1.6.1 is a **mature single-user product** for its model: link-first search, hardened open-URL pipeline (syntax + DNS pin), optional operator controls (token, audit, strict backends, read-only, JSON logs), cosign-signed releases, and dual entrypoints (desktop + headless). The two audit passes closed every P1/P2 security finding; what remains is a short, explicit list: one release cut (1.6.2), four concrete backlog items (load test, SBOM-in-bundle, CSS snapshot, tray left-click, fixture growth), and accepted residuals that are documented and should not be built without an explicit request.
+NetRail **1.6.3** is a **mature single-user product** for its model: link-first search, hardened open-URL pipeline (syntax + DNS pin), optional operator controls (token, audit, strict backends, read-only, JSON logs), cosign-signed releases, SBOM-in-bundle, and dual entrypoints (desktop + headless). Prior audits closed A1–A15 and N1–N4.
 
-OpenCode should treat **§9 as the work plan**, preserve dual-stack discipline on any security touch, keep the read-only gate on every new mutation handler, and refuse scope that turns NetRail into multi-tenant SaaS.
+**This audit (2026-08-02 post-1.6.3)** found **no P0/P1 regressions**, but **two P2 bugs** still open for remediation: incomplete mutate rate-limit on collection item add (**NR-01**), and non-atomic settings persistence despite docs claiming atomic (**NR-02**). P3 hygiene (audit event, readonly semantics docs, constant-time token, CONTEXT_DUMP drift) and accepted residuals (Q16, R7, unauth default) remain.
+
+OpenCode should treat **§6A + §9 P0 as the work plan**, preserve dual-stack discipline, keep the read-only gate on every new mutation handler, and refuse scope that turns NetRail into multi-tenant SaaS.
 
 ---
 
-*Handoff for OpenCode / human continuity — NetRail 1.6.1 — 2026-08-02 — be honest, no scope creep, prefer durable repo state.*
+*Handoff for OpenCode / human continuity — NetRail 1.6.3 — audit refresh 2026-08-02 — be honest, no scope creep, prefer durable repo state.*
