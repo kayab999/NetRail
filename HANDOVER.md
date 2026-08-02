@@ -226,7 +226,7 @@ Non-happy-path covered: empty query, bad mode/settings, open localhost/private/e
 ```
 You are continuing NetRail (Linux local research console, Rust-primary + Python fallback).
 
-Read HANDOVER.md first. Repo: NetRail. Version 1.6.2 (HEAD on main, tree clean, all pushed). See docs/HANDOFF_OPENCODE_2026-08-02.md for the remaining work plan.
+Read HANDOVER.md first. Repo: NetRail. Version 1.6.2 (HEAD on main, tree clean, all pushed). Remaining work: next cut **1.6.3** from [Unreleased] (E2 SBOM-in-bundle + E5 fixture growth + E3 CSS guard), then the don't-build backlog (C3/C4, multi-user/RBAC, egress proxy/TLS pinning, metrics/SLO, Windows/macOS) — see docs/HANDOFF_OPENCODE_2026-08-02.md §9 and docs/ARCHITECTURE.md "Current state".
 
 Invariants: localhost-only API, no telemetry, open-URL blocks (incl. encoded loopback + private IPs + trailing-dot normalization + DNS pin at open), no Brave key on disk, version SSOT via scripts/check-versions.sh, typed errors {code,detail,status}, NETRAIL_READONLY=1 gates all mutations.
 
@@ -255,11 +255,11 @@ Do not force-push. Do not push unless I ask.
 
 | Doc | Role |
 |-----|------|
-| [docs/HANDOFF_OPENCODE_2026-08-02.md](docs/HANDOFF_OPENCODE_2026-08-02.md) | **OpenCode handoff** — enterprise analysis + remaining work plan (release cut 1.6.2, backlog, residuals) |
+| [docs/HANDOFF_OPENCODE_2026-08-02.md](docs/HANDOFF_OPENCODE_2026-08-02.md) | **OpenCode handoff** — enterprise analysis + remaining work plan (release cut 1.6.3, backlog, residuals) |
 | [README.md](README.md) | Install + pitch |
 | [SECURITY.md](SECURITY.md) | Threat model |
 | [docs/API_ERRORS.md](docs/API_ERRORS.md) | Error codes |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Lifecycle roadmap |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Lifecycle roadmap (current state + next milestones) |
 | [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | Packaging |
 | [docs/MANUAL.md](docs/MANUAL.md) | User manual |
 | [docs/AUDIT_ENTERPRISE_2026-07-31.md](docs/AUDIT_ENTERPRISE_2026-07-31.md) | Post-GA enterprise audit + workplan |

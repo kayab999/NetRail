@@ -251,6 +251,15 @@ CI fails on drift: `bash scripts/check-versions.sh`.
 - Tests: `src-tauri/tests/readonly_mode.rs` (6 tests, separate binary so the env can't race `api_error_codes.rs`) + 2 Python API tests. Gates: 162 pytest, 113 cargo tests, clippy clean, parity + E2E smokes green on rebuilt release binary.
 - Docs: `API_ERRORS.md` `READONLY_MODE`, DISTRIBUTION.md env table + systemd/backup sections, CHANGELOG [Unreleased], audit docs closed-state updates.
 
+### 5.4 Batch 4 — backlog E2/E3/E4/E5 + v1.6.2 release (PRs #1–#4, main)
+
+- **PR #1 → v1.6.2** (`307d92b`, tag `v1.6.2`): Sprints 2–4 hardening merged (chaos suite `aa2400a`, load/benchmarks `12fd13c`, hardening report `065e110`) + the PR-review CI fixes (`7ec8f69` chaos-test filter split, `a9b1bf1` `pip-audit`→`pip_audit`). Release workflow green; cosign keyless verified.
+- **E2 SBOM in bundle** (PR #2, `abfdca0`): `build.rs` derives Rust inventory from `Cargo.lock` → `src/sbom.rs` `include_str!`; `netrail-api --sbom` (byte-identical to `SBOM.txt` Rust section); `tauri.conf.json` ships `SBOM.txt` at `/usr/share/netrail/SBOM.txt` in deb/rpm/AppImage; release.yml regenerates + `cmp` + dpkg/rpm presence step; `scripts/generate-sbom.sh` unified (fixed bare-`@4` bug).
+- **E5 fixture growth** (PR #3, `ca35210`): `url_policy.json` 43→68 vectors; found + fixed Python `ftp://` → `OPEN_URL_INVALID_SCHEME` divergence; parity harness now probes `backend_url` live via settings PUT.
+- **E3 CSS guard** (PR #4, `54ce3be`): `tests/test_ui_css.py` pins the `.result-card` minmax grid contract (CI-gated).
+- **E4** — decision (no code): kept `show_menu_on_left_click(true)`.
+- Docs refresh `536d32e`: HANDOVER HEAD note + HANDOFF tables; gates now **162 pytest · 113 cargo**.
+
 **The 08-01 handoff's Spotlight/CSS WIP shipped in the 1.5.0 series** (tray focus places caret in `#query`; result-card grid `minmax(0,1fr) auto`) — no longer a continuity surface.
 
 ---
@@ -357,14 +366,16 @@ Gates as of 2026-08-02 (post backlog E2/E3/E5): **162 pytest · 113 cargo tests 
 
 | # | Item | Acceptance |
 |---|------|------------|
-| R1 | Cut the next release from [Unreleased] delta (read-only mode + systemd unit + backup script) | Bump SSOT 1.6.1 → **1.6.2** in 5 files; `check-versions.sh` green; CHANGELOG [Unreleased] → [1.6.2] — 2026-08-02; tag; release workflow (cosign + cargo-audit pins already in place); assets + offline signature verify like v1.6.1 |
-| R2 | Post-release doc refresh | DISTRIBUTION.md version headers; doc index; this handoff's release row |
+| ~~R1~~ | ~~Cut the next release from [Unreleased] delta~~ | **✅ Done 2026-08-02** — v1.6.2 cut (read-only mode + systemd unit + backup script) with the standard SSOT bump + tag; workflow green, cosign verified |
+| ~~R2~~ | ~~Post-release doc refresh~~ | **✅ Done 2026-08-02** — DISTRIBUTION version headers; HANDOVER HEAD note; CHANGELOG [1.6.2] |
+| R3 | **Cut v1.6.3** from the current [Unreleased] delta (E2 SBOM-in-bundle + E5 fixture growth + E3 CSS guard) | Bump SSOT 1.6.2 → **1.6.3** in 5 files (`package.json`, `Cargo.toml`, `tauri.conf.json`, `netrail/__init__.py`, `src-tauri/src/config.rs`); `check-versions.sh` green; CHANGELOG [Unreleased] → [1.6.3]; tag; release workflow — **first live exercise of the new "SBOM embedded in bundles" verify step** (dpkg-deb/rpm) and the pre-bundle SBOM generation ordering; verify cosign + offline signature like v1.6.1 |
+| R4 | Post-1.6.3 doc refresh | DISTRIBUTION.md version headers; doc index; this handoff's release row; README screenshots/version badges if touched |
 
 ### P2 — Engineering backlog (not blocking)
 
 | # | Item | Notes |
 |---|------|-------|
-| E1 | **Load / performance check** | Scorecard "Performance 7 — no formal load tests". Add a simple concurrent-request probe (e.g., 20 parallel searches/open vs latency budget) both stacks; document results. No new framework needed |
+| ~~E1~~ | ~~Load / performance check~~ | **✅ Done 2026-08-02** (Sprints 3–4): `scripts/load/{run,slope}.py` + `scripts/load-10k.sh` resource-stability harness and `scripts/bench/bench.py` + `report.py` + `scripts/bench-dual.sh` dual-stack benchmarks → `docs/sprint3-slope.md` + `docs/bench-dual.md` (Rust ≈573 rps / p50 23 ms / 14% CPU / 10.4 MiB vs Python ≈295 rps / p50 39 ms / 74% CPU / 64.1 MiB; no knee ≤ C=512). Also surfaced + fixed the Python `HistoryStore` concurrency race |
 | ~~E2~~ | ~~SBOM pinned in bundle~~ | **✅ Done 2026-08-02** (PR #2): Rust inventory embedded in every binary at build time (`build.rs` reads `Cargo.lock` → `sbom.rs` `include_str!`; `netrail-api --sbom` prints it, byte-identical to the shipped `SBOM.txt` Rust section) + full `SBOM.txt` packaged in `.deb`/`.rpm`/AppImage at `/usr/share/netrail/SBOM.txt`; release CI asserts both. Generator unified in `scripts/generate-sbom.sh` (fixed the bare-`@4` awk bug) |
 | ~~E3~~ | ~~CSS regression snapshot~~ | **✅ Done 2026-08-02** (PR #4): `tests/test_ui_css.py` — structural guard pinning `.result-card` desktop `minmax(0,1fr) auto`, image-card `96px minmax(0,1fr) auto`, action column stays `auto`, `720px` collapse to `1fr`. CI-gated via `pytest tests/`; verified non-vacuous |
 | ~~E4~~ | ~~Alfred-style tray left-click~~ | **✅ Closed 2026-08-02** — kept `show_menu_on_left_click(true)` (left-click opens menu + focuses window); decision recorded, no change |
@@ -410,7 +421,7 @@ Gates as of 2026-08-02 (post backlog E2/E3/E5): **162 pytest · 113 cargo tests 
 | Core job completeness | 9 | Search → rail → open solid |
 | Safety / data-loss | 9 | Purge confirm; WAL; backup script; read-only gate |
 | Correctness of mutations | 9 | ETag/If-Match settings; typed collection errors; readonly gate tested |
-| Performance | 7 | No formal load tests (E1) |
+| Performance | 8 | Load harness + slope + dual-stack benchmarks (Rust ≈573 rps/p50 23 ms; Python ≈295 rps/p50 39 ms) |
 | Usability | 8.5 | Spotlight focus; keyboard rail; recovery UX |
 | Recoverability | 8.5 | Partial fanout, wiki fallback, hide-to-tray, DB backup/restore |
 | Architecture | 8.5 | Clear modules; dual-stack residual cost |
@@ -433,9 +444,9 @@ READ FIRST:
   HANDOVER.md
   docs/AUDIT_ARCH_2026-08-01.md (closed findings) + docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md (residuals only)
 
-Version: 1.6.1 SSOT. HEAD = abaf661, main == origin/main (everything pushed), tree CLEAN.
-Releases: v1.6.0, v1.6.1 published (cosign-signed). [Unreleased] holds read-only mode,
-  systemd unit, backup script → next cut is 1.6.2 (see handoff §9 R1).
+Version: 1.6.2 SSOT. HEAD = 536d32e, main == origin/main (everything pushed), tree CLEAN.
+Releases: v1.6.1, v1.6.2 published (cosign-signed). [Unreleased] holds E2 SBOM-in-bundle,
+  E5 fixture growth, E3 CSS guard → next cut is 1.6.3 (see handoff §9 R3).
 
 Stack:
   Rust Axum primary + Tauri 2 desktop; Python FastAPI for Docker/Flatpak/tests.
@@ -474,8 +485,8 @@ Do not force-push. Do not amend published history. Commit + push when the human 
 | [README.md](../README.md) | Install + pitch |
 | [HANDOVER.md](../HANDOVER.md) | Zero-context freeze resume |
 | [SECURITY.md](../SECURITY.md) | Threat model |
-| [CHANGELOG.md](../CHANGELOG.md) | Semver history (1.6.1 released; [Unreleased] = enterprise batch) |
-| [docs/ARCHITECTURE.md](ARCHITECTURE.md) | Lifecycle / design |
+| [CHANGELOG.md](../CHANGELOG.md) | Semver history (1.6.2 released; [Unreleased] = E2/E3/E5) |
+| [docs/ARCHITECTURE.md](ARCHITECTURE.md) | Lifecycle / design roadmap (current state + next milestones) |
 | [docs/DISTRIBUTION.md](DISTRIBUTION.md) | Packaging + env table + systemd + backup/restore |
 | [docs/MANUAL.md](MANUAL.md) | End-user manual |
 | [docs/API_ERRORS.md](API_ERRORS.md) | Error codes (incl. `READONLY_MODE`) |

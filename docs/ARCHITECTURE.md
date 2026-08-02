@@ -1,6 +1,6 @@
 # NetRail — Architecture & Lifecycle Blueprint
 
-> **Current product:** NetRail **1.2.x** (Rust-primary). Lifecycle tables below retain historical phase labels; rows marked ✅ are shipped. Open items are backlog, not “still in Phase 1.” Residual risk: [AUDIT_ENTERPRISE_2026-07-31.md](AUDIT_ENTERPRISE_2026-07-31.md).
+> **Current product:** NetRail **1.6.2** (Rust-primary, dual-stack). Lifecycle tables below retain historical phase labels; rows marked ✅ are shipped. Open items are backlog, not “still in Phase 1.” Residual risk: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). Remaining-work plan: [docs/HANDOFF_OPENCODE_2026-08-02.md](HANDOFF_OPENCODE_2026-08-02.md) §9.
 
 ## Vision
 
@@ -253,6 +253,22 @@ NetMedic IPC, MCP servers, or desktop launchers can wrap these calls in ~50 line
 ## Lifecycle Roadmap
 
 The roadmap is organized into **phases** with explicit goals, deliverables, exit criteria, and risk notes. Dates are indicative — scope beats calendar.
+
+### Current state (2026-08-02)
+
+Released: **v1.6.2** (hardening Sprints 2–4: chaos/fault-injection suite + fixes, resource-stability load harness, dual-stack benchmarks; read-only mode + systemd + backup from 1.6.1 enterprise batch; DNS pin A15 + webview E2E + cosign-signed CI from 1.6.1).
+
+Backlog shipped on `main` after 1.6.2 (candidate for the next release):
+
+| # | Item | Landed |
+|---|------|--------|
+| E2 | SBOM pinned in bundle (embedded in binary via `--sbom` + packaged in deb/rpm/AppImage) | PR #2 |
+| E5 | Golden URL-policy fixture grown 43→68 vectors + live backend parity + `ftp://` scheme-code fix | PR #3 |
+| E3 | Structural CSS regression guard for the `.result-card` grid contract | PR #4 |
+| E4 | Tray left-click — kept `show_menu_on_left_click(true)` (decision, no change) | closed |
+| E1 | Load / performance check (load harness + slope + dual-stack benchmarks) | Sprints 3–4 |
+
+**Next milestone:** cut **v1.6.3** from the [Unreleased] delta (E2 + E3 + E5) — the first release to exercise the new SBOM-in-bundle CI verify step. Then the remaining backlog is "don't build unless asked": C3 DNS resolve-and-warn flag, C4 images-off flag, multi-user/RBAC, egress proxy/TLS pinning, metrics/SLO, Windows/macOS ports (see [HANDOFF §9](HANDOFF_OPENCODE_2026-08-02.md#9-remaining-work-points-established-2026-08-02)).
 
 ---
 
