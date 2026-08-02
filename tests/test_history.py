@@ -1,4 +1,5 @@
 import pytest
+from concurrent.futures import ThreadPoolExecutor
 from cryptography.fernet import Fernet
 
 from netrail.backends.types import SearchResult
@@ -129,3 +130,29 @@ def test_connect_enables_wal_and_stamps_schema_version(tmp_path, monkeypatch):
         assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     finally:
         conn.close()
+
+
+def test_concurrent_store_access_is_serialized(temp_store):
+    """Sprint 3: the shared sqlite3 connection (check_same_thread=False) must
+    never be used from two threads at once — before the lock, concurrent
+    `stats()` returned None from fetchone (TypeError) under load."""
+    results = [SearchResult(title="A", url="https://example.com/a", backend="ddgs")]
+    errors: list[Exception] = []
+
+    def hammer(i: int) -> None:
+        try:
+            for _ in range(100):
+                temp_store.stats()
+                temp_store.list_history()
+                temp_store.record_search(f"concurrent {i}", "web", ["ddgs"], results)
+        except Exception as exc:  # pragma: no cover - regression case
+            errors.append(exc)
+
+    with ThreadPoolExecutor(max_workers=16) as pool:
+        list(pool.map(hammer, range(16)))
+
+    assert errors == []
+    stats = temp_store.stats()
+    assert stats["queries"] == 1600
+    assert stats["visits"] == 0
+    assert stats["collections"] == 0

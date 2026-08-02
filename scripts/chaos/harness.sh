@@ -16,7 +16,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PORT="${NETRAIL_CHAOS_PORT:-7421}"
 BASE="http://127.0.0.1:${PORT}"
 BIN="${ROOT}/src-tauri/target/release/netrail-api"
-VENV_PY="${ROOT}/.venv/bin/python"
+if [ -x "${ROOT}/.venv/bin/python" ]; then
+  VENV_PY="${ROOT}/.venv/bin/python"
+else
+  VENV_PY="python3"
+fi
 
 log() { printf '\033[1;36m[chaos]\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m[chaos FAIL]\033[0m %s\n' "$*"; exit 1; }
