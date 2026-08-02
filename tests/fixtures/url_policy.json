@@ -192,6 +192,101 @@
       "url": "http://[::ffff:7f00:1]./",
       "expect": "block",
       "code": "OPEN_URL_INVALID"
+    },
+    {
+      "id": "reject_ipv6_loopback",
+      "url": "http://[::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_ipv6_hex_embedded_loopback",
+      "url": "http://[::ffff:7f00:1]/",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_ipv6_link_local",
+      "url": "http://[fe80::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_LINK_LOCAL"
+    },
+    {
+      "id": "reject_ipv6_ula",
+      "url": "http://[fd00::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_ipv6_mapped_private",
+      "url": "http://[::ffff:192.168.1.1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_percent_encoded_loopback",
+      "url": "http://%31%32%37%2e%30%2e%30%2e%31/",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_uppercase_scheme_loopback",
+      "url": "HTTP://127.0.0.1/",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "allow_mixedcase_scheme",
+      "url": "Http://example.com/path",
+      "expect": "allow"
+    },
+    {
+      "id": "reject_localhost_hostname",
+      "url": "http://localhost:8080/admin",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_localhost_hostname_trailing_dot",
+      "url": "http://localhost./",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_zero_addr",
+      "url": "http://0.0.0.0/",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_ftp_scheme",
+      "url": "ftp://example.com/",
+      "expect": "block",
+      "code": "OPEN_URL_INVALID_SCHEME"
+    },
+    {
+      "id": "reject_xip_io_subdomain_private",
+      "url": "http://192.168.1.1.xip.io/",
+      "expect": "block",
+      "code": "OPEN_URL_DNS_REBINDING"
+    },
+    {
+      "id": "reject_ddg_unwrap_private",
+      "url": "https://duckduckgo.com/l/?uddg=http%3A%2F%2F192.168.1.1%2F",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_double_encoded_ddg_localhost",
+      "url": "https://duckduckgo.com/l/?uddg=https%3A%2F%2Fduckduckgo.com%2Fl%2F%3Fuddg%3Dhttp%253A%252F%252F127.0.0.1%252F",
+      "expect": "block",
+      "code": "OPEN_URL_LOCALHOST"
+    },
+    {
+      "id": "reject_metadata_ip_via_link_local",
+      "url": "http://169.254.169.254/latest/meta-data/",
+      "expect": "block",
+      "code": "OPEN_URL_LINK_LOCAL"
     }
   ],
   "backend_url": [
@@ -262,6 +357,56 @@
       "url": "http://127.0.0.1.:8080",
       "expect": "allow",
       "normalized": "http://127.0.0.1.:8080"
+    },
+    {
+      "id": "allow_https_backend",
+      "url": "https://searxng.example.com",
+      "expect": "allow"
+    },
+    {
+      "id": "reject_metadata_ipv6_mapped_backend",
+      "url": "http://[::ffff:169.254.169.254]/",
+      "expect": "block",
+      "code": "BACKEND_URL_CLOUD_METADATA"
+    },
+    {
+      "id": "reject_nip_io_subdomain_private_backend",
+      "url": "http://10.0.0.1.nip.io/",
+      "expect": "block",
+      "code": "BACKEND_URL_DNS_REBINDING"
+    },
+    {
+      "id": "reject_ipv6_link_local_backend",
+      "url": "http://[fe80::1]/",
+      "expect": "block",
+      "code": "BACKEND_URL_LINK_LOCAL"
+    },
+    {
+      "id": "allow_ipv6_loopback_backend",
+      "url": "http://[::1]:8080",
+      "expect": "allow"
+    },
+    {
+      "id": "allow_localhost_hostname_backend",
+      "url": "http://localhost:8080",
+      "expect": "allow"
+    },
+    {
+      "id": "allow_ipv6_ula_backend",
+      "url": "http://[fd00::1]:8080",
+      "expect": "allow"
+    },
+    {
+      "id": "allow_ipv6_mapped_loopback_backend",
+      "url": "http://[::ffff:127.0.0.1]:8080",
+      "expect": "allow"
+    },
+    {
+      "id": "reject_strict_ipv6_loopback_backend",
+      "url": "http://[::1]:8080",
+      "expect": "block",
+      "code": "BACKEND_URL_STRICT_PRIVATE",
+      "strict": true
     }
   ]
 }

@@ -78,7 +78,7 @@
 
 ### 1.5 Error contract
 
-`NetRailError` (Rust enum, error.rs:5-97) ↔ `NetRailError` (Python class, errors.py:4-12): stable codes, mapped HTTP statuses (400/404/429/502/500), JSON body `{code, detail, status}`. Golden fixture `tests/fixtures/url_policy.json` (32 open-url + backend-url vectors) drives Rust unit tests, Python tests, and the live parity harness. **Hole:** axum extractor rejections bypass this contract entirely → plain-text HTTP 422 (finding A1).
+`NetRailError` (Rust enum, error.rs:5-97) ↔ `NetRailError` (Python class, errors.py:4-12): stable codes, mapped HTTP statuses (400/404/429/502/500), JSON body `{code, detail, status}`. Golden fixture `tests/fixtures/url_policy.json` (68 open-url + backend-url vectors, grown 2026-08-02) drives Rust unit tests, Python tests, and the live parity harness (which now probes `backend_url` vectors live too). **Hole:** axum extractor rejections bypass this contract entirely → plain-text HTTP 422 (finding A1).
 
 ---
 
@@ -120,7 +120,7 @@
 
 | Surface | Rust | Python | Parity |
 |---------|------|--------|--------|
-| Open URL policy | `validate_open_url` (security.rs:17-65) | `validate_open_url` (security.py:264) | ✅ golden fixture, 32 vectors |
+| Open URL policy | `validate_open_url` (security.rs:17-65) | `validate_open_url` (security.py:264) | ✅ golden fixture, 68 vectors |
 | Backend URL policy | `validate_backend_url_with_options` (security.rs:276) | `validate_backend_url` (security.py:315) | ✅ incl. `strict` |
 | Typed errors | `NetRailError` enum (error.rs) | `NetRailError` class (errors.py) | ✅ contract; **✗ 422 path** (A1) |
 | Settings model | struct + serde (config.rs:24-45) | pydantic model (main.py:175-198) | ✅ fields align |

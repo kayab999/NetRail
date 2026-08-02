@@ -157,6 +157,63 @@ if fails:
 print(f"fixture open_url vectors: {len(vecs)} passed")
 PYEOF
 
+# Backend-URL vectors must behave identically on the live Rust binary. They are
+# exercised through the settings update path (validate_settings) since there is
+# no dedicated backend-URL endpoint. Strict-mode vectors are covered by the
+# Rust/Python unit tests, so only non-strict ones are probed live.
+"$PY" - "$ROOT/tests/fixtures/url_policy.json" <<'PYEOF'
+import json, sys, urllib.request
+
+base = "http://127.0.0.1:7421"
+fixture = json.load(open(sys.argv[1]))
+
+def call(method, path, data=None):
+    req = urllib.request.Request(
+        base + path,
+        data=json.dumps(data).encode() if data is not None else None,
+        headers={"Content-Type": "application/json"},
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+settings = {
+    "search_strategy": "fanout",
+    "backend_order": ["ddgs"],
+    "ddgs_enabled": True,
+    "searxng_url": None,
+    "brave_enabled": False,
+    "private_mode": False,
+    "history_enabled": True,
+    "history_encrypt": False,
+    "history_ttl_days": 90,
+    "max_results": 25,
+}
+fails = []
+for c in fixture["backend_url"]:
+    if c.get("strict"):
+        continue
+    body = dict(settings, searxng_url=c["url"])
+    status, resp = call("PUT", "/api/settings", body)
+    if c["expect"] == "allow":
+        ok = status == 200
+    else:
+        ok = status == 400 and (not c.get("code") or resp.get("code") == c["code"])
+    tag = "ok " if ok else "FAIL"
+    print(f"{tag} {c['id']:44s} {status} {resp.get('code')}")
+    if not ok:
+        fails.append((c["id"], c["url"], status, resp))
+if fails:
+    print("BACKEND LIVE PARITY FAILURES:")
+    for f in fails:
+        print("  ", f)
+    sys.exit(1)
+print(f"fixture backend_url live vectors: {sum(1 for c in fixture['backend_url'] if not c.get('strict'))} passed")
+PYEOF
+
 probe GET /api/docs/nope '' DOC_NOT_FOUND 404
 
 # Settings concurrency contract (A6): ETag on GET, 409 SETTINGS_CONFLICT on a
