@@ -4,6 +4,8 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 
 ## [Unreleased]
 
+## [1.6.2] — 2026-08-02
+
 ### Added
 
 - **Systemd unit (headless)** — `packaging/netrail-api.service` runs `netrail-api` as a hardened system service (`User=netrail`, `ProtectSystem=strict`, `NoNewPrivileges`, `PrivateTmp`, `ReadWritePaths=/var/lib/netrail`, `Restart=on-failure`); install + backup/restore instructions in DISTRIBUTION.md.

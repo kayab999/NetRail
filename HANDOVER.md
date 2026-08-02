@@ -3,12 +3,12 @@
 | Field | Value |
 |-------|--------|
 | **Product** | Local privacy-first research console for Linux |
-| **Version** | **1.6.1** (`scripts/check-versions.sh`; [Unreleased] = read-only mode + systemd unit + backup script) |
+| **Version** | **1.6.2** (`scripts/check-versions.sh`; hardening Sprints 2–4: chaos/fault injection, resource stability, dual-stack benchmarks) |
 | **Primary path** | Rust Axum API + Tauri 2 desktop; Python for Docker/Flatpak/tests |
 | **License** | AGPL-3.0 |
 | **Repo** | https://github.com/kayab999/NetRail |
 | **Freeze date** | 2026-07-12 (invariants; state refreshed 2026-08-02) |
-| **HEAD note** | **1.6.1** released (DNS pin A15, webview E2E matrix #9, cosign-signed CI matrix #10, FTS sync fix A13, typed 422s A1, CSP-safe token A2, ETag settings A6, per-identity rate limits A9, audit rotation A5, WAL + graceful shutdown A4, schema versioning A11). HEAD `abaf661`, main == origin/main, tree clean. Audit: [docs/AUDIT_ARCH_2026-08-01.md](docs/AUDIT_ARCH_2026-08-01.md) + [docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md) |
+| **HEAD note** | **1.6.2** released (Sprints 2–4 hardening: chaos/fault-injection suite + fixes, resource-stability load harness, dual-stack benchmarks; read-only mode + systemd + backup from 1.6.1 enterprise batch). 1.6.1 shipped DNS pin A15, webview E2E matrix #9, cosign-signed CI matrix #10, FTS sync fix A13, typed 422s A1, CSP-safe token A2, ETag settings A6, per-identity rate limits A9, audit rotation A5, WAL + graceful shutdown A4, schema versioning A11. Audit: [docs/AUDIT_ARCH_2026-08-01.md](docs/AUDIT_ARCH_2026-08-01.md) + [docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md) + [docs/hardening-report-v1.6.1.md](docs/hardening-report-v1.6.1.md) |
 
 ---
 
@@ -226,7 +226,7 @@ Non-happy-path covered: empty query, bad mode/settings, open localhost/private/e
 ```
 You are continuing NetRail (Linux local research console, Rust-primary + Python fallback).
 
-Read HANDOVER.md first. Repo: NetRail. Version 1.6.1 (HEAD `abaf661`, tree clean, all pushed). See docs/HANDOFF_OPENCODE_2026-08-02.md for the remaining work plan.
+Read HANDOVER.md first. Repo: NetRail. Version 1.6.2 (HEAD on main, tree clean, all pushed). See docs/HANDOFF_OPENCODE_2026-08-02.md for the remaining work plan.
 
 Invariants: localhost-only API, no telemetry, open-URL blocks (incl. encoded loopback + private IPs + trailing-dot normalization + DNS pin at open), no Brave key on disk, version SSOT via scripts/check-versions.sh, typed errors {code,detail,status}, NETRAIL_READONLY=1 gates all mutations.
 
