@@ -25,6 +25,7 @@ The frontend branches on `code`; `detail` is human-readable. Rust (Tauri / `netr
 | `OPEN_URL_DNS_REBINDING` | 400 | nip.io / sslip.io / xip.io / localtest.me hostname |
 | `OPEN_URL_LINK_LOCAL` | 400 | Link-local IP |
 | `OPEN_URL_PRIVATE` | 400 | Private / non-public IP (RFC1918, ULA, multicast, …) |
+| `OPEN_URL_DNS_UNRESOLVABLE` | 400 | Hostname does not resolve (fails closed before spawn) |
 | `OPEN_URL_CLOUD_METADATA` | 400 | Cloud metadata hostname (e.g. `metadata.google.internal`) |
 | `COLLECTION_ITEM_NOTES_INVALID` | 400 | Collection item notes longer than 2000 characters |
 | `REQUEST_INVALID` | 400 | Generic request validation failure (malformed body/query params) — both stacks |

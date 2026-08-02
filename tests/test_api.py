@@ -1,6 +1,8 @@
+import ipaddress
+
 from fastapi.testclient import TestClient
 
-from netrail import rate_limit
+from netrail import API_CONTRACT, rate_limit
 from netrail.main import app
 
 client = TestClient(app)
@@ -27,7 +29,7 @@ def test_health_parity_shape_with_rust_contract():
     payload = client.get("/api/health").json()
     assert payload["status"] == "ok"
     assert payload["version"] == __version__
-    assert payload.get("api_contract") == "1.4"
+    assert payload.get("api_contract") == API_CONTRACT
     assert "rate_limit" in payload
     assert "enabled" in payload["rate_limit"]
     assert "search_per_minute" in payload["rate_limit"]
@@ -65,6 +67,23 @@ def test_open_rejects_encoded_loopback_and_private():
         response = client.post("/api/open", json={"url": url})
         assert response.status_code == 400, url
         assert response.json()["code"] == code
+
+
+def test_open_pins_hostname_resolution_before_spawn(monkeypatch):
+    monkeypatch.setattr(
+        "netrail.security.resolve_host_ips",
+        lambda host: [ipaddress.ip_address("192.168.1.10")],
+    )
+    response = client.post("/api/open", json={"url": "http://evil.example/"})
+    assert response.status_code == 400
+    assert response.json()["code"] == "OPEN_URL_PRIVATE"
+
+
+def test_open_fails_closed_when_hostname_unresolvable(monkeypatch):
+    monkeypatch.setattr("netrail.security.resolve_host_ips", lambda host: [])
+    response = client.post("/api/open", json={"url": "http://nxdomain.invalid/"})
+    assert response.status_code == 400
+    assert response.json()["code"] == "OPEN_URL_DNS_UNRESOLVABLE"
 
 
 def test_search_empty_query_returns_typed_code():
@@ -194,8 +213,8 @@ def test_token_injection_csp_allows_script_hash(monkeypatch):
     response = client.get("/")
     assert response.headers.get("Content-Security-Policy") == (
         "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'; "
-        "base-uri 'self'; form-action 'self'"
+        "img-src 'self' https: data:; connect-src 'self'; upgrade-insecure-requests; "
+        "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     )
     assert "NETRAIL_API_TOKEN" not in response.text
 

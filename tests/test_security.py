@@ -1,7 +1,15 @@
+import ipaddress
+
 import pytest
 
 from netrail.errors import NetRailError
-from netrail.security import validate_backend_url, validate_open_url
+from netrail.security import (
+    check_resolved_host,
+    pin_open_host,
+    resolve_host_ips,
+    validate_backend_url,
+    validate_open_url,
+)
 
 
 def test_accepts_https():
@@ -108,3 +116,73 @@ def test_rejects_encoded_and_private_open_urls(url, code):
 
 def test_allows_private_backend_for_searxng():
     assert validate_backend_url("http://192.168.0.5:8080") == "http://192.168.0.5:8080"
+
+
+def test_pin_open_host_blocks_loopback_resolution():
+    with pytest.raises(NetRailError) as exc:
+        pin_open_host("http://internal.corp/", resolver=lambda _h: [ipaddress.ip_address("127.0.0.1")])
+    assert exc.value.code == "OPEN_URL_LOCALHOST"
+
+
+def test_pin_open_host_blocks_private_resolution():
+    with pytest.raises(NetRailError) as exc:
+        pin_open_host(
+            "https://evil.example/",
+            resolver=lambda _h: [ipaddress.ip_address("192.168.1.10")],
+        )
+    assert exc.value.code == "OPEN_URL_PRIVATE"
+
+
+def test_pin_open_host_blocks_link_local_resolution():
+    with pytest.raises(NetRailError) as exc:
+        pin_open_host(
+            "http://metadata-helper.example/",
+            resolver=lambda _h: [ipaddress.ip_address("169.254.169.254")],
+        )
+    assert exc.value.code == "OPEN_URL_LINK_LOCAL"
+
+
+def test_pin_open_host_allows_public_resolution():
+    pin_open_host(
+        "https://example.org/",
+        resolver=lambda _h: [ipaddress.ip_address("93.184.216.34")],
+    )
+
+
+def test_pin_open_host_fails_closed_on_unresolvable_host():
+    with pytest.raises(NetRailError) as exc:
+        pin_open_host("https://nxdomain.invalid/", resolver=lambda _h: [])
+    assert exc.value.code == "OPEN_URL_DNS_UNRESOLVABLE"
+
+
+def test_pin_open_host_skips_ip_literals():
+    pin_open_host(
+        "https://93.184.216.34/",
+        resolver=lambda h: pytest.fail(f"resolver must not run for IP literals, got {h}"),
+    )
+
+
+def test_pin_open_host_blocks_any_non_public_answer():
+    with pytest.raises(NetRailError) as exc:
+        pin_open_host(
+            "https://dual.example/",
+            resolver=lambda _h: [
+                ipaddress.ip_address("::1"),
+                ipaddress.ip_address("1.2.3.4"),
+            ],
+        )
+    assert exc.value.code == "OPEN_URL_LOCALHOST"
+
+
+def test_check_resolved_host_empty_is_unresolvable():
+    with pytest.raises(NetRailError) as exc:
+        check_resolved_host("nx.example", [])
+    assert exc.value.code == "OPEN_URL_DNS_UNRESOLVABLE"
+
+
+def test_resolve_host_ips_returns_public_ip_for_known_host():
+    ips = resolve_host_ips("example.com")
+    if not ips:
+        pytest.skip("system resolver unavailable")
+    for ip in ips:
+        assert not ip.is_private and not ip.is_loopback and not ip.is_link_local

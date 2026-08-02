@@ -2,7 +2,7 @@ use crate::audit;
 use crate::auth::{self, check_request_token, inject_ui_token, path_requires_token};
 use crate::backends::get_enabled_backends;
 use crate::browsers::{discover_browsers, open_url};
-use crate::config::{is_flatpak, load_settings, save_settings, static_dir, Settings, HOST, PORT, VERSION};
+use crate::config::{is_flatpak, load_settings, save_settings, static_dir, Settings, API_CONTRACT, HOST, PORT, VERSION};
 use crate::crypto::{encryption_active, ensure_encryption_key};
 use crate::docs;
 use crate::history::SharedStore;
@@ -10,7 +10,7 @@ use crate::error::NetRailError;
 use crate::http_client::build_http_client;
 use crate::rate_limit::RateLimiter;
 use crate::search;
-use crate::security::{validate_open_url, CSP};
+use crate::security::{pin_open_host, resolve_host_ips, validate_open_url, CSP};
 use reqwest::Client;
 use axum::{
     extract::{rejection::{JsonRejection, QueryRejection}, Path, Query, State},
@@ -287,7 +287,7 @@ async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
         "status": "ok",
         "version": VERSION,
         "telemetry": "none",
-        "api_contract": "1.4",
+        "api_contract": API_CONTRACT,
         "backends_configured": backend_names,
         "search_recovery": {
             "searxng_configured": searxng_configured,
@@ -462,6 +462,7 @@ async fn open_link(
     let Json(body) = body?;
     state.rate_limiter.check_open(&request_identity(&headers))?;
     let safe_url = validate_open_url(&body.url)?;
+    pin_open_host(&safe_url, resolve_host_ips)?;
     let mut settings = (state.settings_fn)();
     if let Some(id) = body.browser_id {
         settings.browser_id = Some(id);

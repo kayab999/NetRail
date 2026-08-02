@@ -29,6 +29,13 @@ fn mark_encryption_degraded() {
 
 const SCHEMA_VERSION: i64 = 1;
 
+/// Keep in sync with the `queries_fts` block inside SCHEMA_SQL.
+const FTS_CREATE_SQL: &str = "CREATE VIRTUAL TABLE IF NOT EXISTS queries_fts USING fts5(
+    query_text,
+    content='',
+    tokenize='porter unicode61'
+);";
+
 const SCHEMA_SQL: &str = r#"
 PRAGMA foreign_keys = ON;
 
@@ -166,6 +173,29 @@ impl HistoryStore {
         decrypt_text(blob.unwrap_or_default(), self.encrypt)
     }
 
+    /// Contentless FTS5 tables do not support DELETE statements or the
+    /// 'delete' command; rebuild the index from the queries table instead.
+    fn rebuild_fts_index(&self) -> NetRailResult<()> {
+        self.conn.execute("DROP TABLE IF EXISTS queries_fts", [])?;
+        self.conn.execute_batch(FTS_CREATE_SQL)?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, query_text_enc FROM queries")?;
+        let rows: Vec<(i64, Vec<u8>)> = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .filter_map(Result::ok)
+            .collect();
+        drop(stmt);
+        for (query_id, text_enc) in rows {
+            let text = self.dec(Some(&text_enc));
+            self.conn.execute(
+                "INSERT INTO queries_fts(rowid, query_text) VALUES (?1, ?2)",
+                params![query_id, text],
+            )?;
+        }
+        Ok(())
+    }
+
     pub fn purge_expired(&self, ttl_days: u32) -> NetRailResult<usize> {
         if ttl_days == 0 {
             return Ok(0);
@@ -181,9 +211,10 @@ impl HistoryStore {
 
         for id in &ids {
             self.conn
-                .execute("DELETE FROM queries_fts WHERE rowid = ?1", params![id])?;
-            self.conn
                 .execute("DELETE FROM queries WHERE id = ?1", params![id])?;
+        }
+        if !ids.is_empty() {
+            self.rebuild_fts_index()?;
         }
         Ok(ids.len())
     }
@@ -397,9 +428,8 @@ impl HistoryStore {
             return Ok(false);
         }
         self.conn
-            .execute("DELETE FROM queries_fts WHERE rowid = ?1", params![query_id])?;
-        self.conn
             .execute("DELETE FROM queries WHERE id = ?1", params![query_id])?;
+        self.rebuild_fts_index()?;
         Ok(true)
     }
 
@@ -407,10 +437,8 @@ impl HistoryStore {
         let count: i64 = self
             .conn
             .query_row("SELECT COUNT(*) FROM queries", [], |row| row.get(0))?;
-        self.conn
-            .execute("DELETE FROM queries_fts", [])?;
-        self.conn
-            .execute("DELETE FROM queries", [])?;
+        self.conn.execute("DELETE FROM queries", [])?;
+        self.rebuild_fts_index()?;
         Ok(count)
     }
 
@@ -800,6 +828,72 @@ conn.commit()
         assert_eq!(url_map.len(), 2);
         let listed = store.list_history(None, 10, 0).unwrap();
         assert_eq!(listed["items"][0]["query"], "python tutorial");
+        std::env::remove_var("NETRAIL_DB_KEY");
+        std::env::remove_var("NETRAIL_DB_PATH");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn fts_stays_synced_through_lifecycle() {
+        let dir = TempDir::new().unwrap();
+        let key = Fernet::generate_key();
+        let store = temp_store(&dir, &key);
+
+        let queries_count = |store: &HistoryStore| -> i64 {
+            store
+                .conn
+                .query_row("SELECT COUNT(*) FROM queries", [], |r| r.get(0))
+                .unwrap()
+        };
+        let fts_count = |store: &HistoryStore| -> i64 {
+            store
+                .conn
+                .query_row("SELECT COUNT(*) FROM queries_fts", [], |r| r.get(0))
+                .unwrap()
+        };
+        let orphan_count = |store: &HistoryStore| -> i64 {
+            store
+                .conn
+                .query_row(
+                    "SELECT COUNT(*) FROM queries_fts f LEFT JOIN queries q ON q.id = f.rowid WHERE q.id IS NULL",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap()
+        };
+
+        assert_eq!(queries_count(&store), fts_count(&store));
+        assert_eq!(orphan_count(&store), 0);
+        for q in ["battery regulations EU", "cat pictures", "python tutorial"] {
+            store.record_search(q, "web", &["ddgs".into()], &[]).unwrap();
+        }
+        assert_eq!(queries_count(&store), fts_count(&store));
+        assert_eq!(orphan_count(&store), 0);
+
+        let listed = store.list_history(None, 10, 0).unwrap();
+        let first_id = listed["items"][0]["id"].as_i64().unwrap();
+        assert!(store.delete_history_entry(first_id).unwrap());
+        assert_eq!(queries_count(&store), fts_count(&store));
+        assert_eq!(orphan_count(&store), 0);
+
+        assert_eq!(store.purge_all_history().unwrap(), 2);
+        assert_eq!(queries_count(&store), 0);
+        assert_eq!(fts_count(&store), 0);
+
+        std::env::remove_var("NETRAIL_DB_KEY");
+        std::env::remove_var("NETRAIL_DB_PATH");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn fts_rowids_cover_all_queries_after_fts_search() {
+        let dir = TempDir::new().unwrap();
+        let key = Fernet::generate_key();
+        let store = temp_store(&dir, &key);
+        store.record_search("battery", "web", &["ddgs".into()], &[]).unwrap();
+        let hits = store.list_history(Some("\"battery\""), 10, 0).unwrap();
+        assert_eq!(hits["items"].as_array().unwrap().len(), 1);
+        assert_eq!(hits["items"][0]["query"], "battery");
         std::env::remove_var("NETRAIL_DB_KEY");
         std::env::remove_var("NETRAIL_DB_PATH");
     }

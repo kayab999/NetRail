@@ -57,6 +57,53 @@ def test_fts_history_search(temp_store):
     assert "battery" in hits["items"][0]["query"]
 
 
+def _counts(temp_store):
+    queries = temp_store._conn.execute("SELECT COUNT(*) FROM queries").fetchone()[0]
+    fts = temp_store._conn.execute("SELECT COUNT(*) FROM queries_fts").fetchone()[0]
+    orphans = temp_store._conn.execute(
+        "SELECT COUNT(*) FROM queries_fts f LEFT JOIN queries q ON q.id = f.rowid WHERE q.id IS NULL"
+    ).fetchone()[0]
+    return queries, fts, orphans
+
+
+def test_fts_stays_synced_through_lifecycle(temp_store):
+    assert _counts(temp_store) == (0, 0, 0)
+    for q in ["battery regulations EU", "cat pictures", "python tutorial"]:
+        temp_store.record_search(q, "web", ["ddgs"], [])
+    assert _counts(temp_store) == (3, 3, 0)
+
+    first_id = temp_store.list_history()["items"][0]["id"]
+    assert temp_store.delete_history_entry(first_id)
+    assert _counts(temp_store) == (2, 2, 0)
+
+    assert temp_store.purge_all_history() == 2
+    assert _counts(temp_store) == (0, 0, 0)
+
+
+def test_purge_expired_keeps_fts_synced(temp_store):
+    temp_store.record_search("fresh query", "web", ["ddgs"], [])
+    temp_store._conn.execute(
+        "INSERT INTO queries (query_text_enc, mode, backends_used, timestamp) "
+        "VALUES (?, 'web', '[]', datetime('now', '-2000 days'))",
+        (temp_store._enc("old query"),),
+    )
+    temp_store._rebuild_fts()
+    temp_store._conn.commit()
+    assert _counts(temp_store) == (2, 2, 0)
+    assert temp_store.purge_expired(1000) == 1
+    assert _counts(temp_store) == (1, 1, 0)
+
+
+def test_fts_still_searches_after_rebuild(temp_store):
+    temp_store.record_search("battery regulations EU", "web", ["ddgs"], [])
+    temp_store.record_search("cat pictures", "images", ["ddgs"], [])
+    items = temp_store.list_history()["items"]
+    cat_id = next(i["id"] for i in items if i["query"] == "cat pictures")
+    assert temp_store.delete_history_entry(cat_id)
+    hits = temp_store.list_history(q='"battery"')
+    assert len(hits["items"]) == 1
+
+
 def test_collections_export(temp_store):
     collection = temp_store.create_collection("Research")
     temp_store.add_collection_item(collection["id"], url="https://a.test", title="Alpha", notes="note")

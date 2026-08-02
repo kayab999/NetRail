@@ -17,7 +17,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from netrail import __version__
+from netrail import API_CONTRACT, __version__
 from netrail import audit
 from netrail import rate_limit
 from netrail.auth import (
@@ -36,7 +36,7 @@ from netrail.docs_content import asset_path, load_doc
 from netrail.history.store import get_store, init_history_on_startup
 from netrail.runtime import is_flatpak, static_dir
 from netrail.search import search
-from netrail.security import validate_open_url
+from netrail.security import pin_open_host, validate_open_url
 
 STATIC_DIR = static_dir()
 
@@ -46,6 +46,7 @@ CSP = (
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' https: data:; "
     "connect-src 'self'; "
+    "upgrade-insecure-requests; "
     "frame-ancestors 'none'; "
     "base-uri 'self'; "
     "form-action 'self'"
@@ -242,7 +243,7 @@ def _token_script_csp_hash(token: str) -> str:
 
 
 @app.get("/")
-async def index() -> Response:
+def index() -> Response:
     path = STATIC_DIR / "index.html"
     if not path.is_file():
         return HTMLResponse(
@@ -267,7 +268,7 @@ async def index() -> Response:
 
 
 @app.get("/api/health")
-async def health() -> dict[str, Any]:
+def health() -> dict[str, Any]:
     from netrail.history.crypto import encryption_active, ensure_encryption_key
 
     settings = load_settings()
@@ -322,7 +323,7 @@ async def health() -> dict[str, Any]:
         "default_provenance": "ddgs → DuckDuckGo metasearch → primarily Bing index",
         "history": history,
         "sandbox": "flatpak" if is_flatpak() else "native",
-        "api_contract": "1.4",
+        "api_contract": API_CONTRACT,
         "auth": {"token_required": token_required()},
         "strict_backend_urls": bool(settings.get("strict_backend_urls"))
         or strict_backend_urls_from_env(),
@@ -332,7 +333,7 @@ async def health() -> dict[str, Any]:
 
 
 @app.get("/api/backends")
-async def list_backends() -> list[dict[str, Any]]:
+def list_backends() -> list[dict[str, Any]]:
     settings = load_settings()
     return [
         {
@@ -346,7 +347,7 @@ async def list_backends() -> list[dict[str, Any]]:
 
 
 @app.get("/api/browsers")
-async def list_browsers() -> list[dict[str, Any]]:
+def list_browsers() -> list[dict[str, Any]]:
     return [
         {
             "id": browser.id,
@@ -359,7 +360,7 @@ async def list_browsers() -> list[dict[str, Any]]:
 
 
 @app.get("/api/settings")
-async def get_settings() -> Response:
+def get_settings() -> Response:
     settings = load_settings()
     return Response(
         content=json.dumps(settings),
@@ -386,7 +387,7 @@ def _request_identity(req: Request) -> str:
 
 
 @app.put("/api/settings")
-async def put_settings(req: Request, settings: SettingsModel) -> Response:
+def put_settings(req: Request, settings: SettingsModel) -> Response:
     if if_match := req.headers.get("If-Match"):
         current = load_settings()
         if if_match.strip() != _settings_etag(current):
@@ -406,12 +407,12 @@ async def put_settings(req: Request, settings: SettingsModel) -> Response:
 
 
 @app.get("/api/docs/{slug}")
-async def get_doc(slug: str) -> dict[str, str]:
+def get_doc(slug: str) -> dict[str, str]:
     return load_doc(slug)
 
 
 @app.get("/api/docs/assets/{filename}")
-async def get_doc_asset(filename: str) -> FileResponse:
+def get_doc_asset(filename: str) -> FileResponse:
     path = asset_path(filename)
     if path is None:
         raise NetRailError("DOC_ASSET_NOT_FOUND", "Document asset not found.", status=404)
@@ -419,7 +420,7 @@ async def get_doc_asset(filename: str) -> FileResponse:
 
 
 @app.post("/api/search")
-async def run_search(req: Request, request: SearchRequest) -> dict[str, Any]:
+def run_search(req: Request, request: SearchRequest) -> dict[str, Any]:
     rate_limit.check_search(_request_identity(req))
     payload = search(
         query=request.query,
@@ -438,9 +439,10 @@ async def run_search(req: Request, request: SearchRequest) -> dict[str, Any]:
 
 
 @app.post("/api/open")
-async def open_link(req: Request, request: OpenRequest) -> dict[str, str]:
+def open_link(req: Request, request: OpenRequest) -> dict[str, str]:
     rate_limit.check_open(_request_identity(req))
     safe_url = validate_open_url(request.url)
+    pin_open_host(safe_url)
 
     settings = load_settings()
     browser_id = request.browser_id or settings.get("browser_id")
@@ -481,7 +483,7 @@ async def open_link(req: Request, request: OpenRequest) -> dict[str, str]:
 
 
 @app.get("/api/history")
-async def get_history(
+def get_history(
     q: str | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
@@ -492,7 +494,7 @@ async def get_history(
 
 
 @app.delete("/api/history/{query_id}")
-async def delete_history_entry(req: Request, query_id: int) -> dict[str, Any]:
+def delete_history_entry(req: Request, query_id: int) -> dict[str, Any]:
     rate_limit.check_mutate(_request_identity(req))
     store = _require_store()
     if not store.delete_history_entry(query_id):
@@ -506,7 +508,7 @@ async def delete_history_entry(req: Request, query_id: int) -> dict[str, Any]:
 
 
 @app.delete("/api/history")
-async def purge_history(req: Request) -> dict[str, Any]:
+def purge_history(req: Request) -> dict[str, Any]:
     rate_limit.check_mutate(_request_identity(req))
     store = _require_store()
     count = store.purge_all_history()
@@ -515,13 +517,13 @@ async def purge_history(req: Request) -> dict[str, Any]:
 
 
 @app.get("/api/collections")
-async def list_collections() -> list[dict[str, Any]]:
+def list_collections() -> list[dict[str, Any]]:
     store = _require_store()
     return store.list_collections()
 
 
 @app.post("/api/collections")
-async def create_collection(req: Request, body: CollectionCreate) -> dict[str, Any]:
+def create_collection(req: Request, body: CollectionCreate) -> dict[str, Any]:
     rate_limit.check_mutate(_request_identity(req))
     store = _require_store()
     created = store.create_collection(body.name)
@@ -530,7 +532,7 @@ async def create_collection(req: Request, body: CollectionCreate) -> dict[str, A
 
 
 @app.post("/api/collections/{collection_id}/items")
-async def add_collection_item(collection_id: int, body: CollectionItemCreate) -> dict[str, Any]:
+def add_collection_item(collection_id: int, body: CollectionItemCreate) -> dict[str, Any]:
     store = _require_store()
     safe_url = validate_open_url(body.url)
     return store.add_collection_item(
@@ -542,7 +544,7 @@ async def add_collection_item(collection_id: int, body: CollectionItemCreate) ->
 
 
 @app.get("/api/collections/{collection_id}/export")
-async def export_collection(
+def export_collection(
     collection_id: int,
     fmt: Literal["json", "csv"] = Query(default="json"),
 ) -> Response:

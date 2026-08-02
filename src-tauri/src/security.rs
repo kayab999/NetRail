@@ -215,53 +215,91 @@ fn block_unsafe_host(host: &str) -> NetRailResult<()> {
     }
 
     if let Some(ip) = parse_host_ip(&host_lower) {
-        match ip {
-            IpAddr::V4(v4) if v4.is_loopback() || v4.is_unspecified() => {
-                return Err(NetRailError::InvalidOpenUrl {
-                    code: "OPEN_URL_LOCALHOST",
-                    message: "Localhost URLs cannot be opened from search results.".into(),
-                });
-            }
-            IpAddr::V6(v6) if v6.is_loopback() || v6.is_unspecified() => {
-                return Err(NetRailError::InvalidOpenUrl {
-                    code: "OPEN_URL_LOCALHOST",
-                    message: "Localhost URLs cannot be opened from search results.".into(),
-                });
-            }
-            IpAddr::V4(v4) if v4.is_link_local() => {
-                return Err(NetRailError::InvalidOpenUrl {
-                    code: "OPEN_URL_LINK_LOCAL",
-                    message:
-                        "Local or link-local IP addresses cannot be opened from search results."
-                            .into(),
-                });
-            }
-            IpAddr::V6(v6) if v6.is_unicast_link_local() => {
-                return Err(NetRailError::InvalidOpenUrl {
-                    code: "OPEN_URL_LINK_LOCAL",
-                    message:
-                        "Local or link-local IP addresses cannot be opened from search results."
-                            .into(),
-                });
-            }
-            IpAddr::V4(v4) if is_non_public_v4(v4) => {
-                return Err(NetRailError::InvalidOpenUrl {
-                    code: "OPEN_URL_PRIVATE",
-                    message: "Private or non-public IP addresses cannot be opened from search results."
-                        .into(),
-                });
-            }
-            IpAddr::V6(v6) if is_non_public_v6(v6) => {
-                return Err(NetRailError::InvalidOpenUrl {
-                    code: "OPEN_URL_PRIVATE",
-                    message: "Private or non-public IP addresses cannot be opened from search results."
-                        .into(),
-                });
-            }
-            _ => {}
-        }
+        block_ip(ip)?;
     }
 
+    Ok(())
+}
+
+fn block_ip(ip: IpAddr) -> NetRailResult<()> {
+    match ip {
+        IpAddr::V4(v4) if v4.is_loopback() || v4.is_unspecified() => {
+            Err(NetRailError::InvalidOpenUrl {
+                code: "OPEN_URL_LOCALHOST",
+                message: "Localhost URLs cannot be opened from search results.".into(),
+            })
+        }
+        IpAddr::V6(v6) if v6.is_loopback() || v6.is_unspecified() => {
+            Err(NetRailError::InvalidOpenUrl {
+                code: "OPEN_URL_LOCALHOST",
+                message: "Localhost URLs cannot be opened from search results.".into(),
+            })
+        }
+        IpAddr::V4(v4) if v4.is_link_local() => Err(NetRailError::InvalidOpenUrl {
+            code: "OPEN_URL_LINK_LOCAL",
+            message: "Local or link-local IP addresses cannot be opened from search results."
+                .into(),
+        }),
+        IpAddr::V6(v6) if v6.is_unicast_link_local() => Err(NetRailError::InvalidOpenUrl {
+            code: "OPEN_URL_LINK_LOCAL",
+            message: "Local or link-local IP addresses cannot be opened from search results."
+                .into(),
+        }),
+        IpAddr::V4(v4) if is_non_public_v4(v4) => Err(NetRailError::InvalidOpenUrl {
+            code: "OPEN_URL_PRIVATE",
+            message: "Private or non-public IP addresses cannot be opened from search results."
+                .into(),
+        }),
+        IpAddr::V6(v6) if is_non_public_v6(v6) => Err(NetRailError::InvalidOpenUrl {
+            code: "OPEN_URL_PRIVATE",
+            message: "Private or non-public IP addresses cannot be opened from search results."
+                .into(),
+        }),
+        _ => Ok(()),
+    }
+}
+
+/// Resolve a hostname to IP addresses via the system resolver. Returns an
+/// empty list on failure (NXDOMAIN, no network, …).
+pub fn resolve_host_ips(host: &str) -> Vec<IpAddr> {
+    use std::net::ToSocketAddrs;
+    (host, 0)
+        .to_socket_addrs()
+        .map(|addrs| addrs.map(|addr| addr.ip()).collect())
+        .unwrap_or_default()
+}
+
+/// A15: reject hostnames that resolve to non-public IPs. Empty resolution
+/// fails closed — if the system resolver cannot answer, the browser could
+/// not open the URL anyway.
+pub fn check_resolved_host(host: &str, ips: &[IpAddr]) -> NetRailResult<()> {
+    if ips.is_empty() {
+        return Err(NetRailError::InvalidOpenUrl {
+            code: "OPEN_URL_DNS_UNRESOLVABLE",
+            message: format!("Could not resolve host {host}."),
+        });
+    }
+    for ip in ips {
+        block_ip(*ip)?;
+    }
+    Ok(())
+}
+
+/// A15: pin a previously validated open URL to its current DNS answers
+/// before the browser is spawned. IP-literal hosts were already checked by
+/// `validate_open_url`; only hostnames are resolved. `resolve` is injectable
+/// for tests.
+pub fn pin_open_host(safe_url: &str, resolve: impl Fn(&str) -> Vec<IpAddr>) -> NetRailResult<()> {
+    let parsed = Url::parse(safe_url).map_err(|_| NetRailError::InvalidOpenUrl {
+        code: "OPEN_URL_INVALID",
+        message: "Invalid URL.".into(),
+    })?;
+    if let Some(host) = parsed.host_str() {
+        let host_lower = host.trim_end_matches('.').to_lowercase();
+        if parse_host_ip(&host_lower).is_none() {
+            check_resolved_host(&host_lower, &resolve(&host_lower))?;
+        }
+    }
     Ok(())
 }
 
@@ -383,11 +421,58 @@ fn is_cloud_metadata_ip(ip: IpAddr) -> bool {
     }
 }
 
-pub const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+pub const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; upgrade-insecure-requests; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn pin_open_host_blocks_loopback_resolution() {
+        let fake = |_: &str| vec![IpAddr::V4(Ipv4Addr::LOCALHOST)];
+        let err = pin_open_host("http://internal.corp/", fake).unwrap_err();
+        assert_eq!(err.error_code(), "OPEN_URL_LOCALHOST");
+    }
+
+    #[test]
+    fn pin_open_host_blocks_private_resolution() {
+        let fake = |_: &str| vec![IpAddr::V4(Ipv4Addr::new(192, 168, 1, 10))];
+        let err = pin_open_host("https://evil.example/", fake).unwrap_err();
+        assert_eq!(err.error_code(), "OPEN_URL_PRIVATE");
+    }
+
+    #[test]
+    fn pin_open_host_blocks_link_local_resolution() {
+        let fake = |_: &str| vec![IpAddr::V4(Ipv4Addr::new(169, 254, 169, 254))];
+        let err = pin_open_host("http://metadata-helper.example/", fake).unwrap_err();
+        assert_eq!(err.error_code(), "OPEN_URL_LINK_LOCAL");
+    }
+
+    #[test]
+    fn pin_open_host_allows_public_resolution() {
+        let fake = |_: &str| vec![IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34))];
+        assert!(pin_open_host("https://example.org/", fake).is_ok());
+    }
+
+    #[test]
+    fn pin_open_host_fails_closed_on_unresolvable_host() {
+        let fake = |_: &str| vec![];
+        let err = pin_open_host("https://nxdomain.invalid/", fake).unwrap_err();
+        assert_eq!(err.error_code(), "OPEN_URL_DNS_UNRESOLVABLE");
+    }
+
+    #[test]
+    fn pin_open_host_skips_ip_literals() {
+        let fake = |h: &str| panic!("resolver must not run for IP literals, got {h}");
+        assert!(pin_open_host("https://93.184.216.34/", fake).is_ok());
+    }
+
+    #[test]
+    fn pin_open_host_blocks_any_non_public_answer() {
+        let fake = |_: &str| vec![IpAddr::V6(Ipv6Addr::LOCALHOST), IpAddr::V4(Ipv4Addr::new(1, 2, 3, 4))];
+        let err = pin_open_host("https://dual.example/", fake).unwrap_err();
+        assert_eq!(err.error_code(), "OPEN_URL_LOCALHOST");
+    }
 
     #[test]
     fn accepts_https() {

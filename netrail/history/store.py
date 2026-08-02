@@ -40,6 +40,21 @@ class HistoryStore:
     def _dec(self, blob: bytes | None) -> str:
         return decrypt_text(blob, force_plain=not self._encrypt)
 
+    def _rebuild_fts(self) -> None:
+        """Contentless FTS5 tables do not support DELETE statements or the
+        'delete' command; rebuild the index from the queries table instead."""
+        self._conn.execute("DROP TABLE IF EXISTS queries_fts")
+        self._conn.execute(
+            "CREATE VIRTUAL TABLE IF NOT EXISTS queries_fts USING fts5("
+            "query_text, content='', tokenize='porter unicode61')"
+        )
+        for row in self._conn.execute("SELECT id, query_text_enc FROM queries"):
+            query_id, blob = row
+            self._conn.execute(
+                "INSERT INTO queries_fts(rowid, query_text) VALUES (?, ?)",
+                (query_id, self._dec(blob)),
+            )
+
     def purge_expired(self, ttl_days: int) -> int:
         if ttl_days <= 0:
             return 0
@@ -52,8 +67,9 @@ class HistoryStore:
         )
         ids = [row["id"] for row in cursor.fetchall()]
         for query_id in ids:
-            self._conn.execute("DELETE FROM queries_fts WHERE rowid = ?", (query_id,))
             self._conn.execute("DELETE FROM queries WHERE id = ?", (query_id,))
+        if ids:
+            self._rebuild_fts()
         self._conn.commit()
         return len(ids)
 
@@ -202,15 +218,15 @@ class HistoryStore:
         exists = self._conn.execute("SELECT 1 FROM queries WHERE id = ?", (query_id,)).fetchone()
         if not exists:
             return False
-        self._conn.execute("DELETE FROM queries_fts WHERE rowid = ?", (query_id,))
         self._conn.execute("DELETE FROM queries WHERE id = ?", (query_id,))
+        self._rebuild_fts()
         self._conn.commit()
         return True
 
     def purge_all_history(self) -> int:
         count = self._conn.execute("SELECT COUNT(*) AS c FROM queries").fetchone()["c"]
-        self._conn.execute("DELETE FROM queries_fts")
         self._conn.execute("DELETE FROM queries")
+        self._rebuild_fts()
         self._conn.commit()
         return count
 

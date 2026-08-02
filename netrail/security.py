@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import ipaddress
 import re
+import socket
+from typing import Callable
 from urllib.parse import parse_qs, unquote, urlparse
 
 from netrail.errors import NetRailError
@@ -184,6 +186,13 @@ def _block_unsafe_host(host: str) -> None:
     if ip is None:
         return
 
+    _block_ip(ip)
+
+
+def _block_ip(
+    ip: ipaddress.IPv4Address | ipaddress.IPv6Address,
+) -> None:
+    ip = _effective_ip(ip)
     if isinstance(ip, ipaddress.IPv4Address):
         if ip.is_loopback or ip.is_unspecified:
             raise NetRailError(
@@ -218,6 +227,52 @@ def _block_unsafe_host(host: str) -> None:
             "OPEN_URL_PRIVATE",
             "Private or non-public IP addresses cannot be opened from search results.",
         )
+
+
+def resolve_host_ips(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
+    """System-resolver lookup; empty on failure (NXDOMAIN, no network, ...)."""
+    try:
+        infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
+    except OSError:
+        return []
+    ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
+    for _family, _type, _proto, _canon, sockaddr in infos:
+        try:
+            ip = _effective_ip(ipaddress.ip_address(sockaddr[0]))
+        except ValueError:
+            continue
+        if ip not in ips:
+            ips.append(ip)
+    return ips
+
+
+def check_resolved_host(
+    host: str,
+    ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address],
+) -> None:
+    """Reject hostnames that resolve to non-public IPs. Empty resolution
+    fails closed — the browser could not open the URL anyway."""
+    if not ips:
+        raise NetRailError(
+            "OPEN_URL_DNS_UNRESOLVABLE",
+            f"Could not resolve host {host}.",
+        )
+    for ip in ips:
+        _block_ip(ip)
+
+
+def pin_open_host(
+    safe_url: str,
+    resolver: Callable[[str], list[ipaddress.IPv4Address | ipaddress.IPv6Address]]
+    | None = None,
+) -> None:
+    """Pin a validated open URL to its current DNS answers before the browser
+    is spawned. IP-literal hosts were already checked by validate_open_url;
+    only hostnames are resolved. `resolver` is injectable for tests."""
+    parsed = urlparse(safe_url)
+    host = _normalize_host(parsed.hostname or "")
+    if host and _parse_host_ip(host) is None:
+        check_resolved_host(host, (resolver or resolve_host_ips)(host))
 
 
 def _validate_open_url_inner(url: str, depth: int) -> str:
