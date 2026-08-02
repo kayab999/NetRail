@@ -61,7 +61,7 @@ jobs:
 
       - name: Dependency audits
         run: |
-          cargo install cargo-audit --locked --version 0.21.2 || cargo install cargo-audit --locked
+          cargo install cargo-audit --locked --version 0.22.2
           cargo audit --file src-tauri/Cargo.lock
           python -m pip install -q pip-audit
           python -m pip-audit -r requirements.txt
