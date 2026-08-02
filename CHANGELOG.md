@@ -4,6 +4,10 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 
 ## [Unreleased]
 
+### Added
+
+- **SBOM pinned in bundle (E2)** — the Rust dependency inventory is now embedded in every binary at build time (`build.rs` derives it from `Cargo.lock`; `netrail-api --sbom` prints it, verified byte-identical to the Rust section of the shipped `SBOM.txt`), and the full `SBOM.txt` is packaged into the `.deb` / `.rpm` / AppImage at `/usr/share/netrail/SBOM.txt` (release CI asserts it in both deb and rpm). Also fixed a latent generator bug: the lockfile's top-level `version =` line was emitted as a bare `@4` entry in past `SBOM.txt` assets. Script: `scripts/generate-sbom.sh` (single source for the release asset and the bundled copy).
+
 ## [1.6.2] — 2026-08-02
 
 ### Added

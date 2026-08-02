@@ -40,13 +40,20 @@
     "linux": {
       "deb": {
         "files": {
-          "/usr/share/netrail/static/": "../netrail/static/"
+          "/usr/share/netrail/static/": "../netrail/static/",
+          "/usr/share/netrail/SBOM.txt": "sbom/SBOM.txt"
+        }
+      },
+      "rpm": {
+        "files": {
+          "/usr/share/netrail/SBOM.txt": "sbom/SBOM.txt"
         }
       },
       "appimage": {
         "bundleMediaFramework": false,
         "files": {
-          "usr/share/netrail/static/": "../netrail/static/"
+          "usr/share/netrail/static/": "../netrail/static/",
+          "usr/share/netrail/SBOM.txt": "sbom/SBOM.txt"
         }
       }
     }

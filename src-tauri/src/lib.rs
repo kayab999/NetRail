@@ -10,6 +10,7 @@ pub mod history;
 pub mod http_client;
 pub mod logging;
 pub mod rate_limit;
+pub mod sbom;
 pub mod search;
 pub mod security;
 pub mod server;

@@ -19,3 +19,4 @@ src-tauri/target/
 src-tauri/rust_out
 screenshot.png
 screenshot2.png
+src-tauri/sbom/

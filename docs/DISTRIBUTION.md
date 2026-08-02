@@ -60,6 +60,11 @@ chmod +x NetRail_*_amd64.AppImage
 APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_*_amd64.AppImage
 ```
 
+**SBOM / supply chain:** every release ships `SBOM.txt` (component inventory from `Cargo.lock` + `requirements.txt`), and it is pinned in the artifacts two ways:
+
+- **embedded in the binaries** — `netrail-api --sbom` prints the exact Rust dependency inventory compiled into that artifact. `build.rs` regenerates it from `Cargo.lock` at build time, so it can never drift from the code it shipped with (verified byte-identical to the Rust section of `SBOM.txt`).
+- **bundled in the packages** — the `.deb` / `.rpm` / AppImage install it at `/usr/share/netrail/SBOM.txt`; the release CI fails if it is missing from either package format.
+
 ### Build locally
 
 ```bash
@@ -67,6 +72,7 @@ APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_*_amd64.AppImage
 #   sudo apt install patchelf
 npm ci
 cd src-tauri && cargo build --release --bin netrail-api --no-default-features && cd ..
+bash scripts/generate-sbom.sh src-tauri/sbom/SBOM.txt
 APPIMAGE_EXTRACT_AND_RUN=1 npm run build
 ```
 
