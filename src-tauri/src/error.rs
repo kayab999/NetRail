@@ -100,6 +100,12 @@ pub enum NetRailError {
         code: &'static str,
         message: String,
     },
+
+    #[error("Read-only mode: {message}")]
+    Readonly {
+        code: &'static str,
+        message: String,
+    },
 }
 
 pub type NetRailResult<T> = Result<T, NetRailError>;
@@ -123,6 +129,8 @@ impl NetRailError {
             Self::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,
 
             Self::Conflict { .. } => StatusCode::CONFLICT,
+
+            Self::Readonly { .. } => StatusCode::FORBIDDEN,
 
             Self::BackendHttp { .. }
             | Self::BackendFailure { .. }
@@ -153,7 +161,8 @@ impl NetRailError {
             | Self::Encryption { code, .. }
             | Self::Internal { code, .. }
             | Self::RateLimited { code, .. }
-            | Self::Conflict { code, .. } => code,
+            | Self::Conflict { code, .. }
+            | Self::Readonly { code, .. } => code,
         }
     }
 
@@ -171,7 +180,8 @@ impl NetRailError {
             | Self::Encryption { message, .. }
             | Self::Internal { message, .. }
             | Self::RateLimited { message, .. }
-            | Self::Conflict { message, .. } => message.clone(),
+            | Self::Conflict { message, .. }
+            | Self::Readonly { message, .. } => message.clone(),
             Self::MissingField { field, .. } => format!("Missing required field: {field}"),
             Self::NotFound { entity, .. } => format!("{entity} not found"),
             Self::BackendHttp {

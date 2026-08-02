@@ -194,6 +194,7 @@ Build Rust image directly: `docker build -f Dockerfile.rust -t netrail-api .`
 | `NETRAIL_AUDIT_MAX_BYTES` | Audit rotation size cap (default 10 MiB); on write overflow the log is shifted to `<path>.1` (`.2`, …) |
 | `NETRAIL_AUDIT_MAX_FILES` | Max rotated audit files kept (default 3; `0` disables rotation) |
 | `NETRAIL_LOG_JSON` | `1` emits structured JSON logs (tracing-subscriber `json`) instead of plain text |
+| `NETRAIL_READONLY` | `1` enables read-only mode: all mutating endpoints (`PUT /api/settings`, history delete/purge, collection create/add) return `403 READONLY_MODE`; read endpoints (search, open, history, docs) keep working |
 | `SEARXNG_URL` / `NETRAIL_SEARXNG_URL` | Self-hosted SearXNG base URL |
 | `BRAVE_SEARCH_API_KEY` / `NETRAIL_BRAVE_API_KEY` | Brave Search API key (never stored in settings) |
 | `NETRAIL_SEARCH_STRATEGY` | `fanout` or `fallback` |
@@ -201,6 +202,50 @@ Build Rust image directly: `docker build -f Dockerfile.rust -t netrail-api .`
 | `NETRAIL_HISTORY_ENCRYPT` | Field encryption on/off |
 | `NETRAIL_HISTORY_TTL_DAYS` | Auto-purge age |
 | `NETRAIL_MAX_RESULTS` | Default result cap (1–50) |
+
+---
+
+## Systemd service (headless, Rust)
+
+`packaging/netrail-api.service` is a hardened unit for running `netrail-api` as
+a system service (`User=netrail`, `ProtectSystem=strict`, `NoNewPrivileges`,
+`ReadWritePaths=/var/lib/netrail`, …):
+
+```bash
+sudo useradd --system --home /var/lib/netrail --shell /usr/sbin/nologin netrail
+sudo mkdir -p /var/lib/netrail /opt/netrail
+sudo cp packaging/netrail-api.service /etc/systemd/system/
+sudo cp target/release/netrail-api /opt/netrail/           # or the release asset
+sudo systemctl daemon-reload && sudo systemctl enable --now netrail-api
+curl -s http://127.0.0.1:7421/api/health | jq
+```
+
+Note: with `User=` the OS keyring is unavailable — set `NETRAIL_DB_KEY`
+(via a systemd `EnvironmentFile=` owned by root) so the DB stays encrypted.
+
+### Backup and restore
+
+`scripts/backup-db.sh` (requires the `sqlite3` CLI) performs a WAL-safe online
+backup — run it while the service is up, no stop needed:
+
+```bash
+bash scripts/backup-db.sh
+# writes /var/lib/netrail/netrail.db.<timestamp>.backup
+```
+
+Restore (service stopped):
+
+```bash
+sudo systemctl stop netrail-api
+sqlite3 /var/lib/netrail/netrail.db ".restore '/path/to/netrail.db.<timestamp>.backup'"
+sudo systemctl start netrail-api
+```
+
+Suggested cron timer (online, while running):
+
+```
+17 3 * * *  netrail  bash /opt/netrail/scripts/backup-db.sh
+```
 
 ---
 

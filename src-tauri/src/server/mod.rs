@@ -2,7 +2,7 @@ use crate::audit;
 use crate::auth::{self, check_request_token, inject_ui_token, path_requires_token};
 use crate::backends::get_enabled_backends;
 use crate::browsers::{discover_browsers, open_url};
-use crate::config::{is_flatpak, load_settings, save_settings, static_dir, Settings, API_CONTRACT, HOST, PORT, VERSION};
+use crate::config::{is_flatpak, load_settings, save_settings, static_dir, readonly_mode, Settings, API_CONTRACT, HOST, PORT, VERSION};
 use crate::crypto::{encryption_active, ensure_encryption_key};
 use crate::docs;
 use crate::history::SharedStore;
@@ -353,11 +353,23 @@ async fn get_settings(State(state): State<AppState>) -> Response {
     ([(header::ETAG, settings_etag(&settings))], Json(settings)).into_response()
 }
 
+fn ensure_mutable() -> Result<(), ApiError> {
+    if readonly_mode() {
+        return Err(NetRailError::Readonly {
+            code: "READONLY_MODE",
+            message: "Read-only mode: mutations are disabled (NETRAIL_READONLY=1).".into(),
+        }
+        .into());
+    }
+    Ok(())
+}
+
 async fn put_settings(
     State(state): State<AppState>,
     headers: HeaderMap,
     body: Result<Json<Settings>, JsonRejection>,
 ) -> Result<Response, ApiError> {
+    ensure_mutable()?;
     let Json(body) = body?;
     let identity = request_identity(&headers);
     if let Some(if_match) = headers.get(header::IF_MATCH).and_then(|v| v.to_str().ok()) {
@@ -537,6 +549,7 @@ async fn delete_history_entry(
     headers: HeaderMap,
     Path(query_id): Path<i64>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    ensure_mutable()?;
     state.rate_limiter.check_mutate(&request_identity(&headers))?;
     let settings = (state.settings_fn)();
     let deleted = state
@@ -565,6 +578,7 @@ async fn purge_history(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    ensure_mutable()?;
     state.rate_limiter.check_mutate(&request_identity(&headers))?;
     let settings = (state.settings_fn)();
     let count = state
@@ -601,6 +615,7 @@ async fn create_collection(
     headers: HeaderMap,
     body: Result<Json<CollectionCreate>, JsonRejection>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    ensure_mutable()?;
     let Json(body) = body?;
     state.rate_limiter.check_mutate(&request_identity(&headers))?;
     let settings = (state.settings_fn)();
@@ -633,6 +648,7 @@ async fn add_collection_item(
     Path(collection_id): Path<i64>,
     body: Result<Json<CollectionItemCreate>, JsonRejection>,
 ) -> Result<Json<serde_json::Value>, ApiError> {
+    ensure_mutable()?;
     let Json(body) = body?;
     let settings = (state.settings_fn)();
     let safe_url = validate_open_url(&body.url)?;

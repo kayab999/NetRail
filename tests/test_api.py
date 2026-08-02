@@ -86,6 +86,45 @@ def test_open_fails_closed_when_hostname_unresolvable(monkeypatch):
     assert response.json()["code"] == "OPEN_URL_DNS_UNRESOLVABLE"
 
 
+def test_readonly_mode_rejects_mutations(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("NETRAIL_READONLY", "1")
+    body = _valid_settings_body()
+
+    r = client.put("/api/settings", json=body)
+    assert r.status_code == 403
+    assert r.json()["code"] == "READONLY_MODE"
+
+    r = client.post("/api/collections", json={"name": "Research"})
+    assert r.status_code == 403
+    assert r.json()["code"] == "READONLY_MODE"
+
+    r = client.post(
+        "/api/collections/1/items",
+        json={"url": "https://example.com/", "title": "A"},
+    )
+    assert r.status_code == 403
+    assert r.json()["code"] == "READONLY_MODE"
+
+    r = client.delete("/api/history/1")
+    assert r.status_code == 403
+    assert r.json()["code"] == "READONLY_MODE"
+
+    r = client.delete("/api/history")
+    assert r.status_code == 403
+    assert r.json()["code"] == "READONLY_MODE"
+
+
+def test_readonly_mode_keeps_read_endpoints(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("NETRAIL_READONLY", "1")
+    assert client.get("/api/health").status_code == 200
+    assert client.get("/api/settings").status_code == 200
+    assert client.get("/api/history").status_code == 200
+    assert client.get("/api/collections").status_code == 200
+    assert client.get("/api/docs/manual").status_code == 200
+
+
 def test_search_empty_query_returns_typed_code():
     response = client.post("/api/search", json={"query": "", "mode": "web"})
     assert response.status_code == 400

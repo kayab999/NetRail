@@ -31,7 +31,7 @@ from netrail.auth import (
 from netrail.errors import NetRailError
 from netrail.backends.registry import get_enabled_backends
 from netrail.browsers import discover_browsers, open_url
-from netrail.config import load_settings, save_settings, strict_backend_urls_from_env
+from netrail.config import load_settings, readonly_mode, save_settings, strict_backend_urls_from_env
 from netrail.docs_content import asset_path, load_doc
 from netrail.history.store import get_store, init_history_on_startup
 from netrail.runtime import is_flatpak, static_dir
@@ -386,8 +386,18 @@ def _request_identity(req: Request) -> str:
     )
 
 
+def _ensure_mutable() -> None:
+    if readonly_mode():
+        raise NetRailError(
+            "READONLY_MODE",
+            "Read-only mode: mutations are disabled (NETRAIL_READONLY=1).",
+            status=403,
+        )
+
+
 @app.put("/api/settings")
 def put_settings(req: Request, settings: SettingsModel) -> Response:
+    _ensure_mutable()
     if if_match := req.headers.get("If-Match"):
         current = load_settings()
         if if_match.strip() != _settings_etag(current):
@@ -495,6 +505,7 @@ def get_history(
 
 @app.delete("/api/history/{query_id}")
 def delete_history_entry(req: Request, query_id: int) -> dict[str, Any]:
+    _ensure_mutable()
     rate_limit.check_mutate(_request_identity(req))
     store = _require_store()
     if not store.delete_history_entry(query_id):
@@ -509,6 +520,7 @@ def delete_history_entry(req: Request, query_id: int) -> dict[str, Any]:
 
 @app.delete("/api/history")
 def purge_history(req: Request) -> dict[str, Any]:
+    _ensure_mutable()
     rate_limit.check_mutate(_request_identity(req))
     store = _require_store()
     count = store.purge_all_history()
@@ -524,6 +536,7 @@ def list_collections() -> list[dict[str, Any]]:
 
 @app.post("/api/collections")
 def create_collection(req: Request, body: CollectionCreate) -> dict[str, Any]:
+    _ensure_mutable()
     rate_limit.check_mutate(_request_identity(req))
     store = _require_store()
     created = store.create_collection(body.name)
@@ -533,6 +546,7 @@ def create_collection(req: Request, body: CollectionCreate) -> dict[str, Any]:
 
 @app.post("/api/collections/{collection_id}/items")
 def add_collection_item(collection_id: int, body: CollectionItemCreate) -> dict[str, Any]:
+    _ensure_mutable()
     store = _require_store()
     safe_url = validate_open_url(body.url)
     return store.add_collection_item(

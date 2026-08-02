@@ -31,7 +31,7 @@
 | Q13 | Are Docker and desktop the same engine? | **No.** Docker/Flatpak/`install.sh` = Python; desktop/`netrail-api` = Rust. Parity harness exists; **this pass found the harness can still miss policy drift (N1–N3)**. | `docker-compose.yml`, `Dockerfile`, parity smoke |
 | Q14 | Is the rate limit a security boundary? | **No** — soft UX anti-abuse (fixed window, disableable). Now covers search/open/mutate (settings, purge, collections), but bursts at window boundaries remain. | `rate_limit.rs`, `server/mod.rs` call sites |
 | Q15 | Does Images mode expose thumbnails to trackers? | **Partially** — `no-referrer` set, but CSP `img-src 'self' https: data:` still loads remote images → CDN sees request. Accepted residual R7. | `CSP` const, `security.py` |
-| Q16 | Can a public result URL redirect to localhost after validation? | **Yes** — no DNS pin (SEC-2026-04 class). Backend client disables redirects (`http_client.rs:15`), but the **browser** follows any redirect from the validated public URL. Documented residual; expensive to fix. | `http_client.rs` redirect none; open path has no resolve |
+| Q16 | Can a public result URL redirect to localhost after validation? | **No** — ✅ **Closed 2026-08-01 (A15, v1.6.1).** `pin_open_host` resolves the validated host via the system resolver and re-runs the IP blocklist on every answer before the browser spawns; unresolvable hosts fail closed (`OPEN_URL_DNS_UNRESOLVABLE`). Remaining residual: **time-based DNS rebinding** (hostname whose answer flips public→private after the check) — the browser re-resolves independently, so a short-TTL flip after pinning still lands; documented, same cost class as the original issue. | `pin_open_host` (security.rs / security.py) wired into `/api/open`; injectable resolver + dual-stack tests |
 | Q17 | Do both stacks agree on the golden vectors? | **Yes for the 30 shipped vectors** — parity smoke green. **No for trailing-dot/odd-host forms** (missing from fixture). | `parity-api-smoke.sh`, fixture contents |
 | Q18 | Are process-memory / config-file secrets safe? | Brave key: env only (never settings.json). Fernet key: env or keyring. UI token: page HTML when injected (see Q10). | `config.rs`, `SECURITY.md` |
 
@@ -45,9 +45,9 @@ Severity key: **P0** ship/stop · **P1** real bypass/privacy/contract break · *
 
 | ID | Sev | Title | Evidence | Attack scenario | Fix direction |
 |----|-----|-------|----------|-----------------|---------------|
-| **N1** | **P1** | Open-URL policy allows **trailing-dot IP literals** (Python) and **trailing-dot DDG hosts** (Rust+Python) | Python: `validate_open_url("http://127.0.0.1./")` → allowed; live `/api/open` **spawned Brave to `127.0.0.1.`**. Rust: `https://duckduckgo.com./l/?uddg=http://127.0.0.1/` → ALLOW (host `duckduckgo.com.` fails `is_ddg_host` suffix match → no unwrap → browser follows redirect to loopback). Fixture had no trailing-dot vectors. | Malicious search result / DDG-unwrapped URL `http://127.0.0.1.:8080/admin` → browser hits localhost/LAN service (SSRF-class open); trailing-dot DDG wrapper defeats unwrap | Python: normalize host (percent-decode, lowercase, strip trailing dots) before policy — `_normalize_host` in `security.py`. Rust: `trim_end_matches('.')` in `is_ddg_host` call + `block_unsafe_host`/`block_backend_host`. Both: fixture vectors + parity probe |
-| **N2** | **P1** | Python `strict_backend_urls` bypass via trailing dot | `validate_backend_url("http://127.0.0.1.:8080", strict=True)` → allowed | Strict mode (cloud/homelab split) claims to reject loopback backends but doesn't → settings PUT can point SearXNG at localhost in strict mode | Same normalization fix as N1 for backend path; fixture vector `strict` note |
-| **N3** | **P2** | Python untyped 500 on malformed bracketed IPv6 | `http://[::ffff:7f00:1]./` → raw `ValueError: Invalid IPv6 URL` (from `urlparse`), no typed error body | Any local process (or result URL) can force 500s; breaks `{code,detail,status}` invariant 11 | Catch `ValueError` in `_validate_open_url_inner` → typed `OPEN_URL_INVALID`; same for `_block_backend_host` caller |
+| **N1** | **P1** | Open-URL policy allows **trailing-dot IP literals** (Python) and **trailing-dot DDG hosts** (Rust+Python) | Python: `validate_open_url("http://127.0.0.1./")` → allowed; live `/api/open` **spawned Brave to `127.0.0.1.`**. Rust: `https://duckduckgo.com./l/?uddg=http://127.0.0.1/` → ALLOW (host `duckduckgo.com.` fails `is_ddg_host` suffix match → no unwrap → browser follows redirect to loopback). Fixture had no trailing-dot vectors. | Malicious search result / DDG-unwrapped URL `http://127.0.0.1.:8080/admin` → browser hits localhost/LAN service (SSRF-class open); trailing-dot DDG wrapper defeats unwrap | ✅ **Closed 2026-08-01** — Python `_normalize_host` (percent-decode, lowercase, strip trailing dots) before policy; Rust `trim_end_matches('.')` in `is_ddg_host` call + block fns; fixture vectors + parity probe green |
+| **N2** | **P1** | Python `strict_backend_urls` bypass via trailing dot | `validate_backend_url("http://127.0.0.1.:8080", strict=True)` → allowed | Strict mode (cloud/homelab split) claims to reject loopback backends but doesn't → settings PUT can point SearXNG at localhost in strict mode | ✅ **Closed 2026-08-01** — same normalization fix on the backend path; fixture `strict` vectors + live parity probe green |
+| **N3** | **P2** | Python untyped 500 on malformed bracketed IPv6 | `http://[::ffff:7f00:1]./` → raw `ValueError: Invalid IPv6 URL` (from `urlparse`), no typed error body | Any local process (or result URL) can force 500s; breaks `{code,detail,status}` invariant 11 | ✅ **Closed 2026-08-01** — `ValueError` caught in `_validate_open_url_inner` → typed `OPEN_URL_INVALID`; fixture malformed-IPv6 vector green |
 | **N4** | **P3** | Golden fixture lacked trailing-dot / malformed-IPv6 vectors | Fixture had 22 open + 8 backend vectors; none covered FQDN-root forms | Harness "green" while N1–N3 existed → drift-proofing claim overstated | ✅ **Closed 2026-08-01** — 13 vectors added (9 open, 2 strict backend, 1 malformed IPv6, 1 non-strict allow); `strict` field supported by both harnesses; parity smoke green |
 
 ### Audit residuals — re-verified status (2026-08-01)
@@ -62,18 +62,18 @@ Severity key: **P0** ship/stop · **P1** real bypass/privacy/contract break · *
 | SEC-2026-08 IPv4-mapped IPv6 | ✅ Closed | `effective_ip` both stacks, tests |
 | SEC-2026-09 unauth localhost API | 🔶 Mitigated — optional token, default off (by design) | `auth.rs`; **Q10 nuance** |
 | SEC-2026-10 history crypto partial | 🔶 Residual — documented | `SECURITY.md` |
-| SEC-2026-11 soft rate limits | 🔶 Mostly closed — mutate caps added (60/min); still fixed-window, disableable | `rate_limit.rs` |
+| SEC-2026-11 soft rate limits | 🔶 Mostly closed — mutate caps added (60/min); still fixed-window, disableable; **per-identity buckets landed 1.6.0 (A9)** | `rate_limit.rs` |
 | SEC-2026-12 image CDN privacy | 🔶 Residual R7 | CSP `img-src https:` |
 | SEC-2026-13 no dep audit | ✅ Closed — `cargo audit` / `pip-audit` CI | handoff §1.3, CI files |
 | PAR-01 open DDG hosts differ | ✅ Closed | unified sets + fixture |
 | PAR-02 history no-key behavior | ✅ Closed (handoff claims parity; Rust↔Python Fernet tests green) | `history` tests |
 | PAR-03 error detail/mode/collection | ✅ Closed per handoff | `api_error_codes` 10 green |
 | PAR-04 fanout 20s | ✅ Closed | handoff §6 |
-| PAR-07 dual golden harness | 🔶 **Gap exposed by N1–N4** | this pass |
-| SEC-2026-04 DNS pin on open | 🔶 Residual (documented, expensive) | no resolve in open path |
-| SEC-2026-05 process SSRF via settings | 🔶 Mitigated — token + strict (but **N2 weakens strict**) | this pass |
-| R8 / OPS-03 no Tauri E2E | 🔶 Residual (accepted) | — |
-| R3 dual-stack cost | 🔶 Residual — **this pass shows drift is still reachable** | N1–N3 |
+| PAR-07 dual golden harness | ✅ Closed — **N1–N4 closed 2026-08-01**; fixture extended with 13 vectors, `strict` field, harnesses aligned | this pass + v1.6.1 |
+| SEC-2026-04 DNS pin on open | ✅ **Closed 2026-08-01 (A15, v1.6.1)** — resolve-at-open via system resolver + blocklist on every answer before spawn; unresolvable fails closed `OPEN_URL_DNS_UNRESOLVABLE`; time-based TTL-flip rebinding remains (documented) | `pin_open_host` both stacks |
+| SEC-2026-05 process SSRF via settings | ✅ Mitigated — token + strict (N2 trailing-dot bypass closed 2026-08-01) | `auth.rs`, fixture |
+| R8 / OPS-03 no Tauri E2E | ✅ **Closed 2026-08-01 (matrix #9)** — `scripts/webview-e2e.sh` + `tests/webview_e2e.py` drive the real webview via tauri-driver + WebKitWebDriver; 6/6 checks green | matrix #9, v1.6.1 |
+| R3 dual-stack cost | 🔶 Residual — mitigated by N1–N4 fixture + parity harness; drift re-checked each batch | parity smoke |
 
 ---
 

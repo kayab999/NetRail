@@ -49,6 +49,13 @@ def strict_backend_urls_from_env() -> bool:
     return _as_bool(os.environ.get("NETRAIL_STRICT_BACKEND_URLS", "0"))
 
 
+def readonly_mode() -> bool:
+    """NETRAIL_READONLY=1 rejects all mutating API calls with
+    403 READONLY_MODE; read endpoints (search, open, docs, export) keep
+    working."""
+    return _as_bool(os.environ.get("NETRAIL_READONLY", "0"))
+
+
 def _apply_env_overrides(settings: dict[str, Any]) -> dict[str, Any]:
     if raw := os.environ.get("NETRAIL_STRICT_BACKEND_URLS"):
         settings["strict_backend_urls"] = _as_bool(raw)

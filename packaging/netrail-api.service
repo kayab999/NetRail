@@ -1,0 +1,50 @@
+# NetRail API — local research console (Rust headless server)
+#
+# Install:
+#   sudo useradd --system --home /var/lib/netrail --shell /usr/sbin/nologin netrail
+#   sudo install -d -o netrail -g netrail /var/lib/netrail
+#   sudo install -m 755 -o root -g root dist/netrail-api /usr/local/bin/netrail-api
+#   sudo install -m 644 -o root -g root packaging/netrail-api.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now netrail-api
+#
+# Hardening is strict: the service can only write under /var/lib/netrail
+# (history DB, settings, audit log); everything else is read-only.
+[Unit]
+Description=NetRail API — local research console (Rust)
+Documentation=https://github.com/kayab999/NetRail
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=netrail
+Group=netrail
+ExecStart=/usr/local/bin/netrail-api
+Environment=NETRAIL_DB_PATH=/var/lib/netrail/netrail.db
+Environment=XDG_CONFIG_HOME=/var/lib/netrail
+Environment=NETRAIL_AUTO_OPEN=false
+# Optional hardening:
+#   Environment=NETRAIL_READONLY=1         block all mutations (backup window)
+#   Environment=NETRAIL_API_TOKEN=change-me   cross-process guard (see SECURITY.md)
+#   Environment=NETRAIL_AUDIT_LOG=1       local JSONL audit log (rotates)
+#   Environment=NETRAIL_LOG_JSON=1        structured logs on stdout (journalctl)
+#   Environment=NETRAIL_HISTORY_ENCRYPT=true + NETRAIL_DB_KEY=...  (keyring is unavailable; use env key)
+Restart=on-failure
+RestartSec=2
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+PrivateDevices=true
+ReadWritePaths=/var/lib/netrail
+
+[Install]
+WantedBy=multi-user.target

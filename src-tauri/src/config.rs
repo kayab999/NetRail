@@ -162,6 +162,15 @@ pub fn strict_backend_urls_from_env() -> bool {
         .unwrap_or(false)
 }
 
+/// `NETRAIL_READONLY=1` rejects all mutating API calls (settings PUT,
+/// history delete/purge, collections create/add) with 403 READONLY_MODE.
+/// Read endpoints (search, open, docs, export) keep working.
+pub fn readonly_mode() -> bool {
+    env::var("NETRAIL_READONLY")
+        .map(|v| parse_bool(&v))
+        .unwrap_or(false)
+}
+
 pub fn save_settings(settings: &Settings) -> NetRailResult<Settings> {
     validate_settings(settings)?;
     let dir = config_dir();

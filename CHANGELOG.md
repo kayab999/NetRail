@@ -2,6 +2,18 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Systemd unit (headless)** — `packaging/netrail-api.service` runs `netrail-api` as a hardened system service (`User=netrail`, `ProtectSystem=strict`, `NoNewPrivileges`, `PrivateTmp`, `ReadWritePaths=/var/lib/netrail`, `Restart=on-failure`); install + backup/restore instructions in DISTRIBUTION.md.
+- **DB backup script** — `scripts/backup-db.sh` performs a WAL-safe online `sqlite3 .backup` (works while the service is running); restore via `.restore` with the service stopped.
+- **Read-only mode (dual-stack)** — `NETRAIL_READONLY=1` rejects all mutating endpoints (`PUT /api/settings`, history delete/purge, collection create/add) with `403 READONLY_MODE`; read endpoints (search, open, history, settings, docs, collections, export) keep working. Enterprise gate: immutable "kiosk"/archive deployments.
+
+### Changed
+
+- **Tests** — 6 new Rust integration tests (`src-tauri/tests/readonly_mode.rs`, separate process so the env var can't race other suites: 5 mutations → 403 + read endpoints stay 200) and 2 new Python API tests (monkeypatched env).
+
 ## [1.6.1] — 2026-08-01
 
 ### Added
