@@ -51,7 +51,7 @@ You are continuing **NetRail**, a single-user Linux research console: **query �
 | Threat-model fit (single-user local) | **9** | Localhost API by design; DNS pin on open (A15) |
 | Security vs local attacker | **7.5** | Token (1.4.0) + DNS pin (1.6.1) + read-only gate (1.6.2-unreleased); default still open on loopback by design |
 | Dual-stack parity | **9** | N1–N4 fixture + live parity harness drive both stacks from one SSOT |
-| Correctness / tests | **9** | 127 pytest, 101 cargo tests (76 lib + 19 API + 6 readonly), clippy `-D warnings`, webview E2E (matrix #9) |
+| Correctness / tests | **9** | 162 pytest, 113 cargo tests, clippy `-D warnings`, webview E2E (matrix #9), CSS layout guard (E3) |
 | Ops / packaging | **8.5** | deb/rpm/AppImage/CI + cosign-signed releases; systemd unit + backup script + read-only mode (unreleased) |
 | Docs truth | **9** | Audit passes re-verified claims; residuals honestly documented |
 | Enterprise multi-user / SOC2-ish | **3.5** | Out of stated model; token + audit + read-only are optional footholds only |
@@ -85,7 +85,7 @@ Enterprise *readiness for the stated threat model* ≠ multi-tenant SaaS. For Ne
 | Strict backend URLs | ✅ Opt-in (homelab vs cloud split) |
 | **Read-only mode** | ✅ `NETRAIL_READONLY=1` → `403 READONLY_MODE` on all mutations (unreleased, dual-stack + tests) |
 | Systemd unit + DB backup | ✅ `packaging/netrail-api.service`, `scripts/backup-db.sh` (unreleased) |
-| SBOM / dep audit in CI | ✅ SBOM.txt per release; cargo-audit/npm-audit/pip-audit gated; SBOM **not** pinned inside the bundle (open) |
+| SBOM / dep audit in CI | ✅ SBOM.txt per release; cargo-audit/npm-audit/pip-audit gated; **pinned** in every binary (`--sbom`) + in the deb/rpm/AppImage (E2, 2026-08-02) |
 | Formal SDL / multi-user RBAC | ❌ Out of scope |
 
 ---
@@ -248,7 +248,7 @@ CI fails on drift: `bash scripts/check-versions.sh`.
 - **Read-only mode** (`NETRAIL_READONLY=1`): Rust `NetRailError::Readonly` (403/`READONLY_MODE`), `ensure_mutable()` + 5 gated handlers; Python `_ensure_mutable()` same 5; read endpoints unaffected.
 - **`packaging/netrail-api.service`** — hardened systemd unit (User=netrail, ProtectSystem=strict, NoNewPrivileges, PrivateTmp, ReadWritePaths=/var/lib/netrail).
 - **`scripts/backup-db.sh`** — WAL-safe `sqlite3 .backup`; restore via `.restore` (service stopped); cron example in DISTRIBUTION.md.
-- Tests: `src-tauri/tests/readonly_mode.rs` (6 tests, separate binary so the env can't race `api_error_codes.rs`) + 2 Python API tests. Gates: 127 pytest, 101 cargo tests, clippy clean, parity + E2E smokes green on rebuilt release binary.
+- Tests: `src-tauri/tests/readonly_mode.rs` (6 tests, separate binary so the env can't race `api_error_codes.rs`) + 2 Python API tests. Gates: 162 pytest, 113 cargo tests, clippy clean, parity + E2E smokes green on rebuilt release binary.
 - Docs: `API_ERRORS.md` `READONLY_MODE`, DISTRIBUTION.md env table + systemd/backup sections, CHANGELOG [Unreleased], audit docs closed-state updates.
 
 **The 08-01 handoff's Spotlight/CSS WIP shipped in the 1.5.0 series** (tray focus places caret in `#query`; result-card grid `minmax(0,1fr) auto`) — no longer a continuity surface.
@@ -306,7 +306,7 @@ npm ci && npm run dev
 APPIMAGE_EXTRACT_AND_RUN=1 npm run build
 ```
 
-Gates as of 2026-08-02: **127 pytest · 101 cargo tests (76 lib + 19 API + 6 readonly) · clippy `-D warnings` clean · parity + E2E smokes green**.
+Gates as of 2026-08-02 (post backlog E2/E3/E5): **162 pytest · 113 cargo tests · clippy `-D warnings` clean · parity + E2E smokes green**.
 
 ### Useful env
 
@@ -365,10 +365,10 @@ Gates as of 2026-08-02: **127 pytest · 101 cargo tests (76 lib + 19 API + 6 rea
 | # | Item | Notes |
 |---|------|-------|
 | E1 | **Load / performance check** | Scorecard "Performance 7 — no formal load tests". Add a simple concurrent-request probe (e.g., 20 parallel searches/open vs latency budget) both stacks; document results. No new framework needed |
-| E2 | **SBOM pinned in bundle** | AUDIT_ARCH §5 still open: `SBOM.txt` ships as a release asset but isn't embedded in the AppImage/deb/rpm artifacts. Options: embed in binary (`include_str!` at build from awk-derived Cargo.lock) or attach to each artifact in release.yml |
-| E3 | **CSS regression snapshot** | Result-card layout is visual-QA only. Cheap guard: a static check that `.result-card` uses `minmax(0,1fr) auto` (grep in CI) or a screenshot diff when webview E2E runs |
-| E4 | **Alfred-style tray left-click** | Optional UX: `show_menu_on_left_click(false)` → left-click = focus only, menu on right-click (old P2; Linux tray left-click is flaky, hotkey remains solid) |
-| E5 | **Golden fixture growth** | `tests/fixtures/url_policy.json` = policy SSOT driving both stacks + live parity smoke; grow vectors as backends evolve (additive, don't churn existing ids) |
+| ~~E2~~ | ~~SBOM pinned in bundle~~ | **✅ Done 2026-08-02** (PR #2): Rust inventory embedded in every binary at build time (`build.rs` reads `Cargo.lock` → `sbom.rs` `include_str!`; `netrail-api --sbom` prints it, byte-identical to the shipped `SBOM.txt` Rust section) + full `SBOM.txt` packaged in `.deb`/`.rpm`/AppImage at `/usr/share/netrail/SBOM.txt`; release CI asserts both. Generator unified in `scripts/generate-sbom.sh` (fixed the bare-`@4` awk bug) |
+| ~~E3~~ | ~~CSS regression snapshot~~ | **✅ Done 2026-08-02** (PR #4): `tests/test_ui_css.py` — structural guard pinning `.result-card` desktop `minmax(0,1fr) auto`, image-card `96px minmax(0,1fr) auto`, action column stays `auto`, `720px` collapse to `1fr`. CI-gated via `pytest tests/`; verified non-vacuous |
+| ~~E4~~ | ~~Alfred-style tray left-click~~ | **✅ Closed 2026-08-02** — kept `show_menu_on_left_click(true)` (left-click opens menu + focuses window); decision recorded, no change |
+| ~~E5~~ | ~~Golden fixture growth~~ | **✅ Done 2026-08-02** (PR #3): `tests/fixtures/url_policy.json` 43→68 vectors (IPv6 forms, percent/uppercase-scheme loopbacks, `localhost`, `0.0.0.0`, ftp/file schemes, xip.io subdomain, double-encoded DDG unwrap, metadata IP; IPv6 backend + strict). Fixed Python `ftp://` code divergence (now `OPEN_URL_INVALID_SCHEME` like Rust). Parity harness now probes `backend_url` live too |
 
 ### P3 — Accepted residuals (documented; do not build unless asked)
 
@@ -415,7 +415,7 @@ Gates as of 2026-08-02: **127 pytest · 101 cargo tests (76 lib + 19 API + 6 rea
 | Recoverability | 8.5 | Partial fanout, wiki fallback, hide-to-tray, DB backup/restore |
 | Architecture | 8.5 | Clear modules; dual-stack residual cost |
 | Code quality | 8.5 | Small surface; typed errors; clippy clean |
-| Tests | 9 | 127 pytest + 101 cargo + webview E2E + live parity smokes |
+| Tests | 9 | 162 pytest + 113 cargo + CSS layout guard + webview E2E + live parity smokes |
 | Security (model-fit) | 9 | Open-URL + DNS pin + optional token/audit/readonly |
 | Docs / claims | 9 | Audit truth waves landed; residuals honest |
 | Packaging | 8.5 | CI primary; cosign-signed releases; systemd unit |
