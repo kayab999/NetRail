@@ -122,6 +122,7 @@
 |---------|------|--------|--------|
 | Open URL policy | `validate_open_url` (security.rs:17-65) | `validate_open_url` (security.py:264) | ✅ golden fixture, 68 vectors |
 | Backend URL policy | `validate_backend_url_with_options` (security.rs:276) | `validate_backend_url` (security.py:315) | ✅ incl. `strict` |
+| Result-card CSS | — (frontend only) | `netrail/static/style.css` | ✅ structural guard `tests/test_ui_css.py` (E3): desktop `minmax(0, 1fr) auto`, image-card `96px minmax(0, 1fr) auto`, action column stays `auto`, mobile `720px` collapse to `1fr` |
 | Typed errors | `NetRailError` enum (error.rs) | `NetRailError` class (errors.py) | ✅ contract; **✗ 422 path** (A1) |
 | Settings model | struct + serde (config.rs:24-45) | pydantic model (main.py:175-198) | ✅ fields align |
 | Backend selection | `get_enabled_backends` (backends/mod.rs:86) | `get_enabled_backends` (registry.py:21) | ✅ same precedence |
