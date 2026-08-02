@@ -1,6 +1,8 @@
-# NetRail Distribution Guide (v1.2)
+# NetRail Distribution Guide
 
-NetRail ships as a **Rust/Tauri desktop app** and a **headless `netrail-api` binary**. Python remains for **Docker, Flatpak, tests, and install.sh fallback** — not the primary production path.
+NetRail ships as a **Rust/Tauri desktop app** (AppImage / `.deb` / `.rpm`) and a **headless `netrail-api` binary**. Python remains for **Docker, Flatpak, tests, and install.sh fallback** — not the primary production path.
+
+**Packaging SSOT (build steps, artifact paths, desktop template):** [packaging/README.md](../packaging/README.md)
 
 ## Support policy (dual-stack)
 
@@ -65,18 +67,21 @@ APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_*_amd64.AppImage
 - **embedded in the binaries** — `netrail-api --sbom` prints the exact Rust dependency inventory compiled into that artifact. `build.rs` regenerates it from `Cargo.lock` at build time, so it can never drift from the code it shipped with (verified byte-identical to the Rust section of `SBOM.txt`).
 - **bundled in the packages** — the `.deb` / `.rpm` / AppImage install it at `/usr/share/netrail/SBOM.txt`; the release CI fails if it is missing from either package format.
 
-### Build locally
+### Build locally (recommended one-shot)
 
 ```bash
 # AppImage bundling needs patchelf (also installed in GitHub Release CI):
-#   sudo apt install patchelf
+#   sudo apt install patchelf libwebkit2gtk-4.1-dev libayatana-appindicator3-dev \
+#     librsvg2-dev libssl-dev libgtk-3-dev
 npm ci
-cd src-tauri && cargo build --release --bin netrail-api --no-default-features && cd ..
-bash scripts/generate-sbom.sh src-tauri/sbom/SBOM.txt
-APPIMAGE_EXTRACT_AND_RUN=1 npm run build
+bash scripts/build-desktop-linux.sh
+# iterate packaging only: bash scripts/build-desktop-linux.sh --skip-tests
 ```
 
-Artifacts land in `src-tauri/target/release/bundle/` (`.deb`, `.rpm`, AppImage when `patchelf` is present).
+| Output | Location |
+|--------|----------|
+| Collected release tree | **`dist/release/`** (AppImage, `.deb`, `.rpm`, `netrail-api`, `SBOM.txt`, `SHA256SUMS`) |
+| Raw Tauri bundle tree | `src-tauri/target/release/bundle/` |
 
 If AppImage fails with `Could not find patchelf`, install `patchelf` or use the **`.deb`** / CI-built AppImage from the GitHub Release.
 
@@ -85,7 +90,7 @@ If AppImage fails with `Could not find patchelf`, install `patchelf` or use the 
 **Smoke / E2E (API):** after building the headless binary:
 
 ```bash
-bash scripts/e2e-api-smoke.sh
+bash scripts/e2e-api-smoke.sh dist/release/netrail-api
 # or: bash scripts/package-smoke.sh
 ```
 
@@ -200,7 +205,7 @@ Build Rust image directly: `docker build -f Dockerfile.rust -t netrail-api .`
 | `NETRAIL_AUDIT_MAX_BYTES` | Audit rotation size cap (default 10 MiB); on write overflow the log is shifted to `<path>.1` (`.2`, …) |
 | `NETRAIL_AUDIT_MAX_FILES` | Max rotated audit files kept (default 3; `0` disables rotation) |
 | `NETRAIL_LOG_JSON` | `1` emits structured JSON logs (tracing-subscriber `json`) instead of plain text |
-| `NETRAIL_READONLY` | `1` enables read-only mode: all mutating endpoints (`PUT /api/settings`, history delete/purge, collection create/add) return `403 READONLY_MODE`; read endpoints (search, open, history, docs) keep working |
+| `NETRAIL_READONLY` | `1` enables read-only mode: all mutating endpoints (`PUT /api/settings`, history delete/purge, collection create/add) return `403 READONLY_MODE`; read endpoints (search, open, history, docs) keep working. Note: Search/visit logging remains active. |
 | `SEARXNG_URL` / `NETRAIL_SEARXNG_URL` | Self-hosted SearXNG base URL |
 | `BRAVE_SEARCH_API_KEY` / `NETRAIL_BRAVE_API_KEY` | Brave Search API key (never stored in settings) |
 | `NETRAIL_SEARCH_STRATEGY` | `fanout` or `fallback` |
@@ -257,10 +262,14 @@ Suggested cron timer (online, while running):
 
 ## Desktop integration
 
-- Icon: `assets/netrail.png` (128px installed by `install.sh`)
-- Desktop entry: `assets/netrail.desktop` (`Terminal=false`)
-- Data: `~/.local/share/netrail/netrail.db`
-- Config: `~/.config/netrail/settings.json`
+| Item | Location |
+|------|----------|
+| Production desktop entry template | `packaging/linux/netrail.desktop.hbs` (Tauri deb/rpm; Categories from `bundle.category`) |
+| Bundle metadata | `src-tauri/tauri.conf.json` — `category: Utility`, short/long description |
+| install.sh desktop entry | `assets/netrail.desktop` (`Exec=netrail-launch`) |
+| Icons | `src-tauri/icons/*` (bundles); `assets/netrail.png` / `.svg` (install.sh) |
+| Config | `~/.config/netrail/settings.json` |
+| Data | `~/.local/share/netrail/netrail.db` |
 
 Flatpak uses XDG paths under `~/.var/app/io.netrail.NetRail/`.
 
@@ -277,4 +286,4 @@ Flatpak uses XDG paths under `~/.var/app/io.netrail.NetRail/`.
 
 ---
 
-*NetRail v1.4.0 — dual-stack policy: Rust production · Python compatibility · optional API token / audit log*
+*NetRail — dual-stack policy: Rust production · Python compatibility · optional API token / audit log · packaging SSOT in packaging/README.md*

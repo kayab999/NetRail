@@ -4,19 +4,33 @@
 
 ## Install (Linux)
 
-Download the **AppImage** or **.deb** from the [latest release](https://github.com/kayab999/NetRail/releases/latest).
+Download the **AppImage** (recommended) or **.deb** from the [latest release](https://github.com/kayab999/NetRail/releases/latest). Verify `SHA256SUMS` (and the cosign signature when present).
+
+### Desktop (AppImage — double-click)
 
 ```bash
-# Desktop app (AppImage)
-chmod +x NetRail_1.4.0_amd64.AppImage
-# Ubuntu 24.04+ without FUSE: APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.4.0_amd64.AppImage
-./NetRail_1.4.0_amd64.AppImage
-
-# Or Debian/Ubuntu package
-sudo dpkg -i NetRail_1.4.0_amd64.deb
+chmod +x NetRail_*_amd64.AppImage
+# Ubuntu 24.04+ without FUSE:
+APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_*_amd64.AppImage
 ```
 
-**Headless API** (homelabs, scripting, Docker):
+Or install the Debian package:
+
+```bash
+sudo dpkg -i NetRail_*_amd64.deb
+# then launch "NetRail" from the app menu, or: netrail
+```
+
+**System requirements (desktop):** modern 64-bit Linux (glibc, x86_64), a display server (Wayland or X11). The AppImage bundles the WebKit/GTK runtime pieces Tauri needs; you do **not** need to install Rust, Node, or Python to run a release build. On hosts without FUSE, keep `APPIMAGE_EXTRACT_AND_RUN=1`.
+
+**User data (XDG, never inside the AppImage):**
+
+| Path | Purpose |
+|------|---------|
+| `~/.config/netrail/settings.json` | Settings |
+| `~/.local/share/netrail/netrail.db` | History / collections |
+
+### Headless API (homelabs, scripting, Docker)
 
 ```bash
 chmod +x netrail-api
@@ -26,7 +40,7 @@ curl http://127.0.0.1:7421/api/health
 
 (`netrail-api` is always headless; `--api-only` is for the desktop `netrail` binary.)
 
-Build from source: see [Development](#development) below.
+**Build distributables from source:** `bash scripts/build-desktop-linux.sh` → artifacts in `dist/release/`. Full packaging notes: [packaging/README.md](packaging/README.md).
 
 ---
 
@@ -34,7 +48,7 @@ Build from source: see [Development](#development) below.
 
 *Fanout search across SearXNG and DDGS. Results stay in the link rail until you open them.*
 
-**Version:** 1.4.0 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
+**Version:** 1.6.4 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
 
 ---
 
@@ -147,6 +161,7 @@ Full API: [docs/MANUAL.md](docs/MANUAL.md)
 | [User Manual](docs/MANUAL.md) | Search, operators, browsers, troubleshooting |
 | [Architecture](docs/ARCHITECTURE.md) | Design, lifecycle roadmap |
 | [Distribution](docs/DISTRIBUTION.md) | Flatpak, Docker, AppImage, install |
+| [Packaging](packaging/README.md) | AppImage/deb build SSOT, artifacts, caveats |
 | [Open Letter](OPEN_LETTER.md) | Philosophy and the v1.0 postscript |
 | [API error codes](docs/API_ERRORS.md) | Stable `code` / `detail` / `status` reference |
 | [Release notes 1.4.0](docs/RELEASE_v1.4.0.md) | Wave 3–5 token, audit, Docker Rust, parity harness |
@@ -162,8 +177,12 @@ Full API: [docs/MANUAL.md](docs/MANUAL.md)
 ```bash
 git clone https://github.com/kayab999/NetRail.git && cd NetRail
 
-# Native desktop (Tauri)
-npm install && npm run build
+# Full Linux release tree (AppImage + deb + rpm + netrail-api → dist/release/)
+# Needs: patchelf, webkit2gtk-4.1 dev libs — see packaging/README.md
+bash scripts/build-desktop-linux.sh
+
+# Or iterate the desktop binary only
+npm ci && npm run build
 ./src-tauri/target/release/netrail
 
 # Headless API only
@@ -185,12 +204,13 @@ NetRail/
 ├── src-tauri/          # Rust + Tauri (primary / production engine)
 ├── netrail/static/     # Web UI (shared)
 ├── netrail/            # Python: Docker, Flatpak, tests (compatibility)
-├── scripts/            # version check + API E2E smoke
+├── packaging/          # Desktop templates + packaging SSOT (README.md)
+├── scripts/            # build-desktop-linux.sh, version check, E2E smokes
 ├── .github/workflows/  # CI + Release (AppImage + .deb + netrail-api)
 └── docs/
 ```
 
-**Supported production path:** Rust desktop or `netrail-api`. Python is for packaging fallbacks and CI.
+**Supported production path:** Rust desktop (AppImage/deb) or `netrail-api`. Python is for packaging fallbacks and CI.
 
 ---
 

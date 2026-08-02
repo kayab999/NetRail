@@ -1,9 +1,18 @@
 #!/usr/bin/env bash
+# LEGACY / NON-SHIPPING — Python + PyInstaller AppImage.
+# Production desktop AppImage is built by Tauri:
+#   bash scripts/build-desktop-linux.sh
+#   → dist/release/NetRail_*_amd64.AppImage
+# Do not use this script for GitHub Releases.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BUILD="${ROOT}/build/appimage"
 APPDIR="${BUILD}/NetRail.AppDir"
+
+echo "WARNING: packaging/appimage/build.sh is the legacy Python AppImage path."
+echo "         Prefer: bash scripts/build-desktop-linux.sh"
+echo ""
 
 command -v pyinstaller >/dev/null || {
   echo "PyInstaller required: pip install pyinstaller"
