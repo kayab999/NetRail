@@ -123,6 +123,8 @@ jobs:
           cosign verify-blob \
             --certificate SHA256SUMS.pem \
             --signature SHA256SUMS.sig \
+            --certificate-identity-regexp '^https://github.com/kayab999/NetRail/.github/workflows/release.yml@refs/tags/v' \
+            --certificate-oidc-issuer 'https://token.actions.githubusercontent.com' \
             SHA256SUMS
           echo "signature verification OK"
 
