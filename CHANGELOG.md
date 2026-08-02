@@ -2,13 +2,14 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.6.3] — 2026-08-02
 
 ### Added
 
 - **SBOM pinned in bundle (E2)** — the Rust dependency inventory is now embedded in every binary at build time (`build.rs` derives it from `Cargo.lock`; `netrail-api --sbom` prints it, verified byte-identical to the Rust section of the shipped `SBOM.txt`), and the full `SBOM.txt` is packaged into the `.deb` / `.rpm` / AppImage at `/usr/share/netrail/SBOM.txt` (release CI asserts it in both deb and rpm). Also fixed a latent generator bug: the lockfile's top-level `version =` line was emitted as a bare `@4` entry in past `SBOM.txt` assets. Script: `scripts/generate-sbom.sh` (single source for the release asset and the bundled copy).
 - **Golden fixture growth (E5)** — `tests/fixtures/url_policy.json` grew from 43 to 68 vectors (16 new `open_url` + 9 new `backend_url`): IPv6 loopback/link-local/ULA/IPv4-mapped forms, percent-encoded and uppercase-scheme loopbacks, `localhost` hostname (+ trailing dot), `0.0.0.0`, `ftp:`/`file:` schemes, xip.io subdomain rebinding, double-encoded DDG unwrap, cloud-metadata IP, plus IPv6 backend vectors (incl. strict mode). Each vector was verified consistent on both stacks before being committed. Fixed a real dual-stack divergence found during growth: `ftp://` (and any non-http(s) scheme) returned `OPEN_URL_INVALID` in Python but `OPEN_URL_INVALID_SCHEME` in Rust — Python now matches Rust (empty URL still `OPEN_URL_INVALID`). The live parity harness now also probes `backend_url` vectors against the running Rust binary via the settings-update path (strict-mode vectors stay covered by unit tests).
 - **CSS regression guard (E3)** — `tests/test_ui_css.py` pins the `.result-card` grid contract as a CI-gated structural check: desktop `minmax(0, 1fr) auto`, image-card `96px minmax(0, 1fr) auto`, action column always `auto` (never stretched on short snippets — the exact regression the track comment documents), and the `max-width: 720px` collapse to `1fr`. The parser reads only top-level rules so `@media` nesting is handled. Verified non-vacuous: mutating the tracks fails the tests.
+- **Release assurance doc** — `docs/RELEASE_ASSURANCE.md`: non-technical "what guarantees does the project offer and where are they backed" map (security, resilience, concurrency, performance, quality, supply chain) + release-identity discipline table.
 
 ## [1.6.2] — 2026-08-02
 

@@ -4,7 +4,7 @@ use std::env;
 use std::fs;
 use std::path::PathBuf;
 
-pub const VERSION: &str = "1.6.2";
+pub const VERSION: &str = "1.6.3";
 /// Stable API contract version (additive changes only; see docs/AUDIT_ARCH A12).
 pub const API_CONTRACT: &str = "1.4";
 pub const HOST: &str = "127.0.0.1";
