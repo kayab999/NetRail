@@ -8,7 +8,6 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from netrail.errors import NetRailError
 
-_BLOCKED_SCHEMES = frozenset({"javascript", "data", "file", "vbscript"})
 # Base registrable hosts; subdomains (www., r., …) match via suffix.
 _DDG_HOSTS = frozenset({"duckduckgo.com", "duck.com"})
 _DNS_REBINDING_HELPERS = frozenset({"nip.io", "sslip.io", "xip.io", "localtest.me"})
@@ -285,14 +284,11 @@ def _validate_open_url_inner(url: str, depth: int) -> str:
         raise NetRailError("OPEN_URL_INVALID", "Invalid URL.") from None
 
     if parsed.scheme not in {"http", "https"}:
-        if parsed.scheme in _BLOCKED_SCHEMES:
-            raise NetRailError(
-                "OPEN_URL_INVALID_SCHEME",
-                f"Blocked URL scheme: {parsed.scheme}",
-            )
+        if not parsed.scheme:
+            raise NetRailError("OPEN_URL_INVALID", "Invalid URL.") from None
         raise NetRailError(
-            "OPEN_URL_INVALID",
-            "Only http:// and https:// URLs are supported.",
+            "OPEN_URL_INVALID_SCHEME",
+            f"Blocked URL scheme: {parsed.scheme}",
         )
 
     if parsed.username or parsed.password:
