@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import csv
+import functools
 import io
 import json
 import sqlite3
+import threading
 from datetime import datetime, timezone
 from typing import Any
 
@@ -14,6 +16,24 @@ from netrail.history.db import connect, normalize_url
 
 _store: "HistoryStore | None" = None
 _encryption_degraded: bool = False
+
+
+def _synchronized(method):
+    """Serialize store access.
+
+    `db.connect()` opens with `check_same_thread=False`, so the one shared
+    connection serves FastAPI's threadpool threads; using a sqlite3
+    connection's cursor from two threads at once corrupts cursor state
+    (e.g. `fetchone()` returning None). Every public method takes a
+    reentrant lock (Sprint 3 concurrency finding).
+    """
+
+    @functools.wraps(method)
+    def wrapper(self, *args, **kwargs):
+        with self._lock:
+            return method(self, *args, **kwargs)
+
+    return wrapper
 
 ENCRYPTION_DEGRADED_MESSAGE = (
     "System keyring unavailable (common on WSL, i3, or headless). "
@@ -33,6 +53,7 @@ class HistoryStore:
     def __init__(self, conn: sqlite3.Connection, *, encrypt: bool) -> None:
         self._conn = conn
         self._encrypt = encrypt
+        self._lock = threading.RLock()
 
     def _enc(self, text: str) -> bytes:
         return encrypt_text(text, force_plain=not self._encrypt)
@@ -55,6 +76,7 @@ class HistoryStore:
                 (query_id, self._dec(blob)),
             )
 
+    @_synchronized
     def purge_expired(self, ttl_days: int) -> int:
         if ttl_days <= 0:
             return 0
@@ -73,6 +95,7 @@ class HistoryStore:
         self._conn.commit()
         return len(ids)
 
+    @_synchronized
     def record_search(
         self,
         query: str,
@@ -116,6 +139,7 @@ class HistoryStore:
         self._conn.commit()
         return query_id, url_to_result_id
 
+    @_synchronized
     def get_visit_metadata(self, urls: list[str]) -> dict[str, dict[str, Any]]:
         if not urls:
             return {}
@@ -148,6 +172,7 @@ class HistoryStore:
                 output[url] = meta
         return output
 
+    @_synchronized
     def record_visit(
         self,
         url: str,
@@ -166,6 +191,7 @@ class HistoryStore:
         )
         self._conn.commit()
 
+    @_synchronized
     def list_history(
         self,
         *,
@@ -214,6 +240,7 @@ class HistoryStore:
         total = self._conn.execute("SELECT COUNT(*) AS c FROM queries").fetchone()["c"]
         return {"items": items, "total": total, "limit": limit, "offset": offset}
 
+    @_synchronized
     def delete_history_entry(self, query_id: int) -> bool:
         exists = self._conn.execute("SELECT 1 FROM queries WHERE id = ?", (query_id,)).fetchone()
         if not exists:
@@ -223,6 +250,7 @@ class HistoryStore:
         self._conn.commit()
         return True
 
+    @_synchronized
     def purge_all_history(self) -> int:
         count = self._conn.execute("SELECT COUNT(*) AS c FROM queries").fetchone()["c"]
         self._conn.execute("DELETE FROM queries")
@@ -230,6 +258,7 @@ class HistoryStore:
         self._conn.commit()
         return count
 
+    @_synchronized
     def list_collections(self) -> list[dict[str, Any]]:
         cursor = self._conn.execute(
             """
@@ -249,6 +278,7 @@ class HistoryStore:
             for row in cursor.fetchall()
         ]
 
+    @_synchronized
     def create_collection(self, name: str) -> dict[str, Any]:
         name = name.strip()
         if not name:
@@ -274,6 +304,7 @@ class HistoryStore:
         collection_id = int(cursor.lastrowid)
         return {"id": collection_id, "name": name, "created_at": datetime.now(timezone.utc).isoformat(), "item_count": 0}
 
+    @_synchronized
     def add_collection_item(
         self,
         collection_id: int,
@@ -302,6 +333,7 @@ class HistoryStore:
         self._conn.commit()
         return {"collection_id": collection_id, "url": url, "title": title, "notes": notes}
 
+    @_synchronized
     def export_collection(self, collection_id: int, fmt: str = "json") -> str:
         collection = self._conn.execute(
             "SELECT id, name, created_at FROM collections WHERE id = ?",
@@ -342,6 +374,7 @@ class HistoryStore:
 
         return json.dumps(payload, indent=2)
 
+    @_synchronized
     def stats(self) -> dict[str, int]:
         return {
             "queries": self._conn.execute("SELECT COUNT(*) AS c FROM queries").fetchone()["c"],

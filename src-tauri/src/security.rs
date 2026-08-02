@@ -187,8 +187,12 @@ fn is_cloud_metadata_host(host: &str) -> bool {
         .any(|&h| host == h || host.ends_with(&format!(".{h}")))
 }
 
+pub fn normalize_host(host: &str) -> String {
+    host.trim_end_matches('.').to_lowercase()
+}
+
 fn block_unsafe_host(host: &str) -> NetRailResult<()> {
-    let host_lower = host.trim_end_matches('.').to_lowercase();
+    let host_lower = normalize_host(host);
 
     if matches!(
         host_lower.as_str(),
@@ -199,6 +203,7 @@ fn block_unsafe_host(host: &str) -> NetRailResult<()> {
             message: "Localhost URLs cannot be opened from search results.".into(),
         });
     }
+
 
     if is_dns_rebinding_helper(&host_lower) {
         return Err(NetRailError::InvalidOpenUrl {
@@ -687,4 +692,72 @@ mod tests {
         let err = validate_backend_url_with_options("http://127.0.0.1:8080", true).unwrap_err();
         assert_eq!(err.error_code(), "BACKEND_URL_STRICT_PRIVATE");
     }
+
+    // --- S1: Invariant & Property Tests ---
+
+    #[test]
+    fn property_normalize_host_is_idempotent() {
+        let sample_hosts = [
+            "127.0.0.1.",
+            "DUCKDUCKGO.COM..",
+            "192.168.1.1",
+            "metadata.google.internal.",
+            "EXAMPLE.COM%2Fpath",
+            "127.0.0.1",
+            "localhost",
+            "[::1]",
+        ];
+        for host in sample_hosts {
+            let once = normalize_host(host);
+            let twice = normalize_host(&once);
+            assert_eq!(once, twice, "idempotency failed for host: {host}");
+        }
+    }
+
+    #[test]
+    fn property_parse_browser_ipv4_never_panics_on_arbitrary_input() {
+        let fuzz_inputs = [
+            "",
+            "   ",
+            ".",
+            "...",
+            "0",
+            "0x",
+            "0xGG",
+            "256.256.256.256",
+            "127.0.0.1.1",
+            "-1",
+            "99999999999999999999999999999",
+            "0177.0.0.1",
+            "0x7f000001",
+            "2130706433",
+            "127.1",
+            "127.0.1",
+            "192.168.1.1",
+            "../../../etc/passwd",
+            "\x00\x01\x02",
+        ];
+        for input in fuzz_inputs {
+            let _ = parse_browser_ipv4(input);
+        }
+    }
+
+
+    #[test]
+    fn property_pin_open_host_fail_closed_on_empty_dns() {
+        let empty_ips: &[std::net::IpAddr] = &[];
+        let res = check_resolved_host("example.com", empty_ips);
+        assert!(res.is_err(), "Empty DNS resolution must fail closed");
+        assert_eq!(res.unwrap_err().error_code(), "OPEN_URL_DNS_UNRESOLVABLE");
+    }
+
+    #[test]
+    fn property_pin_open_host_blocks_private_dns_answers() {
+        let private_ips = [std::net::IpAddr::V4(std::net::Ipv4Addr::new(192, 168, 1, 50))];
+        let res = check_resolved_host("rebinding.example.com", &private_ips);
+        assert!(res.is_err(), "DNS resolving to private IP must be rejected");
+        assert_eq!(res.unwrap_err().error_code(), "OPEN_URL_PRIVATE");
+    }
 }
+
+

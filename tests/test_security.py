@@ -186,3 +186,52 @@ def test_resolve_host_ips_returns_public_ip_for_known_host():
         pytest.skip("system resolver unavailable")
     for ip in ips:
         assert not ip.is_private and not ip.is_loopback and not ip.is_link_local
+
+
+# --- S1: Invariant & Property Tests ---
+
+def test_property_normalize_host_is_idempotent():
+    from netrail.security import _normalize_host
+
+    sample_hosts = [
+        "127.0.0.1.",
+        "DUCKDUCKGO.COM..",
+        "192.168.1.1",
+        "metadata.google.internal.",
+        "EXAMPLE.COM%2Fpath",
+        "127.0.0.1",
+        "localhost",
+        "[::1]",
+    ]
+    for host in sample_hosts:
+        once = _normalize_host(host)
+        twice = _normalize_host(once)
+        assert once == twice, f"idempotency failed for host: {host}"
+
+
+def test_property_parse_browser_ipv4_never_panics_on_arbitrary_input():
+    from netrail.security import _parse_browser_ipv4
+
+    fuzz_inputs = [
+        "",
+        "   ",
+        ".",
+        "...",
+        "0",
+        "0x",
+        "0xGG",
+        "256.256.256.256",
+        "127.0.0.1.1",
+        "-1",
+        "99999999999999999999999999999",
+        "0177.0.0.1",
+        "0x7f000001",
+        "2130706433",
+        "127.1",
+        "127.0.1",
+        "192.168.1.1",
+        "../../../etc/passwd",
+        "\x00\x01\x02",
+    ]
+    for inp in fuzz_inputs:
+        _ = _parse_browser_ipv4(inp)
