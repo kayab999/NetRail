@@ -69,6 +69,9 @@ jobs:
         working-directory: src-tauri
         run: cargo build --release --bin netrail-api --no-default-features
 
+      - name: Generate SBOM for bundle (embedded in deb/rpm/AppImage)
+        run: bash scripts/generate-sbom.sh src-tauri/sbom/SBOM.txt
+
       - name: Build Tauri desktop bundle
         env:
           APPIMAGE_EXTRACT_AND_RUN: 1
@@ -94,21 +97,23 @@ jobs:
 
       - name: Generate SBOM + SHA256 checksums
         run: |
-          # Lightweight SPDX-ish inventory (no external syft dependency).
-          {
-            echo "# NetRail SBOM (component inventory)"
-            echo "generated=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "version=$(python3 -c "import json; print(json.load(open('package.json'))['version'])")"
-            echo ""
-            echo "## Rust (Cargo.lock packages)"
-            awk '/^name = /{n=$3} /^version = /{print n "@" $3}' src-tauri/Cargo.lock | tr -d '"' | sort -u
-            echo ""
-            echo "## Python (requirements.txt)"
-            cat requirements.txt
-          } > dist/release/SBOM.txt
+          bash scripts/generate-sbom.sh dist/release/SBOM.txt
+          # Sanity: the bundled artifact copy must equal the one embedded in
+          # the deb/rpm/AppImage (same generator, same inputs).
+          cmp dist/release/SBOM.txt src-tauri/sbom/SBOM.txt
           cd dist/release
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
+
+      - name: Verify SBOM is embedded in bundles
+        run: |
+          DEB="$(find dist/release -maxdepth 1 -name '*.deb' -print -quit)"
+          RPM="$(find dist/release -maxdepth 1 -name '*.rpm' -print -quit)"
+          test -n "${DEB}" && dpkg-deb -c "${DEB}" | grep -q 'usr/share/netrail/SBOM.txt' || \
+            { echo "ERROR: SBOM.txt missing from .deb"; exit 1; }
+          test -n "${RPM}" && rpm -qlp "${RPM}" | grep -q 'usr/share/netrail/SBOM.txt' || \
+            { echo "ERROR: SBOM.txt missing from .rpm"; exit 1; }
+          echo "SBOM embedded in .deb and .rpm OK"
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
