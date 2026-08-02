@@ -54,8 +54,10 @@ start_server() {
 api() { curl -fsS -H 'Content-Type: application/json' "$@"; }
 
 run_gate() {
-  log "Rust chaos tests (chaos_db, chaos_process, audit rotation)..."
-  (cd "${ROOT}/src-tauri" && cargo test --test chaos_db --test chaos_process --lib audit::tests --quiet)
+  log "Rust chaos tests (chaos_db, chaos_process)..."
+  (cd "${ROOT}/src-tauri" && cargo test --test chaos_db --test chaos_process --quiet)
+  log "Rust audit-rotation chaos test..."
+  (cd "${ROOT}/src-tauri" && cargo test --lib audit::tests --quiet)
   log "Python chaos tests (test_chaos.py)..."
   "${VENV_PY}" -m pytest "${ROOT}/tests/test_chaos.py" -q
   log "chaos gate OK"
