@@ -98,8 +98,8 @@ jobs:
 
       - name: Python coverage (observability only, no gate — T5)
         run: |
-          python -c "import pytest, coverage; print('pytest', pytest.__version__, '| coverage.py', coverage.__version__)"
           python -m pip install -q pytest-cov
+          python -c "import pytest, coverage; print('pytest', pytest.__version__, '| coverage.py', coverage.__version__)"
           python -m pytest tests/ -q --cov=netrail --cov-report=term --cov-config=.coveragerc
 
       - name: Rust coverage (observability only, no gate — T5)
