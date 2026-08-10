@@ -8,12 +8,12 @@
 | **License** | AGPL-3.0 |
 | **Repo** | https://github.com/kayab999/NetRail |
 | **Handoff date** | 2026-08-02 (supersedes earlier same-day snapshots) |
-| **HEAD** | `ed0603d` — `fix(release): unblock 1.6.4 AppImage (NR-16) — NO_STRIP + Categories fix` |
+| **HEAD** | `a32df00` + docs refresh — `docs: refresh handoff for NR-16 fix (ed0603d) + QA-01/QA-02 closure`
 | **Prior commit** | `a12dbed` — `chore(release): consolidate AppImage-first Linux packaging for 1.6.4` |
-| **Branch** | `main` — **ahead of `origin/main`** by 5 commits (A2 parity/fuzz/NR-16 fixes, unpushed) |
+| **Branch** | `main` — **pushed** == `origin/main` |
 | **Working tree** | Clean (unless editing handoff now) |
-| **Tag** | **`v1.6.4`** on `a12dbed` (pushed) — **needs re-point to `ed0603d`** (fix commit) once user authorizes |
-| **GitHub Release assets** | ⚠️ **Not published yet** — AppImage blocker root-caused + fixed in `ed0603d` (see §9 P0): Categories empty-value bug in desktopTemplate + linuxdeploy strip/`.relr.dyn` on 24.04 (`NO_STRIP`). **Local full-pipeline proof:** `NetRail_1.6.4_amd64.AppImage` built. CI rerun pending tag re-point. |
+| **Tag** | **`v1.6.4`** on `a32df00` (re-pointed, pushed) |
+| **GitHub Release assets** | ✅ **Published 2026-08-10** — run `31350607763` green: AppImage (82M), deb, rpm, netrail-api, SBOM.txt, SHA256SUMS(+.sig/.pem, cosign keyless verified). See §9 P0. |
 | **Primary path** | Rust Axum API + Tauri 2 desktop; Python FastAPI for Docker/Flatpak/tests |
 | **Official ship artifact** | **AppImage** (CI authority); secondaries `.deb` / `.rpm` / `netrail-api` |
 | **Packaging SSOT** | [packaging/README.md](../packaging/README.md) + `scripts/build-desktop-linux.sh` |
@@ -64,7 +64,7 @@ You are continuing **NetRail**, a single-user Linux research console: **query �
 | Desktop UX polish | **8** | Keyboard rail, recovery UX, Spotlight, tray/hotkey |
 | **Overall (v1 desktop product)** | **~8.8 code / ~8.0 ship** | Product + pipeline defined; **finish release CI** to close the ship gap |
 
-**Verdict:** NetRail 1.6.4 on `main` is a **distributable product contract**: audit closed, dual-stack remediations landed, single official packaging path (Tauri AppImage), XDG data outside the bundle, no telemetry. What remains operational is **making CI publish the v1.6.4 assets** after the `linuxdeploy` failure.
+**Verdict:** NetRail 1.6.4 on `main` is a **distributable product contract**: audit closed, dual-stack remediations landed, single official packaging path (Tauri AppImage), XDG data outside the bundle, no telemetry. The v1.6.4 assets were **published 2026-08-10** (Release CI `31350607763` green after NR-16 fixes `ed0603d`): AppImage 82M + deb/rpm/netrail-api/SBOM/SHA256SUMS, cosign-signed.
 
 ### 1.2 Release / git posture (critical for agents)
 
@@ -96,7 +96,7 @@ Enterprise *readiness for the stated threat model* ≠ multi-tenant SaaS. For Ne
 | Systemd unit + DB backup | ✅ `packaging/netrail-api.service`, `scripts/backup-db.sh` |
 | SBOM / dep audit in CI | ✅ Embedded `--sbom` + package path; audits gated |
 | AppImage-first packaging SSOT | ✅ `packaging/README.md`, `scripts/build-desktop-linux.sh`, desktop template |
-| v1.6.4 signed GitHub assets | ⚠️ **Fix landed** `ed0603d` (NR-16); CI rerun pending tag re-point |
+| v1.6.4 signed GitHub assets | ✅ **Published 2026-08-10** — Release `31350607763` green (AppImage 82M + deb/rpm/API/SBOM/SUMS/cosign) |
 | Formal SDL / multi-user RBAC | ❌ Out of scope |
 
 ---
@@ -397,7 +397,7 @@ Source of truth: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) (A1–A15 
 | **NR-07** | ✅ residual | DNS-pin / homoglyph class; documented |
 | **NR-09..14** | ✅ on main | Docs, hygiene, CONFIG_SAVE→500, Rust tests |
 | **NR-15** | ✅ git | Committed + tagged + pushed |
-| **NR-16** | ✅ fixed `ed0603d` (pending CI rerun) | AppImage blocker root-caused: desktopTemplate Categories empty-value + linuxdeploy strip/`.relr.dyn`; local pipeline proof — see §9 P0 |
+| **NR-16** | ✅ **closed** `ed0603d` + Release CI `31350607763` green → assets published; §9 P0 |
 
 ### 6B.2 Packaging contract (official path)
 
@@ -507,9 +507,9 @@ Release CI (tag `v1.6.4`): `failed to run linuxdeploy` — **fixed** `ed0603d` (
 
 | # | Item | Status / notes |
 |---|------|----------------|
-| **NR-16** | Fix Release workflow AppImage step | Run `30771210870` failed `failed to run linuxdeploy` after deb+rpm. **Root-caused + fixed** `ed0603d` (2026-08-09): (1) desktopTemplate rendered `Categories=Utility;;Network;` — hardcoded suffix + tauri's trailing-`;` category var = empty value → appimagetool/desktop-file-validate hard-rejects; template now concatenates `{{categories}}Network;` (`Utility;Network;` / `Network;` when empty). (2) linuxdeploy strip chokes on `.relr.dyn` sections on ubuntu-24.04 libs (upstream tauri#14796/#8929/#13113) → `NO_STRIP: true` added to release.yml build env + `scripts/build-desktop-linux.sh`. **Local proof:** first-ever `NetRail_1.6.4_amd64.AppImage` built (90.6 MB); Categories validated inside squashfs; deb/rpm/SHA256SUMS regenerated. |
-| R5a | Re-run or re-tag after fix | Patch landed (`ed0603d`): push main → **re-point tag `v1.6.4` to the fix commit** (delete+recreate locally, `--force` push of the tag only; policy allows tag force as the release is unpublished) → Release workflow rebuilds all assets. **No force-push of main.** Target assets: AppImage, deb, rpm, netrail-api, SBOM, SHA256SUMS, cosign. |
-| R5b | Post-release doc refresh | After green: HANDOVER HEAD + handoff “assets published”; optional README pin to exact artifact names. |
+| **NR-16** | Fix Release workflow AppImage step | ✅ **CLOSED 2026-08-10** — Release CI `31350607763` (tag re-pointed to `a32df00`) **green**: AppImage 82M + deb/rpm/netrail-api/SBOM/SHA256SUMS/cosign published. Root causes fixed `ed0603d` (see resolution record below). |
+| R5a | Re-run or re-tag after fix | ✅ Done: push main → CI main green (`31350151123`) → `git tag -f v1.6.4 && git push -f origin v1.6.4` → Release green. |
+| R5b | Post-release doc refresh | ✅ This refresh: HEAD + "assets published". |
 
 **Resolution record (2026-08-09, `ed0603d`):** reproduced `failed to run linuxdeploy`
 locally via `bash scripts/build-desktop-linux.sh --skip-tests` (patchelf 0.18 + librsvg
@@ -525,6 +525,10 @@ Local proof: `NetRail_1.6.4_amd64.AppImage` (90.6 MB) — first-ever for 1.6.4 �
 extracted, `Categories=Utility;Network;` verified inside squashfs; dist/release
 regenerated (deb/rpm/SBOM/SHA256SUMS).
 
+**External confirmation (2026-08-10):** Release CI `31350607763` green → assets live at
+https://github.com/kayab999/NetRail/releases/tag/v1.6.4 — AppImage 82M, deb 8.3M, rpm
+8.1M, netrail-api 6.7M, SBOM.txt, SHA256SUMS(+.sig/.pem cosign keyless).
+
 ```bash
 gh run view 30771210870 --log-failed     # deb+rpm OK, linuxdeploy ran 59s then generic error
 # Rerun recipe: git push origin main && git tag -f v1.6.4 && git push -f origin v1.6.4
@@ -537,7 +541,7 @@ gh run view 30771210870 --log-failed     # deb+rpm OK, linuxdeploy ran 59s then 
 |---|------|------------|
 | ~~R1–R4~~ | 1.6.2 / 1.6.3 cuts + doc refresh | ✅ Done earlier 2026-08-02 |
 | ~~R5 code~~ | 1.6.4 remediations + packaging on main + tag | ✅ `e436e6d` + `a12dbed` + tag pushed |
-| R5 assets | Publish signed GitHub Release for `v1.6.4` | ⚠️ **open — NR-16** |
+| R5 assets | Publish signed GitHub Release for `v1.6.4` | ✅ **published 2026-08-10** — all 8 assets (AppImage/deb/rpm/API/SBOM/SUMS/cosign) |
 
 ### P2 — Engineering backlog (not blocking)
 
@@ -599,7 +603,7 @@ gh run view 30771210870 --log-failed     # deb+rpm OK, linuxdeploy ran 59s then 
 | Docs / claims | 9 | Packaging SSOT + honest CI failure note |
 | Packaging contract | 9 | AppImage-first defined; legacy path excluded |
 | Packaging published | 6 | **v1.6.4 Release assets blocked on linuxdeploy** |
-| **Overall** | **~8.7 code / ship pending** | Product ready; finish NR-16 |
+| **Overall** | **~8.7 code, **ship released** (v1.6.4 assets live)** | Product ready; finish NR-16 |
 
 ---
 
@@ -632,7 +636,7 @@ Invariants:
   XDG data outside bundle; packaged static under /usr/share/netrail/static/.
 
 NEXT WORK (P0):
-  NR-16: fix Release CI AppImage/linuxdeploy so v1.6.4 assets publish
+  NR-16: ✅ closed — v1.6.4 assets published (Release CI 31350607763)
     (AppImage, deb, rpm, netrail-api, SBOM, SHA256SUMS, cosign).
   Do NOT re-open closed A1–A15 / N1–N4 / NR-01..15 without new evidence.
   Do NOT build accepted residuals (Q16, R7, multi-user) unless asked.
