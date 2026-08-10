@@ -12,7 +12,7 @@ NetRail ships as a **Rust/Tauri desktop app** (AppImage / `.deb` / `.rpm`) and a
 | **`netrail-api`** (Rust headless) | **Production** | Homelab, scripting, CI smoke |
 | **Python** (`python -m netrail`, Docker, Flatpak) | **Compatibility** | API parity targeted; prefer Rust when packaging allows |
 
-### Feature parity matrix (1.2.2)
+### Feature parity matrix (1.6.4)
 
 | Feature | Rust | Python |
 |---------|------|--------|

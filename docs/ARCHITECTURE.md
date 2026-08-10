@@ -1,6 +1,6 @@
 # NetRail — Architecture & Lifecycle Blueprint
 
-> **Current product:** NetRail **1.6.2** (Rust-primary, dual-stack). Lifecycle tables below retain historical phase labels; rows marked ✅ are shipped. Open items are backlog, not “still in Phase 1.” Residual risk: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). Remaining-work plan: [docs/HANDOFF_OPENCODE_2026-08-02.md](HANDOFF_OPENCODE_2026-08-02.md) §9.
+> **Current product:** NetRail **1.6.4** (Rust-primary, dual-stack). Lifecycle tables below retain historical phase labels; rows marked ✅ are shipped. Open items are backlog, not “still in Phase 1.” Residual risk: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). Remaining-work plan: [docs/HANDOFF_OPENCODE_2026-08-02.md](HANDOFF_OPENCODE_2026-08-02.md) §9.
 
 ## Vision
 
@@ -256,7 +256,7 @@ The roadmap is organized into **phases** with explicit goals, deliverables, exit
 
 ### Current state (2026-08-02)
 
-Released: **v1.6.3** (reproducibility & supply chain: SBOM pinned in bundle — embedded in every binary via `--sbom` + packaged in deb/rpm/AppImage, release CI asserts both; golden URL-policy fixture grown 43→68 vectors + live backend parity; CSS regression guard for the `.result-card` grid). **v1.6.2** = hardening Sprints 2–4 (chaos/fault-injection suite + fixes, resource-stability load harness, dual-stack benchmarks; read-only mode + systemd + backup from 1.6.1 enterprise batch). **v1.6.1** = DNS pin A15, webview E2E, cosign-signed CI, FTS sync, typed 422s, CSP token.
+Released: **v1.6.4** (Linux packaging restored end-to-end: AppImage/deb/rpm published with keyless cosign signatures + SBOM, 8 assets, release CI `31350607763`; AppImage rebuilt from the same source assertions as CI). **v1.6.3** = reproducibility & supply chain (SBOM pinned in bundle — embedded in every binary via `--sbom` + packaged in deb/rpm/AppImage, release CI asserts both; golden URL-policy fixture grown 43→68 vectors + live backend parity; CSS regression guard for the `.result-card` grid). **v1.6.2** = hardening Sprints 2–4 (chaos/fault-injection suite + fixes, resource-stability load harness, dual-stack benchmarks; read-only mode + systemd + backup from 1.6.1 enterprise batch). **v1.6.1** = DNS pin A15, webview E2E, cosign-signed CI, FTS sync, typed 422s, CSP token.
 
 Backlog shipped on `main` (all in v1.6.3 / Sprints):
 
