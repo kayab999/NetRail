@@ -268,7 +268,7 @@ Backlog shipped on `main` (all in v1.6.3 / Sprints):
 | E4 | Tray left-click — kept `show_menu_on_left_click(true)` (decision, no change) | closed |
 | E1 | Load / performance check (load harness + slope + dual-stack benchmarks) | Sprints 3–4 |
 
-**Next milestone:** the engineering backlog is empty. Remaining work is "don't build unless asked": C3 DNS resolve-and-warn flag, C4 images-off flag, multi-user/RBAC, egress proxy/TLS pinning, metrics/SLO, Windows/macOS ports, then the long-horizon phases below (see [HANDOFF §9](HANDOFF_OPENCODE_2026-08-02.md#9-remaining-work-points-established-2026-08-02)).
+**Next milestone:** the engineering backlog is empty. Remaining work is "don't build unless asked": C3 DNS resolve-and-warn flag, C4 images-off flag, multi-user/RBAC, egress proxy/TLS pinning, metrics/SLO, Windows/macOS ports, then the long-horizon phases below (see [HANDOFF §9](HANDOFF_OPENCODE_2026-08-02.md#9-remaining-work-points-post-164-push)).
 
 ---
 
