@@ -238,8 +238,8 @@ The score that would hide QA-01 is exactly what the hard-stop rule exists to pre
 
 | ID | Sev | Domain | Title | Evidence | Fix direction |
 |----|-----|--------|-------|----------|---------------|
-| QA-01 | **P0** | D8 | **clippy `-D warnings` gate red in as-built** (precedent: HANDOVER lists CI-red as P0) | `cargo clippy --all-targets -- -D warnings` → `error: unused import: std::io::Read` `server/mod.rs:950` (added with uncommitted `csp_includes_failsafe_script_hash` test); would fail ci.yml/release.yml clippy steps on push | Delete line 950; re-run clippy |
-| QA-02 | P2 | D3/D5 | Flaky integration test under full-suite concurrency | `settings_put_with_fresh_if_match_succeeds_and_returns_new_etag`: 1/5 full `cargo test` runs, 0/12 isolated; suspected shared mutate rate-limit budget with `add_collection_item_respects_mutate_rate_limit` | Isolate rate-limit state per test (fresh limiter/SharedStore) |
+| QA-01 | **P0** | D8 | clippy `-D warnings` gate red in as-built | `error: unused import: std::io::Read` `server/mod.rs:950` | **Closed by A2** (2026-08-09): line removed; `cargo clippy --all-targets -- -D warnings` exit 0 |
+| QA-02 | P2 | D3/D5 | Flaky integration test under full-suite concurrency | `settings_put_with_fresh_if_match_succeeds_and_returns_new_etag`: 1/5 full `cargo test` runs; shared mutate rate-limit budget suspected | **Closed by A2** (2026-08-09): rate-limit state isolated; 8/8 full-suite runs clean (was 1/5) |
 | QA-03 | P2 | D5 | Differential fuzz harness not committed nor CI-gated | **Closed by B-wave** (2026-08-09): harness + seed committed (`scripts/fuzz-parity.py`, `1e2d36e`); parity `code_diff=0` on 7 600 URLs; residual pinned to 1 family (50 `0xzz`); §16 numbers + runbook | Optional CI job remains (unblocked by this closure) |
 | QA-04 | P3 | D5 | No coverage % measurement anywhere | No coverage step in ci.yml/release.yml; no kcov/coveralls/`pytest --cov` config | Add coverage job (rust: llvm-cov/tarpaulin, py: pytest-cov) with branch gate |
 | QA-05 | P3 | D5/D6 | webview E2E not in CI | `webview-e2e.sh` + `tests/webview_e2e.py` exist; display-dependent; ci.yml omits it | Document as manual release gate, or CI with xvfb |
@@ -275,7 +275,7 @@ bash scripts/check-versions.sh                      # exit 0, all 1.6.4
 .venv/bin/python -m pytest tests/ -q                # 199 passed
 # 3. Rust suite + clippy (gate!)
 cargo test                                          # ≈126 passed, 0 flakes expected
-cargo clippy --all-targets -- -D warnings           # exit 0 (currently FAILS: QA-01)
+cargo clippy --all-targets -- -D warnings           # exit 0 (closed by A2, 2026-08-09)
 # 4. Live contract parity (Rust binary required)
 NETRAIL_NO_OPEN=1 bash scripts/parity-api-smoke.sh  # 57/57 open + 18 backend + ETag
 bash scripts/e2e-api-smoke.sh                       # health/static/QUERY_INVALID/open-blocks

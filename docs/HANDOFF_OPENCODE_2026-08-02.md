@@ -8,12 +8,12 @@
 | **License** | AGPL-3.0 |
 | **Repo** | https://github.com/kayab999/NetRail |
 | **Handoff date** | 2026-08-02 (supersedes earlier same-day snapshots) |
-| **HEAD** | `a12dbed` — `chore(release): consolidate AppImage-first Linux packaging for 1.6.4` |
-| **Prior commit** | `e436e6d` — `feat(1.6.4): close audit remediations NR-01..NR-14` |
-| **Branch** | `main` **== `origin/main`** (pushed) |
-| **Working tree** | Clean (except uncommitted handoff refresh if editing now) |
-| **Tag** | **`v1.6.4`** on `a12dbed` (pushed) |
-| **GitHub Release assets** | ⚠️ **Not published yet** — Release workflow run `30771210870` **failed** at Tauri AppImage / `linuxdeploy` (deb+rpm stages succeeded before fail). See §9 P0. |
+| **HEAD** | `ed0603d` — `fix(release): unblock 1.6.4 AppImage (NR-16) — NO_STRIP + Categories fix` |
+| **Prior commit** | `a12dbed` — `chore(release): consolidate AppImage-first Linux packaging for 1.6.4` |
+| **Branch** | `main` — **ahead of `origin/main`** by 5 commits (A2 parity/fuzz/NR-16 fixes, unpushed) |
+| **Working tree** | Clean (unless editing handoff now) |
+| **Tag** | **`v1.6.4`** on `a12dbed` (pushed) — **needs re-point to `ed0603d`** (fix commit) once user authorizes |
+| **GitHub Release assets** | ⚠️ **Not published yet** — AppImage blocker root-caused + fixed in `ed0603d` (see §9 P0): Categories empty-value bug in desktopTemplate + linuxdeploy strip/`.relr.dyn` on 24.04 (`NO_STRIP`). **Local full-pipeline proof:** `NetRail_1.6.4_amd64.AppImage` built. CI rerun pending tag re-point. |
 | **Primary path** | Rust Axum API + Tauri 2 desktop; Python FastAPI for Docker/Flatpak/tests |
 | **Official ship artifact** | **AppImage** (CI authority); secondaries `.deb` / `.rpm` / `netrail-api` |
 | **Packaging SSOT** | [packaging/README.md](../packaging/README.md) + `scripts/build-desktop-linux.sh` |
@@ -96,7 +96,7 @@ Enterprise *readiness for the stated threat model* ≠ multi-tenant SaaS. For Ne
 | Systemd unit + DB backup | ✅ `packaging/netrail-api.service`, `scripts/backup-db.sh` |
 | SBOM / dep audit in CI | ✅ Embedded `--sbom` + package path; audits gated |
 | AppImage-first packaging SSOT | ✅ `packaging/README.md`, `scripts/build-desktop-linux.sh`, desktop template |
-| v1.6.4 signed GitHub assets | ⚠️ **Blocked** on Release CI AppImage/`linuxdeploy` failure |
+| v1.6.4 signed GitHub assets | ⚠️ **Fix landed** `ed0603d` (NR-16); CI rerun pending tag re-point |
 | Formal SDL / multi-user RBAC | ❌ Out of scope |
 
 ---
@@ -397,7 +397,7 @@ Source of truth: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) (A1–A15 
 | **NR-07** | ✅ residual | DNS-pin / homoglyph class; documented |
 | **NR-09..14** | ✅ on main | Docs, hygiene, CONFIG_SAVE→500, Rust tests |
 | **NR-15** | ✅ git | Committed + tagged + pushed |
-| **NR-16** | ⚠️ open | **Release CI failed** — see §9 P0 |
+| **NR-16** | ✅ fixed `ed0603d` (pending CI rerun) | AppImage blocker root-caused: desktopTemplate Categories empty-value + linuxdeploy strip/`.relr.dyn`; local pipeline proof — see §9 P0 |
 
 ### 6B.2 Packaging contract (official path)
 
@@ -456,7 +456,7 @@ bash scripts/build-desktop-linux.sh
 ```
 
 Gates at 1.6.4 land: **166 pytest · ~85 cargo lib · ~31 cargo integration · clippy `-D warnings`**.  
-Release CI (tag `v1.6.4`): **failed** at AppImage/`linuxdeploy` — re-run after fix (§9 P0).
+Release CI (tag `v1.6.4`): `failed to run linuxdeploy` — **fixed** `ed0603d` (NO_STRIP + Categories); local AppImage proof; CI rerun pending (tag re-point, §9 P0).
 
 ### Useful env
 
@@ -507,18 +507,28 @@ Release CI (tag `v1.6.4`): **failed** at AppImage/`linuxdeploy` — re-run after
 
 | # | Item | Status / notes |
 |---|------|----------------|
-| **NR-16** | Fix Release workflow AppImage step | Run `30771210870` **failed**: `failed to run linuxdeploy` after deb+rpm bundled successfully. Same class of failure seen locally without healthy AppImage toolchain. |
-| R5a | Re-run or re-tag after fix | Prefer diagnose → patch if code/config → `gh workflow run` / delete+repush tag only if policy allows; **no force-push of main**. Target assets: AppImage, deb, rpm, netrail-api, SBOM, SHA256SUMS, cosign. |
+| **NR-16** | Fix Release workflow AppImage step | Run `30771210870` failed `failed to run linuxdeploy` after deb+rpm. **Root-caused + fixed** `ed0603d` (2026-08-09): (1) desktopTemplate rendered `Categories=Utility;;Network;` — hardcoded suffix + tauri's trailing-`;` category var = empty value → appimagetool/desktop-file-validate hard-rejects; template now concatenates `{{categories}}Network;` (`Utility;Network;` / `Network;` when empty). (2) linuxdeploy strip chokes on `.relr.dyn` sections on ubuntu-24.04 libs (upstream tauri#14796/#8929/#13113) → `NO_STRIP: true` added to release.yml build env + `scripts/build-desktop-linux.sh`. **Local proof:** first-ever `NetRail_1.6.4_amd64.AppImage` built (90.6 MB); Categories validated inside squashfs; deb/rpm/SHA256SUMS regenerated. |
+| R5a | Re-run or re-tag after fix | Patch landed (`ed0603d`): push main → **re-point tag `v1.6.4` to the fix commit** (delete+recreate locally, `--force` push of the tag only; policy allows tag force as the release is unpublished) → Release workflow rebuilds all assets. **No force-push of main.** Target assets: AppImage, deb, rpm, netrail-api, SBOM, SHA256SUMS, cosign. |
 | R5b | Post-release doc refresh | After green: HANDOVER HEAD + handoff “assets published”; optional README pin to exact artifact names. |
 
-**Debug starting points for NR-16:**
+**Resolution record (2026-08-09, `ed0603d`):** reproduced `failed to run linuxdeploy`
+locally via `bash scripts/build-desktop-linux.sh --skip-tests` (patchelf 0.18 + librsvg
+`.pc` shim); `--verbosity 2` pinpointed both failures:
+
+1. **AppImage `.desktop` invalid** — template `Categories={{categories}};Network;`
+   rendered `Utility;;Network;` (tauri passes `Utility;` already trailing `;`) → empty
+   value → appimagetool rejects. Fixed: `Categories={{categories}}Network;`.
+2. **linuxdeploy strip on `.relr.dyn`** (ubuntu-24.04 libs, upstream
+   tauri#14796/#8929/#13113) — fixed: `NO_STRIP: true` in release.yml + script.
+
+Local proof: `NetRail_1.6.4_amd64.AppImage` (90.6 MB) — first-ever for 1.6.4 — built,
+extracted, `Categories=Utility;Network;` verified inside squashfs; dist/release
+regenerated (deb/rpm/SBOM/SHA256SUMS).
 
 ```bash
-gh run view 30771210870 --log-failed
-# Local (needs patchelf + webkit deps):
-bash scripts/build-desktop-linux.sh --skip-tests
-# Suspects: desktop template comments / Categories string; linuxdeploy download;
-# compare working v1.6.3 AppImage path vs 1.6.4 tauri.conf desktopTemplate
+gh run view 30771210870 --log-failed     # deb+rpm OK, linuxdeploy ran 59s then generic error
+# Rerun recipe: git push origin main && git tag -f v1.6.4 && git push -f origin v1.6.4
+# (tag force OK — release unpublished; NO force-push of main)
 ```
 
 ### P1 — Release hygiene (history)
