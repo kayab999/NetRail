@@ -252,6 +252,26 @@ The score that would hide QA-01 is exactly what the hard-stop rule exists to pre
 | QA-10 | P2 | D3 | Carried: fanout deadline asymmetry (HANDOVER §8b P4, open, "trivial") | Rust hard-abort 20s vs Python `as_completed(20)` + blocking `ThreadPoolExecutor.__exit__` | Replace executor shutdown with explicit `cancel` + bounded wait |
 | QA-11 | P3 | D1 | `check-versions.sh` does not cover CHANGELOG/tag | Script compares 5 code locations only | Add `git tag` + CHANGELOG latest-entry check |
 | QA-12 | P3 | D7 | No link-integrity checker for cross-doc links | `tests/test_docs.py` covers API exposure only; ~40 markdown files in repo | Add link checker test |
+| QA-13 | P3 | D1/D4 | Env override transparency + empty-var parity (searxng) | External audit XQB-01 (its NR-09): Python `walrus or` fell through an empty `NETRAIL_SEARXNG_URL` to `SEARXNG_URL` (Rust `or_else`+`is_empty` skips); invalid override swallowed silently (Rust `tracing::warn!`s) | **FIXED 2026-08-10** (`config.py`): Rust-mirror skip + `logging.warning`; tests `test_empty_searxng_env_does_not_fall_through`, `test_invalid_searxng_env_logs_warning` |
+| QA-14 | P3 | D3/D4 | Audit path singleton race on first call | XQB-01 (its NR-10): `audit.py` `_resolved` module-global without lock; TOCTOU on first resolution (benign value — but violates the project's own concurrency standard, which HistoryStore holds) | **FIXED 2026-08-10** (`audit.py`): double-checked `threading.Lock`; `test_audit_path_first_call_is_thread_safe` |
+| QA-15 | P3 | D1/D2 | `NETRAIL_BRAVE_ENABLED` env ordering divergence | XQB-01 (its NR-11): Python applies key block then `ENABLED` (explicit false wins); Rust applies `ENABLED` then key (key force-enables). Combo `KEY + ENABLED=false` → Python disabled, Rust enabled | **FIXED 2026-08-10** (`config.py`): Python aligned to Rust-primary semantic (key presence force-enables); `test_brave_key_forces_enabled_over_env_false` |
+| QA-16 | P3 | D4 | `DATA_DIR` frozen at import time | XQB-01 (its NR-12): `history/db.py` module-level `Path.home()`; violates the project's own per-call convention (config.py, browsers.py document it) | **FIXED 2026-08-10** (`history/db.py`): `_data_dir()` resolved per call; `test_db_path_resolves_home_per_call` |
+| QA-17 | P4 | D1 | `SearchRequest.mode` is an unvalidated `String` in serde | XQB-01 (its NR-13): validated late in `search.rs` (trim/lower → `QUERY_INVALID`); outcome parity with Python `Literal` proven by api_error_codes + fuzz; architecture-fragility note | **Ledger note — no change** (freeze discipline; outcome parity holds) |
+| QA-18 | P4 | D2 | `inject_ui_token` blocklist vs `_as_bool` allowlist | XQB-01 (its NR-14): style mismatch inside Python; Rust uses the identical blocklist, so cross-stack parity is intact | **Ledger note** — document semantics, no behavior change |
+| QA-19 | P4 | D3 | `get_store()` singleton mutation un-locked | XQB-01 (its NR-15): theoretical window — closed by design: `init_history_on_startup()` (main.py:59) runs pre-bind | **Ledger note** — accepted with evidence |
+| QA-20 | P4 | D1 | ETag canonical-form divergence (hex vs base64) | XQB-01 (its NR-16): **non-finding** — the `_settings_etag` docstring documents exactly this; per-stack self-consistency is the whole `If-Match` contract (API_ERRORS `SETTINGS_CONFLICT`) | **Closed-informative — no change** |
+| QA-21 | P4 | D10 | `env::set_var`/`remove_var` unsound under Rust 2024 | XQB-01 (its NR-17): informational; project is `edition = "2021"` | **Ledger note** — revisit at edition migration |
+
+**External adversarial audit XQB-01 (2026-08-10).** An independent full-stack review
+reported 11 items (its IDs NR-09..NR-17). Every item was triaged against the code
+before acceptance — the audit's own test counts (113 Rust / 165 Python) diverge
+from project evidence (130 / 207), so it sampled a subset and nothing was taken
+verbatim. Result: **4 real and fixed (QA-13..QA-16, all Python-tier, suite green at
+212 pytest / 130 cargo / clippy clean)**, 1 architecture note (QA-17), 4 ledger
+notes (QA-18/19/21, QA-20 non-finding), **no P0/P1** — Baseline #2 (4.65,
+ship-grade) and the 1.6.5 RC gate are unaffected. Ledger integrity: the audit's
+NR-11/NR-16 collide with existing release-asset findings of the same ID (closed
+2026-08-10) — renumbered to the QA-### series above rather than corrupting history.
 
 ## 14. Delta vs HANDOVER §7/§8b
 
