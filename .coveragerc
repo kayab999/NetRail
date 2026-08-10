@@ -1,0 +1,11 @@
+[run]
+# Observability-only configuration (T5): no threshold is enforced here.
+# The coverage gate decision is deferred to Baseline #2 by design.
+branch = true
+omit =
+    # CLI entrypoint shim only; the real surface is netrail.main and callers.
+    netrail/__main__.py
+
+[report]
+show_missing = true
+sort = Name
