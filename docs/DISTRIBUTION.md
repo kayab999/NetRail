@@ -190,29 +190,38 @@ Build Rust image directly: `docker build -f Dockerfile.rust -t netrail-api .`
 
 ## Environment variables
 
-| Variable | Purpose |
-|----------|---------|
-| `NETRAIL_DB_PATH` | SQLite database location |
-| `NETRAIL_DB_KEY` | Fernet key (Docker / headless) |
-| `NETRAIL_STATIC_DIR` | Directory containing `index.html` / UI assets |
-| `NETRAIL_AUTO_OPEN` | Open browser on start (`true`/`false`) |
-| `NETRAIL_RATE_LIMIT` | `0` / `false` disables the per-identity 90/120/60 per-minute caps (defaults; when a token is configured, limits apply per token identity, otherwise to the anonymous bucket) |
-| `NETRAIL_API_TOKEN` | Optional API token; require Bearer / `X-NetRail-Token` on `/api/*` (except health) |
-| `NETRAIL_INJECT_UI_TOKEN` | When token set, inject into served HTML for UI (default on). Note: the injected page (`/`) is unauthenticated, so any local HTTP client can read the token from it — see SECURITY.md. Set `0` and supply via `localStorage` if you need tighter behavior |
-| `NETRAIL_STRICT_BACKEND_URLS` | `1` rejects private/loopback SearXNG/backend URLs |
-| `NETRAIL_AUDIT_LOG` | `1` appends JSON lines to XDG data `netrail/audit.log` |
-| `NETRAIL_AUDIT_LOG_PATH` | Explicit audit log path |
-| `NETRAIL_AUDIT_MAX_BYTES` | Audit rotation size cap (default 10 MiB); on write overflow the log is shifted to `<path>.1` (`.2`, …) |
-| `NETRAIL_AUDIT_MAX_FILES` | Max rotated audit files kept (default 3; `0` disables rotation) |
-| `NETRAIL_LOG_JSON` | `1` emits structured JSON logs (tracing-subscriber `json`) instead of plain text |
-| `NETRAIL_READONLY` | `1` enables read-only mode: all mutating endpoints (`PUT /api/settings`, history delete/purge, collection create/add) return `403 READONLY_MODE`; read endpoints (search, open, history, docs) keep working. Note: Search/visit logging remains active. |
-| `SEARXNG_URL` / `NETRAIL_SEARXNG_URL` | Self-hosted SearXNG base URL |
-| `BRAVE_SEARCH_API_KEY` / `NETRAIL_BRAVE_API_KEY` | Brave Search API key (never stored in settings) |
-| `NETRAIL_SEARCH_STRATEGY` | `fanout` or `fallback` |
-| `NETRAIL_HISTORY_ENABLED` | Enable/disable history |
-| `NETRAIL_HISTORY_ENCRYPT` | Field encryption on/off |
-| `NETRAIL_HISTORY_TTL_DAYS` | Auto-purge age |
-| `NETRAIL_MAX_RESULTS` | Default result cap (1–50) |
+| Variable | Purpose | Stack |
+|----------|---------|-------|
+| `NETRAIL_DB_PATH` | SQLite database location | Both |
+| `NETRAIL_DB_KEY` | Fernet key (Docker / headless) | Both |
+| `NETRAIL_STATIC_DIR` | Directory containing `index.html` / UI assets | Rust |
+| `NETRAIL_AUTO_OPEN` | Open browser on start (`true`/`false`) | Python |
+| `NETRAIL_RATE_LIMIT` | `0` / `false` disables the per-identity 90/120/60 per-minute caps (defaults; when a token is configured, limits apply per token identity, otherwise to the anonymous bucket) | Both |
+| `NETRAIL_API_TOKEN` | Optional API token; require Bearer / `X-NetRail-Token` on `/api/*` (except health) | Both |
+| `NETRAIL_INJECT_UI_TOKEN` | When token set, inject into served HTML for UI (default on). Note: the injected page (`/`) is unauthenticated, so any local HTTP client can read the token from it — see SECURITY.md. Set `0` and supply via `localStorage` if you need tighter behavior | Both |
+| `NETRAIL_STRICT_BACKEND_URLS` | `1` rejects private/loopback SearXNG/backend URLs | Both |
+| `NETRAIL_AUDIT_LOG` | `1` appends JSON lines to XDG data `netrail/audit.log` | Both |
+| `NETRAIL_AUDIT_LOG_PATH` | Explicit audit log path | Both |
+| `NETRAIL_AUDIT_MAX_BYTES` | Audit rotation size cap (default 10 MiB); on write overflow the log is shifted to `<path>.1` (`.2`, …) | Both |
+| `NETRAIL_AUDIT_MAX_FILES` | Max rotated audit files kept (default 3; `0` disables rotation) | Both |
+| `NETRAIL_LOG_JSON` | `1` emits structured JSON logs (tracing-subscriber `json`) instead of plain text | Rust |
+
+**Non-goal (QA-08, 2026-08-10):** structured JSON **application** logging on the
+Python stack is an explicit non-goal. Python's logging surface is limited to
+stdlib logger warnings (backend/config modules) with no configured handlers;
+all structured operational events on **both** stacks flow through the audit
+log (`NETRAIL_AUDIT_LOG`, NDJSON, identical schema), which is the parity
+surface that matters operationally. `NETRAIL_LOG_JSON` therefore applies to
+the Rust stack only — documented above as Rust-owned.
+| `NETRAIL_READONLY` | `1` enables read-only mode: all mutating endpoints (`PUT /api/settings`, history delete/purge, collection create/add) return `403 READONLY_MODE`; read endpoints (search, open, history, docs) keep working. Note: Search/visit logging remains active. | Both |
+| `SEARXNG_URL` / `NETRAIL_SEARXNG_URL` | Self-hosted SearXNG base URL | Both |
+| `BRAVE_SEARCH_API_KEY` / `NETRAIL_BRAVE_API_KEY` | Brave Search API key (never stored in settings) | Both |
+| `NETRAIL_SEARCH_STRATEGY` | `fanout` or `fallback` | Both |
+| `NETRAIL_HISTORY_ENABLED` | Enable/disable history | Both |
+| `NETRAIL_HISTORY_ENCRYPT` | Field encryption on/off | Both |
+| `NETRAIL_HISTORY_TTL_DAYS` | Auto-purge age | Both |
+| `NETRAIL_MAX_RESULTS` | Default result cap (1–50) | Both |
+| `XDG_DATA_HOME` | Overrides data dir (history DB, audit log) when set; default is `~/.local/share` | Python |
 
 ---
 
