@@ -118,6 +118,7 @@ def main() -> int:
     ap.add_argument("--min-urls", type=int, default=2000)
     ap.add_argument("--full", action="store_true")
     ap.add_argument("--corpus-only", action="store_true")
+    ap.add_argument("--dump-all", action="store_true")
     args = ap.parse_args()
 
     urls = build_corpus(args.seed, args.min_urls, args.full)
@@ -155,13 +156,18 @@ def main() -> int:
     print(json.dumps(stats, indent=2))
     for (pc, rc), urls_in in sorted(mismatches.items(), key=lambda kv: -len(kv[1])):
         if stats["py_allow_rust_block"] and pc == "ALLOW" and all(
-            f"://{h}" in u or f"://{h}." in u for u in urls_in for h in _KNOWN_DNS_STAGE_RESIDUAL
+            u.split("://", 1)[1].split("/", 1)[0].lower().startswith(h)
+            for u in urls_in for h in _KNOWN_DNS_STAGE_RESIDUAL
         ):
             print(f"known DNS-stage residual (rust={rc}) count={len(urls_in)}")
         else:
             print(f"rust={rc} py={pc} count={len(urls_in)}")
-            for u in urls_in[:5]:
-                print(f"   {u[:90]}")
+            if args.dump_all:
+                for u in urls_in:
+                    print(f"   {u[:90]}")
+            else:
+                for u in urls_in[:5]:
+                    print(f"   {u[:90]}")
 
     if stats["py_allow_rust_block"]:
         print("FAIL-OPEN DIVERGENCE — Python allows, Rust blocks")

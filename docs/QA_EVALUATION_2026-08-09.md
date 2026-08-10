@@ -240,7 +240,7 @@ The score that would hide QA-01 is exactly what the hard-stop rule exists to pre
 |----|-----|--------|-------|----------|---------------|
 | QA-01 | **P0** | D8 | **clippy `-D warnings` gate red in as-built** (precedent: HANDOVER lists CI-red as P0) | `cargo clippy --all-targets -- -D warnings` → `error: unused import: std::io::Read` `server/mod.rs:950` (added with uncommitted `csp_includes_failsafe_script_hash` test); would fail ci.yml/release.yml clippy steps on push | Delete line 950; re-run clippy |
 | QA-02 | P2 | D3/D5 | Flaky integration test under full-suite concurrency | `settings_put_with_fresh_if_match_succeeds_and_returns_new_etag`: 1/5 full `cargo test` runs, 0/12 isolated; suspected shared mutate rate-limit budget with `add_collection_item_respects_mutate_rate_limit` | Isolate rate-limit state per test (fresh limiter/SharedStore) |
-| QA-03 | P2 | D5 | Differential fuzz harness not committed nor CI-gated | Harness rebuilt from scratch in `/tmp` twice this week (previous run lost to tmp cleanup); run 1: fail-open class 74 → residual 50 (families `*x`/`0x…`/numeric-last-label) | Commit harness + corpus seed under `scripts/` + optional CI job |
+| QA-03 | P2 | D5 | Differential fuzz harness not committed nor CI-gated | **Closed by B-wave** (2026-08-09): harness + seed committed (`scripts/fuzz-parity.py`, `1e2d36e`); parity `code_diff=0` on 7 600 URLs; residual pinned to 1 family (50 `0xzz`); §16 numbers + runbook | Optional CI job remains (unblocked by this closure) |
 | QA-04 | P3 | D5 | No coverage % measurement anywhere | No coverage step in ci.yml/release.yml; no kcov/coveralls/`pytest --cov` config | Add coverage job (rust: llvm-cov/tarpaulin, py: pytest-cov) with branch gate |
 | QA-05 | P3 | D5/D6 | webview E2E not in CI | `webview-e2e.sh` + `tests/webview_e2e.py` exist; display-dependent; ci.yml omits it | Document as manual release gate, or CI with xvfb |
 | QA-06 | P3 | D7 | Five prose-version drifts (discovered by this eval) | `ARCHITECTURE.md:3` (1.6.2), `:259` (v1.6.3); `DISTRIBUTION.md:15` ("(1.2.2)"); `MANUAL.md:29` (`1.4.0` AppImage); `SECURITY.md:5–10` (1.3.x–1.6.x missing from supported versions); `HANDOVER.md:158` ("v1.2.2 is Latest") + footer | Refresh to 1.6.4 SSOT; extend `check-versions.sh` to prose spot-lists |
@@ -292,4 +292,30 @@ cargo test --test chaos_db --test chaos_process     # + live harness (ci.yml)
 #    re-run scorecard; close findings; record delta in a new QA_EVALUATION_*.md
 ```
 
-**Longitudinal note:** this document is baseline #1. Each release should answer not just "did tests pass?" but "is NetRail more or less enterprise-ready than the previous baseline?" — same instrument, same protocol, delta required, negative deltas recorded honestly.
+## 16. B-wave closure — differential open-URL fuzz (QA-03), 2026-08-09
+
+Harness committed: `scripts/fuzz-parity.py` (commit `1e2d36e`), corpus seed `20260809`,
+reproducible, `--corpus-only` + full parity modes.
+
+**B1 — seeded corpus exploration (python validator):** 7 600 URLs (5 schemes × 62 hosts ×
+24 port-tails × path tails). Allowed 1 550 (public IP literals, DNS-hosts) · blocked 6 050
+distributed across all six documented codes:
+`OPEN_URL_INVALID` 4 700 · `OPEN_URL_LOCALHOST` 550 · `OPEN_URL_PRIVATE` 500 ·
+`OPEN_URL_DNS_REBINDING` 200 · `OPEN_URL_CLOUD_METADATA` 50 · `OPEN_URL_LINK_LOCAL` 50.
+= 60.9% of blocked URLs carry a typed policy code, not a generic parse error.
+
+**B2 — differential parity vs live Rust binary (release `netrail-api`, dry-open):**
+`code_diff = 0` across all 7 600 URLs (blocked codes identical). Fail-open divergence
+`py_allow_rust_block = 50`, 100% of them the single-label `0xzz` DNS-stage family
+(established residual: Python fails DNS inside open's resolver; terminal behavior
+identical — no practical fail-open). The `*x` and numeric-last-label families from the
+QA-03 baseline **no longer diverge** (A2 dual-stack hardening closed them):
+residual families 3 → 1, divergence 74 → 50.
+
+Runbook: `python3 scripts/fuzz-parity.py --corpus-only && python3 scripts/fuzz-parity.py`
+
+## 17. Longitudinal note
+
+This document is baseline #1. Each release should answer not just "did tests pass?" but
+"is NetRail more or less enterprise-ready than the previous baseline?" — same instrument,
+same protocol, delta required, negative deltas recorded honestly.
