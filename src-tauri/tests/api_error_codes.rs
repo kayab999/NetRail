@@ -358,7 +358,11 @@ async fn settings_get_returns_etag() {
     assert!(etag.to_str().unwrap().starts_with('"'));
 }
 
+/// Env isolation: these tests mutate process-global `XDG_CONFIG_HOME`/DB env
+/// vars, so they must not race each other (or `add_collection_item_respects_
+/// mutate_rate_limit`) across the parallel test threads.
 #[tokio::test]
+#[serial_test::serial]
 async fn settings_put_with_stale_if_match_returns_settings_conflict() {
     let dir = TempDir::new().unwrap();
     std::env::set_var("XDG_CONFIG_HOME", dir.path());
@@ -385,6 +389,7 @@ async fn settings_put_with_stale_if_match_returns_settings_conflict() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn settings_put_with_fresh_if_match_succeeds_and_returns_new_etag() {
     let dir = TempDir::new().unwrap();
     std::env::set_var("XDG_CONFIG_HOME", dir.path());

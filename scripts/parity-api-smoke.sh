@@ -10,6 +10,10 @@ cd "$ROOT"
 export NETRAIL_RATE_LIMIT=0
 export NETRAIL_HISTORY_ENCRYPT=false
 export NETRAIL_AUTO_OPEN=false
+# Dry-run open mode: `/api/open` allow vectors report success without
+# discovering or spawning a browser, so the harness is headless-safe
+# (no fake-browser PATH needed).
+export NETRAIL_NO_OPEN=1
 unset NETRAIL_API_TOKEN || true
 
 echo "== Python golden security probes (pytest) =="

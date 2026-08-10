@@ -201,7 +201,25 @@ pub struct OpenResult {
     pub sandbox: String,
 }
 
+fn dry_run_enabled() -> bool {
+    std::env::var("NETRAIL_NO_OPEN")
+        .map(|v| !v.trim().is_empty() && v != "0" && !v.eq_ignore_ascii_case("false"))
+        .unwrap_or(false)
+}
+
 pub fn open_url(url: &str, settings: &Settings) -> NetRailResult<OpenResult> {
+    // NETRAIL_NO_OPEN: harness/dry-run mode — report success without
+    // discovering or spawning a browser (used by the parity smoke script).
+    if dry_run_enabled() {
+        return Ok(OpenResult {
+            browser: "dry-run".into(),
+            executable: "dry-run".into(),
+            mode: if settings.private_mode { "private" } else { "normal" }.into(),
+            url: url.into(),
+            sandbox: "dry-run".into(),
+        });
+    }
+
     let browser = find_browser(settings.browser_id.as_deref()).ok_or_else(|| {
         NetRailError::Internal {
             code: "BROWSER_NOT_FOUND",
@@ -232,4 +250,47 @@ pub fn open_url(url: &str, settings: &Settings) -> NetRailResult<OpenResult> {
         url: url.into(),
         sandbox: if is_flatpak() { "flatpak-host" } else { "native" }.into(),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Settings;
+    use serial_test::serial;
+
+    #[test]
+    #[serial]
+    fn netrail_no_open_returns_dry_run_without_discovery() {
+        std::env::set_var("NETRAIL_NO_OPEN", "1");
+        let settings = Settings {
+            browser_id: Some("definitely-not-installed".into()),
+            private_mode: true,
+            ..Settings::default()
+        };
+        let result = open_url("https://example.com/", &settings).expect("dry-run must succeed");
+        assert_eq!(result.browser, "dry-run");
+        assert_eq!(result.executable, "dry-run");
+        assert_eq!(result.mode, "private");
+        assert_eq!(result.url, "https://example.com/");
+        std::env::remove_var("NETRAIL_NO_OPEN");
+    }
+
+    #[test]
+    #[serial]
+    fn dry_run_env_parsing() {
+        for (value, expected) in [
+            ("1", true),
+            ("true", true),
+            ("yes", true),
+            ("0", false),
+            ("false", false),
+            ("FALSE", false),
+            ("", false),
+        ] {
+            std::env::set_var("NETRAIL_NO_OPEN", value);
+            assert_eq!(dry_run_enabled(), expected, "NETRAIL_NO_OPEN={value}");
+        }
+        std::env::remove_var("NETRAIL_NO_OPEN");
+        assert!(!dry_run_enabled());
+    }
 }

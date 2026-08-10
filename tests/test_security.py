@@ -114,6 +114,56 @@ def test_rejects_encoded_and_private_open_urls(url, code):
     assert exc.value.code == code
 
 
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://011.119.190.078/",
+        "http://08.02.01.1/",
+        "http://011778/",
+        "http://999.1.2.3/",
+        "http://1.2.3.4.5/",
+        "http://1.2..3/",
+        "http://1.16777216/",
+        "http://1.1.1.1:65536/",
+        "http://139.241.:80:9604/",
+        "http://103.66.236.176:8080./",
+    ],
+)
+def test_rejects_whatwg_invalid_numeric_hosts(url):
+    with pytest.raises(NetRailError) as exc:
+        validate_open_url(url)
+    assert exc.value.code == "OPEN_URL_INVALID"
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://1955950671/",
+        "http://0x1ddB5d6/",
+        "http://1.2/",
+        "http://1.16777215/",
+        "http://1.1.1.1:0/",
+        "http://1.1.1.1:65535/",
+    ],
+)
+def test_allows_whatwg_numeric_hosts(url):
+    assert validate_open_url(url) == url
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "http://08.02.01.1/",
+        "http://1.1.1.1:65536/",
+        "http://103.66.236.176:8080./",
+    ],
+)
+def test_rejects_whatwg_invalid_backend_urls(url):
+    with pytest.raises(NetRailError) as exc:
+        validate_backend_url(url)
+    assert exc.value.code == "BACKEND_URL_INVALID"
+
+
 def test_allows_private_backend_for_searxng():
     assert validate_backend_url("http://192.168.0.5:8080") == "http://192.168.0.5:8080"
 

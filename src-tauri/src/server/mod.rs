@@ -473,33 +473,58 @@ async fn open_link(
 ) -> Result<Json<serde_json::Value>, ApiError> {
     let Json(body) = body?;
     state.rate_limiter.check_open(&request_identity(&headers))?;
-    let safe_url = validate_open_url(&body.url)?;
-    pin_open_host(&safe_url, resolve_host_ips)?;
-    let mut settings = (state.settings_fn)();
-    if let Some(id) = body.browser_id {
-        settings.browser_id = Some(id);
-    }
-    if body.private_mode {
-        settings.private_mode = true;
-    }
 
-    let result = open_url(&safe_url, &settings)?;
-    state.store.with_store(&settings, |store| {
-        let _ = store.record_visit(
-            &safe_url,
-            body.result_id,
-            settings.browser_id.as_deref(),
-            settings.private_mode,
+    // Audit attempted-but-blocked opens (validation, DNS pin, browser spawn)
+    // alongside the successful `open` event (NR blocked-opens finding).
+    let raw_url = body.url.clone();
+    let outcome = (|| -> Result<Json<serde_json::Value>, ApiError> {
+        let safe_url = validate_open_url(&body.url)?;
+        pin_open_host(&safe_url, resolve_host_ips)?;
+        let mut settings = (state.settings_fn)();
+        if let Some(id) = body.browser_id {
+            settings.browser_id = Some(id);
+        }
+        if body.private_mode {
+            settings.private_mode = true;
+        }
+
+        let result = open_url(&safe_url, &settings)?;
+        state.store.with_store(&settings, |store| {
+            let _ = store.record_visit(
+                &safe_url,
+                body.result_id,
+                settings.browser_id.as_deref(),
+                settings.private_mode,
+            );
+        });
+        audit::log_event(
+            "open",
+            serde_json::json!({
+                "url_host": url::Url::parse(&safe_url).ok().and_then(|u| u.host_str().map(str::to_string)),
+                "private_mode": body.private_mode,
+            }),
         );
-    });
+        Ok(Json(serde_json::to_value(result).unwrap_or_default()))
+    })();
+
+    if let Err(err) = &outcome {
+        audit_open_blocked(&raw_url, err.code, &err.detail);
+    }
+    outcome
+}
+
+fn audit_open_blocked(raw_url: &str, code: &str, detail: &str) {
+    let host = url::Url::parse(raw_url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_string));
     audit::log_event(
-        "open",
+        "open.blocked",
         serde_json::json!({
-            "url_host": url::Url::parse(&safe_url).ok().and_then(|u| u.host_str().map(str::to_string)),
-            "private_mode": body.private_mode,
+            "url_host": host,
+            "code": code,
+            "detail": detail,
         }),
     );
-    Ok(Json(serde_json::to_value(result).unwrap_or_default()))
 }
 
 #[derive(Deserialize)]
@@ -857,6 +882,52 @@ impl IntoResponse for ApiError {
 }
 
 #[cfg(test)]
+mod open_blocked_audit_tests {
+    use super::*;
+    use serial_test::serial;
+    use tempfile::TempDir;
+
+    #[test]
+    #[serial]
+    fn audit_open_blocked_writes_typed_event() {
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("NETRAIL_AUDIT_LOG_PATH", dir.path().join("audit.log"));
+        audit::reset_for_tests();
+
+        audit_open_blocked("http://127.0.0.1/", "OPEN_URL_LOCALHOST", "blocked");
+
+        let content = std::fs::read_to_string(dir.path().join("audit.log")).unwrap();
+        let ev: serde_json::Value = serde_json::from_str(content.trim()).unwrap();
+        assert_eq!(ev["action"], "open.blocked");
+        assert_eq!(ev["detail"]["code"], "OPEN_URL_LOCALHOST");
+        assert_eq!(ev["detail"]["url_host"], "127.0.0.1");
+        assert_eq!(ev["detail"]["detail"], "blocked");
+
+        std::env::remove_var("NETRAIL_AUDIT_LOG_PATH");
+        audit::reset_for_tests();
+    }
+
+    #[test]
+    #[serial]
+    fn audit_open_blocked_unparseable_url_has_null_host() {
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("NETRAIL_AUDIT_LOG_PATH", dir.path().join("audit.log"));
+        audit::reset_for_tests();
+
+        audit_open_blocked("http://%B4.3511866278/x", "OPEN_URL_INVALID", "invalid");
+
+        let content = std::fs::read_to_string(dir.path().join("audit.log")).unwrap();
+        let ev: serde_json::Value = serde_json::from_str(content.trim()).unwrap();
+        assert_eq!(ev["action"], "open.blocked");
+        assert_eq!(ev["detail"]["code"], "OPEN_URL_INVALID");
+        assert!(ev["detail"]["url_host"].is_null());
+
+        std::env::remove_var("NETRAIL_AUDIT_LOG_PATH");
+        audit::reset_for_tests();
+    }
+}
+
+#[cfg(test)]
 mod token_csp_tests {
     use super::*;
 
@@ -870,6 +941,22 @@ mod token_csp_tests {
         let digest = sha2::Sha256::digest(content.as_bytes());
         let b64 = base64::engine::general_purpose::STANDARD.encode(digest);
         assert_eq!(hash, format!("'sha256-{b64}'"));
+    }
+
+    #[test]
+    fn csp_includes_failsafe_script_hash() {
+        // The inline splash failsafe in index.html is allowed by a sha256 hash
+        // in the static CSP; keep the two in lock-step.
+        let html = std::fs::read_to_string(static_dir().join("index.html")).unwrap();
+        let start = html.find("<script>").expect("inline script open tag");
+        let rest = &html[start + "<script>".len()..];
+        let content = &rest[..rest.find("</script>").expect("inline script close tag")];
+        let digest = sha2::Sha256::digest(content.as_bytes());
+        let b64 = base64::engine::general_purpose::STANDARD.encode(digest);
+        assert!(
+            CSP.contains(&format!("'sha256-{b64}'")),
+            "CSP must whitelist the inline failsafe script hash; update security::CSP"
+        );
     }
 
     #[test]

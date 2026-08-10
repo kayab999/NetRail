@@ -112,12 +112,32 @@ pub fn config_file() -> PathBuf {
 }
 
 pub fn load_settings() -> Settings {
-    let mut settings = config_file()
-        .exists()
-        .then(|| fs::read_to_string(config_file()).ok())
-        .flatten()
-        .and_then(|raw| serde_json::from_str::<Settings>(&raw).ok())
-        .unwrap_or_default();
+    let path = config_file();
+    let mut settings = if path.exists() {
+        match fs::read_to_string(&path) {
+            Ok(raw) => match serde_json::from_str::<Settings>(&raw) {
+                Ok(parsed) => parsed,
+                Err(err) => {
+                    tracing::warn!(
+                        path = %path.display(),
+                        %err,
+                        "settings.json is corrupt; falling back to defaults"
+                    );
+                    Settings::default()
+                }
+            },
+            Err(err) => {
+                tracing::warn!(
+                    path = %path.display(),
+                    %err,
+                    "settings.json unreadable; falling back to defaults"
+                );
+                Settings::default()
+            }
+        }
+    } else {
+        Settings::default()
+    };
 
     apply_env_overrides(&mut settings);
     settings
@@ -392,6 +412,48 @@ mod save_settings_tests {
             leftovers.is_empty(),
             "unexpected temp leftovers: {leftovers:?}"
         );
+        std::env::remove_var("XDG_CONFIG_HOME");
+    }
+
+    #[test]
+    #[serial]
+    fn corrupt_settings_falls_back_with_warning() {
+        use std::sync::{Arc, Mutex};
+
+        #[derive(Clone, Default)]
+        struct Captured(Arc<Mutex<Vec<u8>>>);
+
+        impl std::io::Write for Captured {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(buf);
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let dir = TempDir::new().unwrap();
+        std::env::set_var("XDG_CONFIG_HOME", dir.path());
+        std::fs::create_dir_all(config_dir()).unwrap();
+        std::fs::write(config_file(), "{corrupt json").unwrap();
+
+        let captured = Captured::default();
+        let out = captured.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_writer(move || out.clone())
+            .with_max_level(tracing::Level::TRACE)
+            .finish();
+        let _guard = tracing::subscriber::set_default(subscriber);
+
+        let settings = load_settings();
+        assert_eq!(settings.max_results, Settings::default().max_results);
+        let text = String::from_utf8(captured.0.lock().unwrap().clone()).unwrap();
+        assert!(
+            text.contains("corrupt"),
+            "expected a corruption warning, got: {text}"
+        );
+
         std::env::remove_var("XDG_CONFIG_HOME");
     }
 

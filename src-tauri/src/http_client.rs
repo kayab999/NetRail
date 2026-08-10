@@ -14,5 +14,12 @@ pub fn build_http_client() -> Client {
         .timeout(Duration::from_secs(15))
         .redirect(reqwest::redirect::Policy::none())
         .build()
-        .unwrap_or_else(|_| Client::new())
+        .unwrap_or_else(|err| {
+            tracing::warn!(
+                %err,
+                "reqwest client builder failed; falling back to Client::new() \
+                 (15s timeout, redirect-disable and UA protections dropped)"
+            );
+            Client::new()
+        })
 }

@@ -152,11 +152,37 @@ fn parse_host_ip(host: &str) -> Option<IpAddr> {
     parse_browser_ipv4(host).map(IpAddr::V4)
 }
 
-/// Unmap IPv4-mapped IPv6 (`::ffff:x.x.x.x`) so loopback/private checks apply.
+/// Decode IPv4 embedded in IPv6 forms that carry a real IPv4 in the last
+/// 32 bits: IPv4-mapped (`::ffff:a.b.c.d`, via `to_ipv4_mapped`), the RFC
+/// 6052 NAT64 well-known prefix (`64:ff9b::/96`), the IPv4-compatible
+/// mapped range (`::ffff:0:0/96`, i.e. `::ffff:0:a.b.c.d`) and the
+/// deprecated IPv4-compatible range (`::/96`, i.e. `::a.b.c.d`).
+fn decode_embedded_v4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
+    if let Some(v4) = ip.to_ipv4_mapped() {
+        return Some(v4);
+    }
+    let seg = ip.segments();
+    let last = u32::from_be_bytes(
+        ip.octets()[12..16]
+            .try_into()
+            .expect("octets()[12..16] is four bytes"),
+    );
+    let v4 = Ipv4Addr::from(last);
+    let nat64_wkp = seg[0] == 0x0064 && seg[1] == 0xff9b && seg[2..6].iter().all(|&s| s == 0);
+    let compat_mapped = seg[0] == 0 && seg[1] == 0 && seg[2] == 0 && seg[3] == 0
+        && seg[4] == 0xffff && seg[5] == 0;
+    let ipv4_compatible = seg[0..6].iter().all(|&s| s == 0) && ip != Ipv6Addr::LOCALHOST;
+    if nat64_wkp || compat_mapped || ipv4_compatible {
+        return Some(v4);
+    }
+    None
+}
+
+/// Unmap embedded-IPv4 IPv6 forms so loopback/private checks apply to the
+/// embedded IPv4 (SSRF).
 fn effective_ip(ip: IpAddr) -> IpAddr {
     match ip {
-        IpAddr::V6(v6) => v6
-            .to_ipv4_mapped()
+        IpAddr::V6(v6) => decode_embedded_v4(v6)
             .map(IpAddr::V4)
             .unwrap_or(IpAddr::V6(v6)),
         other => other,
@@ -179,6 +205,9 @@ fn is_non_public_v6(ip: Ipv6Addr) -> bool {
         || ip.is_unicast_link_local()
         || ip.is_unique_local()
         || ip.is_multicast()
+        // RFC 6052 local-use NAT64 prefix 64:ff9b:1::/48 — not a decodable
+        // /96 form, and Python blocks it as reserved/private; keep parity.
+        || (ip.segments()[0] == 0x0064 && ip.segments()[1] == 0xff9b && ip.segments()[2] == 0x0001)
 }
 
 fn is_cloud_metadata_host(host: &str) -> bool {
@@ -426,7 +455,7 @@ fn is_cloud_metadata_ip(ip: IpAddr) -> bool {
     }
 }
 
-pub const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; upgrade-insecure-requests; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+pub const CSP: &str = "default-src 'self'; script-src 'self' 'sha256-aN9klVksJOk4OThOcI2OMlo7DsWPc+W7cPY4E+ODbD8='; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; upgrade-insecure-requests; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 #[cfg(test)]
 mod tests {

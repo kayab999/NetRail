@@ -17,7 +17,13 @@ ENV NETRAIL_DB_PATH=/app/data/netrail.db \
     NETRAIL_AUTO_OPEN=false \
     NETRAIL_HISTORY_ENCRYPT=true
 
-RUN mkdir -p /app/data
+RUN mkdir -p /app/data /app/.config /app/.local/share/netrail \
+    && useradd --system --home /app --no-create-home appuser \
+    && chown -R appuser:appuser /app/data /app/.config /app/.local/share
+
+ENV HOME=/app
+
+USER appuser
 
 EXPOSE 7421
 

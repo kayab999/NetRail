@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import tempfile
 from pathlib import Path
@@ -112,13 +113,16 @@ def _apply_env_overrides(settings: dict[str, Any]) -> dict[str, Any]:
 
 
 def load_settings() -> dict[str, Any]:
+    data: dict[str, Any] = {}
     if config_file().exists():
         try:
             data = json.loads(config_file().read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError) as exc:
+            logging.getLogger("netrail.config").warning(
+                "settings.json corrupt or unreadable (%s); falling back to defaults",
+                exc,
+            )
             data = {}
-    else:
-        data = {}
 
     merged = DEFAULTS.copy()
     for key, value in data.items():

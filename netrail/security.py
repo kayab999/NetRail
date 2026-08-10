@@ -20,7 +20,10 @@ _CLOUD_METADATA_HOSTS = frozenset(
 )
 _MAX_REDIRECT_DEPTH = 5
 _HEX_INT = re.compile(r"^0[xX][0-9a-fA-F]+$")
+_HEX_INT_OR_EMPTY = re.compile(r"^0[xX][0-9a-fA-F]*$")
 _OCTAL_INT = re.compile(r"^0[0-7]+$")
+# Sentinel: host looks numeric but fails WHATWG IPv4 parsing (Rust `url` parity).
+_NUM_INVALID = object()
 
 
 def _is_ddg_host(host: str) -> bool:
@@ -32,8 +35,20 @@ def _normalize_host(host: str) -> str:
     """WHATWG-style host normalization: percent-decode, lowercase, strip
     FQDN-root trailing dots (browsers strip the final '.' at DNS resolution,
     so `127.0.0.1.` and `duckduckgo.com.` must be treated as their base host).
+    Non-ASCII hosts are IDNA-encoded to punycode (Rust `url` parity); hosts
+    that are not valid IDN are returned unchanged and rejected by callers.
     """
-    return unquote(host).lower().rstrip(".")
+    host = unquote(host).lower().rstrip(".")
+    if any(ord(c) > 0x7F for c in host):
+        try:
+            return host.encode("idna").decode("ascii")
+        except UnicodeError:
+            return host
+    return host
+
+
+def _is_ascii(host: str) -> bool:
+    return all(ord(c) <= 0x7F for c in host)
 
 
 def _is_dns_rebinding_helper(host: str) -> bool:
@@ -48,8 +63,8 @@ def _parse_u32_loose(raw: str) -> int | None:
     if not s:
         return None
     try:
-        if _HEX_INT.match(s):
-            return int(s, 16)
+        if _HEX_INT_OR_EMPTY.match(s):
+            return int(s[2:] or "0", 16)
         if len(s) > 1 and _OCTAL_INT.match(s):
             return int(s, 8)
         if s.isdigit():
@@ -57,6 +72,77 @@ def _parse_u32_loose(raw: str) -> int | None:
     except ValueError:
         return None
     return None
+
+
+def _parse_whatwg_num_part(raw: str) -> int | None:
+    """WHATWG IPv4 number parser (URL Standard § parse IPv4 number):
+    ``0x``-prefixed parts are hex, leading-zero parts are octal (digits 8/9
+    make the whole address invalid), everything else decimal."""
+    if _HEX_INT_OR_EMPTY.match(raw):
+        return int(raw[2:] or "0", 16)
+    if len(raw) > 1 and raw.startswith("0"):
+        if any(c in "89" for c in raw):
+            return None
+        try:
+            v = int(raw, 8)
+        except ValueError:
+            return None
+        return v if v <= 0xFFFFFFFF else None
+    if raw.isdigit():
+        v = int(raw, 10)
+        return v if v <= 0xFFFFFFFF else None
+    return None
+
+
+def _parse_whatwg_ipv4(host: str) -> ipaddress.IPv4Address | object | None:
+    """Mirror the Rust `url` crate's WHATWG IPv4 handling (empirically probed:
+
+    - a single label parses as IPv4 when it is all digits or ``0x``-hex
+      (``0x`` alone is 0; ``0xzz``/``abc`` fall back to DNS domains);
+    - dotted hosts with an all-digit or ``0x``-hex *last* label attempt the
+      strict IPv4 parse and hard-fail the URL when any part is malformed
+      (octal 8/9, mid-label ``x``, part > 255, > 4 parts, empty part).
+
+    Returns the parsed address, ``_NUM_INVALID`` for numeric hosts that fail
+    WHATWG rules, or ``None`` when the host is a DNS domain.
+    """
+    if ":" in host:
+        # IPv6 literal (urlparse strips brackets) — handled by _parse_host_ip.
+        return None
+    if "." not in host:
+        if not (host.isdigit() or _HEX_INT_OR_EMPTY.match(host)):
+            return None
+        v = _parse_whatwg_num_part(host)
+        if v is None:
+            return _NUM_INVALID
+        try:
+            return ipaddress.IPv4Address(v)
+        except ValueError:
+            return _NUM_INVALID
+
+    last = host.rsplit(".", 1)[-1]
+    if not (last.isdigit() or _HEX_INT_OR_EMPTY.match(last)):
+        return None
+    parts = host.split(".")
+    if len(parts) > 4 or any(not p for p in parts):
+        return _NUM_INVALID
+    nums: list[int] = []
+    for p in parts:
+        v = _parse_whatwg_num_part(p)
+        if v is None:
+            return _NUM_INVALID
+        nums.append(v)
+    if any(n > 255 for n in nums[:-1]):
+        return _NUM_INVALID
+    if nums[-1] >= 256 ** (5 - len(nums)):
+        return _NUM_INVALID
+    total = nums[-1]
+    for i, n in enumerate(nums[:-1]):
+        total += n << (8 * (3 - i))
+    try:
+        return ipaddress.IPv4Address(total)
+    except ValueError:
+        return _NUM_INVALID
 
 
 def _parse_browser_ipv4(host: str) -> ipaddress.IPv4Address | None:
@@ -113,12 +199,30 @@ def _parse_host_ip(host: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address |
     return _effective_ip(ip)
 
 
+# Top-96-bits of the IPv6 ranges that embed a real IPv4 in the last 32 bits:
+# RFC 6052 NAT64 well-known prefix (64:ff9b::/96), the IPv4-compatible
+# mapped range (::ffff:0:0:0/96, i.e. ::ffff:0:a.b.c.d) and the deprecated
+# IPv4-compatible range (::/96, i.e. ::a.b.c.d). (The standard IPv4-mapped
+# ::ffff:a.b.c.d is handled via ip.ipv4_mapped.)
+_NAT64_WKP_96 = int(ipaddress.IPv6Address("64:ff9b::")) >> 32
+_COMPAT_MAPPED_96 = int(ipaddress.IPv6Address("::ffff:0:0:0")) >> 32
+_IPV4_COMPATIBLE_96 = 0
+_LOOPBACK_V6 = ipaddress.ip_address("::1")
+
+
 def _effective_ip(
     ip: ipaddress.IPv4Address | ipaddress.IPv6Address,
 ) -> ipaddress.IPv4Address | ipaddress.IPv6Address:
-    """Unmap IPv4-mapped IPv6 so loopback/private checks apply."""
-    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
-        return ip.ipv4_mapped
+    """Unmap IPv4-mapped and embedded-IPv4 IPv6 so loopback/private checks
+    apply to the IPv4 (SSRF). Mirrors Rust `decode_embedded_v4`."""
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped is not None:
+            return ip.ipv4_mapped
+        if ip == _LOOPBACK_V6:
+            return ip
+        value = int(ip)
+        if value >> 32 in (_NAT64_WKP_96, _COMPAT_MAPPED_96, _IPV4_COMPATIBLE_96):
+            return ipaddress.IPv4Address(value & 0xFFFFFFFF)
     return ip
 
 
@@ -146,6 +250,7 @@ def _is_non_public_v4(ip: ipaddress.IPv4Address) -> bool:
         or ip.is_private
         or ip.is_multicast
         or ip.is_reserved
+        or int(ip) < 0x01000000  # 0.0.0.0/8 "this network" (Rust parity)
         or int(ip) >= 0xF0000000  # 240.0.0.0/4 class E
     )
 
@@ -229,10 +334,12 @@ def _block_ip(
 
 
 def resolve_host_ips(host: str) -> list[ipaddress.IPv4Address | ipaddress.IPv6Address]:
-    """System-resolver lookup; empty on failure (NXDOMAIN, no network, ...)."""
+    """System-resolver lookup; empty on failure (NXDOMAIN, no network, ...).
+    UnicodeError: non-IDN hosts are rejected earlier by validation, but keep
+    this defensive so getaddrinfo can never bubble a 500 (NR-02 parity)."""
     try:
         infos = socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)
-    except OSError:
+    except (OSError, UnicodeError):
         return []
     ips: list[ipaddress.IPv4Address | ipaddress.IPv6Address] = []
     for _family, _type, _proto, _canon, sockaddr in infos:
@@ -297,9 +404,28 @@ def _validate_open_url_inner(url: str, depth: int) -> str:
             "URLs with embedded credentials are not allowed.",
         )
 
+    # Rust `url` crate rejects malformed port specs (":80:9604", ":8080.",
+    # port > 65535) at parse time; urlparse tolerates them, so mirror here.
+    try:
+        port = parsed.port
+    except ValueError:
+        raise NetRailError("OPEN_URL_INVALID", "Invalid URL.") from None
+    if port is not None and port > 65535:
+        raise NetRailError("OPEN_URL_INVALID", "Invalid URL.")
+
     host = _normalize_host(parsed.hostname or "")
     if not host:
         raise NetRailError("OPEN_URL_NO_HOST", "URL must include a host.")
+
+    if not _is_ascii(host):
+        # Invalid IDN (e.g. %B4 → ´) — Rust url crate rejects at parse time
+        # with OPEN_URL_INVALID; mirror it instead of crashing in getaddrinfo.
+        raise NetRailError("OPEN_URL_INVALID", "Invalid URL.")
+
+    if _parse_whatwg_ipv4(host) is _NUM_INVALID:
+        # All-numeric host that fails WHATWG IPv4 rules (octal 8/9, octet >
+        # 255, > 4 parts, ...) — Rust url crate fails the whole URL parse.
+        raise NetRailError("OPEN_URL_INVALID", "Invalid URL.")
 
     if _is_ddg_host(host):
         params = parse_qs(parsed.query)
@@ -388,9 +514,23 @@ def validate_backend_url(url: str, *, strict: bool = False) -> str:
             "Backend URLs with embedded credentials are not allowed.",
         )
 
+    try:
+        port = parsed.port
+    except ValueError:
+        raise NetRailError("BACKEND_URL_INVALID", "Invalid backend URL.") from None
+    if port is not None and port > 65535:
+        raise NetRailError("BACKEND_URL_INVALID", "Invalid backend URL.")
+
     host = _normalize_host(parsed.hostname or "")
     if not host:
         raise NetRailError("BACKEND_URL_NO_HOST", "Backend URL must include a host.")
+
+    if not _is_ascii(host):
+        # Invalid IDN — Rust url crate fails to parse with BACKEND_URL_INVALID.
+        raise NetRailError("BACKEND_URL_INVALID", "Invalid backend URL.")
+
+    if _parse_whatwg_ipv4(host) is _NUM_INVALID:
+        raise NetRailError("BACKEND_URL_INVALID", "Invalid backend URL.")
 
     _block_backend_host(host, strict=strict)
     return trimmed

@@ -466,6 +466,23 @@ def run_search(req: Request, request: SearchRequest) -> dict[str, Any]:
 @app.post("/api/open")
 def open_link(req: Request, request: OpenRequest) -> dict[str, str]:
     rate_limit.check_open(_request_identity(req))
+    try:
+        return _open_link_impl(req, request)
+    except NetRailError as exc:
+        from urllib.parse import urlparse
+
+        audit.log_event(
+            "open.blocked",
+            {
+                "url_host": urlparse(request.url).hostname,
+                "code": exc.code,
+                "detail": exc.message,
+            },
+        )
+        raise
+
+
+def _open_link_impl(req: Request, request: OpenRequest) -> dict[str, str]:
     safe_url = validate_open_url(request.url)
     pin_open_host(safe_url)
 

@@ -395,6 +395,74 @@ def test_audit_log_collection_item_add(monkeypatch, tmp_path):
     audit.reset_for_tests()
 
 
+def test_audit_log_open_blocked(monkeypatch, tmp_path):
+    import json
+    import netrail.audit as audit
+    from netrail.history.store import reset_store_for_tests
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("NETRAIL_DB_PATH", str(tmp_path / "test.db"))
+    log_file = tmp_path / "audit.jsonl"
+    monkeypatch.setenv("NETRAIL_AUDIT_LOG_PATH", str(log_file))
+    audit.reset_for_tests()
+    reset_store_for_tests()
+
+    res = client.post("/api/open", json={"url": "http://127.0.0.1/"})
+    assert res.status_code == 400
+    assert res.json()["code"] == "OPEN_URL_LOCALHOST"
+
+    res = client.post("/api/open", json={"url": "http://%B4.3511866278/x"})
+    assert res.status_code == 400
+    assert res.json()["code"] == "OPEN_URL_INVALID"
+
+    lines = log_file.read_text(encoding="utf-8").strip().splitlines()
+    events = [json.loads(line) for line in lines]
+    blocked = [e for e in events if e.get("action") == "open.blocked"]
+    assert len(blocked) == 2
+    assert blocked[0]["detail"]["code"] == "OPEN_URL_LOCALHOST"
+    assert blocked[0]["detail"]["url_host"] == "127.0.0.1"
+    assert blocked[1]["detail"]["code"] == "OPEN_URL_INVALID"
+    assert blocked[1]["detail"]["url_host"] == "%B4.3511866278"
+    audit.reset_for_tests()
+
+
+def test_load_settings_warns_on_corrupt_file(monkeypatch, tmp_path, caplog):
+    import logging
+
+    from netrail.config import config_file, load_settings
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    config_file().parent.mkdir(parents=True, exist_ok=True)
+    config_file().write_text("{corrupt json", encoding="utf-8")
+    with caplog.at_level(logging.WARNING, logger="netrail.config"):
+        settings = load_settings()
+    assert settings["max_results"] == 25
+    assert any(
+        r.name == "netrail.config" and "corrupt or unreadable" in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_open_dry_run_returns_without_browser(monkeypatch, tmp_path):
+    from netrail.history.store import reset_store_for_tests
+
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("NETRAIL_DB_PATH", str(tmp_path / "test.db"))
+    reset_store_for_tests()
+    monkeypatch.setenv("NETRAIL_NO_OPEN", "1")
+
+    res = client.post(
+        "/api/open",
+        json={"url": "http://[::ffff:0:101:101]/", "browser_id": "not-installed"},
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["browser"] == "dry-run"
+    assert body["executable"] == "dry-run"
+    assert body["mode"] == "normal"
+    assert body["url"] == "http://[::ffff:0:101:101]/"
+
+
 def test_save_settings_atomic(monkeypatch, tmp_path):
     from netrail.config import save_settings, load_settings, config_file, config_dir
 

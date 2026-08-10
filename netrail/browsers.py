@@ -177,7 +177,23 @@ def find_browser(browser_id: str | None) -> Browser | None:
     return browsers[0]
 
 
+def _dry_run_enabled() -> bool:
+    raw = os.environ.get("NETRAIL_NO_OPEN", "").strip()
+    return bool(raw) and raw not in {"0", "false", "False", "FALSE"}
+
+
 def open_url(url: str, browser_id: str | None = None, private_mode: bool = False) -> dict[str, str]:
+    # NETRAIL_NO_OPEN: harness/dry-run mode — report success without
+    # discovering or spawning a browser (used by the parity smoke script).
+    if _dry_run_enabled():
+        return {
+            "browser": "dry-run",
+            "executable": "dry-run",
+            "mode": "private" if private_mode else "normal",
+            "url": url,
+            "sandbox": "dry-run",
+        }
+
     browser = find_browser(browser_id)
     if not browser:
         raise RuntimeError("No web browser found on this system.")
