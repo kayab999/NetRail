@@ -25,11 +25,15 @@ from __future__ import annotations
 import argparse
 import json
 import random
+import os
+import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 
-sys.path.insert(0, "/home/carlos/NetRail")
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _REPO_ROOT)
 from netrail.errors import NetRailError
 from netrail.security import validate_open_url
 
@@ -63,6 +67,48 @@ PATHS = ["", "/", "/%89y+=ZwD]w$vv", "/%8a;0(#Y", "/%F5T,9,N", "/$]gjag(w",
 # the DNS path in both stacks; the DNS stage ordering difference is not a
 # fail-open (terminal state identical). Allowed as the only residual class.
 _KNOWN_DNS_STAGE_RESIDUAL = ("0xzz",)
+
+# Pinned CI expectation for the seed corpus: every divergence must belong to
+# the known residual family, and the family size must stay at the Baseline #1
+# value. A change here is a contract decision, not an incidental drift.
+_EXPECTED_RESIDUAL_COUNT = 50
+
+
+def spawn_server(binary: str, base: str) -> subprocess.Popen:
+    """Boot a netrail-api with fully isolated state (harness-safe)."""
+    import tempfile
+
+    home = tempfile.mkdtemp(prefix="fuzz-home-")
+    xdg = tempfile.mkdtemp(prefix="fuzz-xdg-")
+    db = os.path.join(tempfile.mkdtemp(prefix="fuzz-db-"), "netrail.db")
+    env = dict(
+        os.environ,
+        HOME=home,
+        XDG_CONFIG_HOME=xdg,
+        NETRAIL_DB_PATH=db,
+        NETRAIL_RATE_LIMIT="0",
+        NETRAIL_HISTORY_ENCRYPT="false",
+        NETRAIL_AUTO_OPEN="false",
+        NETRAIL_NO_OPEN="1",
+        NETRAIL_STATIC_DIR=os.path.join(_REPO_ROOT, "netrail", "static"),
+    )
+    env.pop("NETRAIL_API_TOKEN", None)
+    proc = subprocess.Popen([binary], env=env, stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL)
+    host = base.split("://")[1].rsplit(":", 1)[0]
+    port = base.rsplit(":", 1)[1].split("/", 1)[0]
+    for _ in range(80):
+        if proc.poll() is not None:
+            raise RuntimeError(f"netrail-api exited early (code {proc.returncode})")
+        try:
+            with urllib.request.urlopen(f"http://{host}:{port}/api/health",
+                                        timeout=2) as r:
+                if r.status == 200:
+                    return proc
+        except Exception:
+            time.sleep(0.25)
+    proc.terminate()
+    raise RuntimeError("netrail-api did not become healthy in time")
 
 
 def build_corpus(seed: int, min_urls: int, full: bool) -> list[str]:
@@ -119,8 +165,28 @@ def main() -> int:
     ap.add_argument("--full", action="store_true")
     ap.add_argument("--corpus-only", action="store_true")
     ap.add_argument("--dump-all", action="store_true")
+    ap.add_argument("--binary", help="netrail-api binary to spawn (isolated env)")
+    ap.add_argument("--ci", action="store_true",
+                    help="gate mode: code_diff==0, all divergences in the known "
+                         "residual family, residual count pinned")
     args = ap.parse_args()
 
+    proc = None
+    if args.binary:
+        print(f"spawning {args.binary} (isolated state)")
+        proc = spawn_server(args.binary, args.base)
+    try:
+        return run(args)
+    finally:
+        if proc is not None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+
+
+def run(args: argparse.Namespace) -> int:
     urls = build_corpus(args.seed, args.min_urls, args.full)
 
     if args.corpus_only:
@@ -140,6 +206,7 @@ def main() -> int:
         print("CORPUS EXPLORATION OK")
         return 0
     stats = {"total": 0, "py_allow_rust_block": 0, "code_diff": 0}
+    divergences: list[str] = []
     mismatches: dict[tuple[str | None, str | None], list[str]] = {}
 
     for url in urls:
@@ -148,6 +215,7 @@ def main() -> int:
         stats["total"] += 1
         if p[0] == 200 and r[0] != 200:
             stats["py_allow_rust_block"] += 1
+            divergences.append(url)
             mismatches.setdefault((p[1], r[1]), []).append(url)
         if p[0] != 200 and r[0] != 200 and p[1] != r[1]:
             stats["code_diff"] += 1
@@ -168,6 +236,29 @@ def main() -> int:
             else:
                 for u in urls_in[:5]:
                     print(f"   {u[:90]}")
+
+    if stats["py_allow_rust_block"]:
+        print("FAIL-OPEN DIVERGENCE — Python allows, Rust blocks")
+    if stats["code_diff"]:
+        print("CODE DIVERGENCE — both block with different codes")
+
+    if args.ci:
+        residual = divergences
+        known_only = all(u.split("://", 1)[1].split("/", 1)[0].lower()
+                         .startswith(h)
+                         for u in residual for h in _KNOWN_DNS_STAGE_RESIDUAL)
+        if stats["code_diff"]:
+            print("CI GATE FAILED — code divergence present")
+            return 2
+        if not known_only:
+            print(f"CI GATE FAILED — unknown divergence family ({len(residual)} urls)")
+            return 1
+        if len(residual) != _EXPECTED_RESIDUAL_COUNT:
+            print(f"CI GATE FAILED — known residual drifted: {len(residual)} "
+                  f"!= pinned {_EXPECTED_RESIDUAL_COUNT} (contract decision required)")
+            return 1
+        print(f"CI GATE OK — parity holds; known residual pinned at {len(residual)}")
+        return 0
 
     if stats["py_allow_rust_block"]:
         print("FAIL-OPEN DIVERGENCE — Python allows, Rust blocks")

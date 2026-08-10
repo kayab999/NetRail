@@ -101,6 +101,12 @@ jobs:
       - name: Dual-stack parity API smoke
         run: bash scripts/parity-api-smoke.sh
 
+      - name: Differential open-URL parity fuzz (QA-03, seed 20260809)
+        run: |
+          python3 scripts/fuzz-parity.py --corpus-only
+          python3 scripts/fuzz-parity.py --ci \
+            --binary src-tauri/target/release/netrail-api
+
       - name: Dependency audits
         run: |
           cargo install cargo-audit --locked --version 0.22.2
