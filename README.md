@@ -29,6 +29,20 @@ sudo dpkg -i NetRail_*_amd64.deb
 |------|---------|
 | `~/.config/netrail/settings.json` | Settings |
 | `~/.local/share/netrail/netrail.db` | History / collections |
+| `~/.local/share/netrail/audit.log` | Audit JSONL (only when `NETRAIL_AUDIT_LOG=1`; rotates up to 10 MiB × 3) |
+
+**Logs:** NetRail writes no log file by default — run it from a terminal to see
+stdout/stderr. `NETRAIL_LOG_JSON=1` switches Rust-stack logs to structured JSON on
+stdout (`journalctl -u netrail-api` under systemd). Application errors also reach
+the UI (`/api/health`).
+
+**Uninstall:**
+
+- **AppImage:** remove the file (it never writes outside XDG). Optionally delete
+  user data: `rm -rf ~/.config/netrail ~/.local/share/netrail`.
+- **.deb:** `sudo dpkg -r netrail`
+- **.rpm:** `sudo rpm -e netrail`
+- **systemd service (optional setup):** `sudo systemctl disable --now netrail-api`
 
 ### Headless API (homelabs, scripting, Docker)
 
@@ -48,7 +62,7 @@ curl http://127.0.0.1:7421/api/health
 
 *Fanout search across SearXNG and DDGS. Results stay in the link rail until you open them.*
 
-**Version:** 1.6.4 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
+**Version:** 1.6.5 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
 
 ---
 

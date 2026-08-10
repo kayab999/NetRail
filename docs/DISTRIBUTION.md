@@ -34,7 +34,7 @@ NetRail ships as a **Rust/Tauri desktop app** (AppImage / `.deb` / `.rpm`) and a
 
 ---
 
-## Quick install (60 seconds)
+## Developer quick start (git clone — not the end-user path)
 
 ```bash
 git clone git@github.com:kayab999/NetRail.git NetRail && cd NetRail
