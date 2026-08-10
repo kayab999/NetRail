@@ -5,9 +5,14 @@ Comment={{comment}}
 Exec={{exec}}
 Icon={{icon}}
 Terminal=false
-# FreeDesktop: Utility from Tauri category + Network for research/search menus.
-# Hardcoded suffix so Categories never ships empty (pre-1.6.4 Tauri default bug).
-Categories={{categories}};Network;
+# FreeDesktop: Tauri renders {{categories}} with a trailing ";" (bundle.category
+# pins "Utility"). Network is appended as an additional main category for
+# research/search menus. Never emit an extra ";" — a bare separator renders an
+# empty value, which appimagetool/desktop-file-validate hard-rejects (the
+# 1.6.4 AppImage blocker; pre-1.6.4 default rendered Categories empty).
+# Concat form is safe for both populated ("Utility;" -> "Utility;Network;")
+# and empty ("Network;") renders.
+Categories={{categories}}Network;
 Keywords=Network;Search;privacy;research;osint;metasearch;
 StartupNotify=true
 StartupWMClass={{exec}}

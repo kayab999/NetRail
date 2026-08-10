@@ -75,6 +75,12 @@ jobs:
       - name: Build Tauri desktop bundle
         env:
           APPIMAGE_EXTRACT_AND_RUN: 1
+          # linuxdeploy's bundled strip chokes on .relr.dyn sections in
+          # ubuntu-24.04 system libs ("failed to run linuxdeploy" after deb/rpm
+          # succeed — NR-16, run 30771210870). Upstream workaround, see
+          # tauri-apps/tauri#14796 / #8929 / #13113. Ships an un-stripped
+          # AppImage: larger artifact, functional bundle.
+          NO_STRIP: true
         run: npm run build
 
       - name: Collect release artifacts

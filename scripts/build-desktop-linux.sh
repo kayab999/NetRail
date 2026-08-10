@@ -90,6 +90,9 @@ bash scripts/generate-sbom.sh src-tauri/sbom/SBOM.txt
 
 echo "==> Tauri desktop bundle (AppImage / deb / rpm)"
 export APPIMAGE_EXTRACT_AND_RUN="${APPIMAGE_EXTRACT_AND_RUN:-1}"
+# linuxdeploy strip fails on .relr.dyn sections on ubuntu-24.04+ libs
+# ("failed to run linuxdeploy" — NR-16; tauri-apps/tauri#14796/#8929/#13113).
+export NO_STRIP="${NO_STRIP:-true}"
 npm run build
 
 echo "==> Collect dist/release"
