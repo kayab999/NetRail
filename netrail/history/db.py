@@ -4,11 +4,14 @@ import os
 import sqlite3
 from pathlib import Path
 
-DATA_DIR = Path.home() / ".local" / "share" / "netrail"
+def _data_dir() -> Path:
+    # Resolved per call (not at import): tests and processes may change $HOME
+    # after import (config.py and browsers.py follow the same convention).
+    return Path.home() / ".local" / "share" / "netrail"
 
 
 def db_path() -> Path:
-    return Path(os.environ.get("NETRAIL_DB_PATH", str(DATA_DIR / "netrail.db")))
+    return Path(os.environ.get("NETRAIL_DB_PATH", str(_data_dir() / "netrail.db")))
 
 SCHEMA_SQL = """
 PRAGMA foreign_keys = ON;

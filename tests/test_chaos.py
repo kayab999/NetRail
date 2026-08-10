@@ -79,6 +79,19 @@ def test_unwritable_db_dir_degrades_then_recovers(monkeypatch, tmp_path):
     reset_store_for_tests()
 
 
+def test_audit_path_first_call_is_thread_safe(monkeypatch, tmp_path):
+    """QA-14: concurrent first calls to audit._path() must resolve exactly once
+    (lock-guarded; previously a plain module global raced on first call)."""
+    monkeypatch.setenv("NETRAIL_AUDIT_LOG_PATH", str(tmp_path / "audit.log"))
+    audit.reset_for_tests()
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        results = list(pool.map(lambda _: audit._path(), range(32)))
+    assert all(r == results[0] for r in results)
+    assert results[0] == tmp_path / "audit.log"
+
+
 def test_audit_external_rotation_no_entry_loss(monkeypatch, tmp_path):
     monkeypatch.setenv("NETRAIL_AUDIT_LOG_PATH", str(tmp_path / "audit.log"))
     monkeypatch.setenv("NETRAIL_AUDIT_MAX_BYTES", str(1024 * 1024 * 1024))

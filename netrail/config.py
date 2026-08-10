@@ -62,17 +62,27 @@ def _apply_env_overrides(settings: dict[str, Any]) -> dict[str, Any]:
     if raw := os.environ.get("NETRAIL_STRICT_BACKEND_URLS"):
         settings["strict_backend_urls"] = _as_bool(raw)
 
-    if url := os.environ.get("NETRAIL_SEARXNG_URL") or os.environ.get("SEARXNG_URL"):
+    raw_searx = os.environ.get("NETRAIL_SEARXNG_URL")
+    if raw_searx is None:
+        raw_searx = os.environ.get("SEARXNG_URL")
+    if raw_searx:
         # Same gate as settings save — never apply metadata/rebinding/etc. from env.
         from netrail.errors import NetRailError
         from netrail.security import validate_backend_url
 
         strict = bool(settings.get("strict_backend_urls")) or strict_backend_urls_from_env()
         try:
-            settings["searxng_url"] = validate_backend_url(url, strict=strict)
+            settings["searxng_url"] = validate_backend_url(raw_searx, strict=strict)
         except NetRailError:
             # Leave prior settings value; invalid env must not enable a hostile backend.
-            pass
+            # Mirror config.rs tracing::warn! — the operator must see the override failed.
+            logging.getLogger("netrail.config").warning(
+                "Ignoring invalid NETRAIL_SEARXNG_URL / SEARXNG_URL "
+                "(failed backend URL policy)"
+            )
+
+    if raw := os.environ.get("NETRAIL_BRAVE_ENABLED"):
+        settings["brave_enabled"] = _as_bool(raw)
 
     if os.environ.get("BRAVE_SEARCH_API_KEY") or os.environ.get("NETRAIL_BRAVE_API_KEY"):
         settings["brave_enabled"] = True
@@ -82,9 +92,6 @@ def _apply_env_overrides(settings: dict[str, Any]) -> dict[str, Any]:
         order = settings.setdefault("backend_order", [])
         if "brave" not in order:
             order.append("brave")
-
-    if raw := os.environ.get("NETRAIL_BRAVE_ENABLED"):
-        settings["brave_enabled"] = _as_bool(raw)
 
     if raw := os.environ.get("NETRAIL_SEARCH_STRATEGY"):
         lower = raw.lower()

@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from cryptography.fernet import Fernet
 
 from netrail.backends.types import SearchResult
-from netrail.history.db import SCHEMA_VERSION, connect
+from netrail.history.db import SCHEMA_VERSION, connect, db_path
 from netrail.history.store import HistoryStore
 
 
@@ -130,6 +130,18 @@ def test_connect_enables_wal_and_stamps_schema_version(tmp_path, monkeypatch):
         assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     finally:
         conn.close()
+
+
+def test_db_path_resolves_home_per_call(monkeypatch):
+    """QA-16: db_path() must not freeze $HOME at import (config.py/browsers.py
+    convention); changing $HOME between calls changes the default path."""
+    monkeypatch.delenv("NETRAIL_DB_PATH", raising=False)
+    monkeypatch.setenv("HOME", "/tmp/qa16-home-a")
+    first = db_path()
+    monkeypatch.setenv("HOME", "/tmp/qa16-home-b")
+    second = db_path()
+    assert str(first).startswith("/tmp/qa16-home-a")
+    assert str(second).startswith("/tmp/qa16-home-b")
 
 
 def test_concurrent_store_access_is_serialized(temp_store):

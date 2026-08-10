@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -16,27 +17,33 @@ _DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 _DEFAULT_MAX_FILES = 3
 
 _resolved: Path | None | bool = False  # False = unset
+_path_lock = threading.Lock()
 
 
 def _path() -> Path | None:
     global _resolved
     if _resolved is not False:
         return _resolved if isinstance(_resolved, Path) else None
+    with _path_lock:
+        # Re-check under the lock: resolution is deterministic and idempotent,
+        # but a second thread must not race the first (QA-14, external audit).
+        if _resolved is not False:
+            return _resolved if isinstance(_resolved, Path) else None
 
-    if path := os.environ.get("NETRAIL_AUDIT_LOG_PATH", "").strip():
-        _resolved = Path(path)
+        if path := os.environ.get("NETRAIL_AUDIT_LOG_PATH", "").strip():
+            _resolved = Path(path)
+            return _resolved
+
+        raw = os.environ.get("NETRAIL_AUDIT_LOG", "0")
+        if raw in {"0", "false", "False", "FALSE", ""}:
+            _resolved = None
+            return None
+
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+        directory = base / "netrail"
+        directory.mkdir(parents=True, exist_ok=True)
+        _resolved = directory / "audit.log"
         return _resolved
-
-    raw = os.environ.get("NETRAIL_AUDIT_LOG", "0")
-    if raw in {"0", "false", "False", "FALSE", ""}:
-        _resolved = None
-        return None
-
-    base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    directory = base / "netrail"
-    directory.mkdir(parents=True, exist_ok=True)
-    _resolved = directory / "audit.log"
-    return _resolved
 
 
 def enabled() -> bool:
