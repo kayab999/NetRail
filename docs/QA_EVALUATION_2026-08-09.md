@@ -234,6 +234,8 @@ Hard-stop application: despite a **ship-adjacent weighted average**, the presenc
 
 The score that would hide QA-01 is exactly what the hard-stop rule exists to prevent. A 4.12 with a red CI gate is not a release authorization; it is the to-do list below.
 
+*Post-baseline (2026-08-10): this gate was subsequently **UNBLOCKED** — QA-01, QA-02, QA-03, NR-16 and §8b P2 all closed with evidence; v1.6.4 published (8 assets, cosign-signed). Baseline #1 photo and score unchanged; closure record in §17, new score computed at Baseline #2.*
+
 ## 13. Findings register — QA-2026-08-09
 
 | ID | Sev | Domain | Title | Evidence | Fix direction |
@@ -258,7 +260,7 @@ The score that would hide QA-01 is exactly what the hard-stop rule exists to pre
 | §8b P2 "Error-code divergence on malformed URLs" | **Closed** (fixed 2026-08-09; fuzz code_diff = 0) | ➕ |
 | §8b P3 "Browser-discovery parity" | Open, carried as QA-09 | ➖ |
 | §8b P4 "Fanout deadline asymmetry" | Open, carried as QA-10 (trivial) | ➖ |
-| NR-11/NR-16 release assets | v1.6.4 assets **still unpublished** (linuxdeploy failure) | ➖ |
+| NR-11/NR-16 release assets | **Closed & published 2026-08-10** — NR-16 root-caused (`ed0603d`): desktopTemplate empty Categories value + linuxdeploy strip/`.relr.dyn` (tauri#14796/#8929/#13113) → `NO_STRIP`; Release CI `31350607763` green; 8 assets live, cosign-signed | ➕ |
 | §7 R4 "v1.2.2 is Latest" | Row itself now stale (doc drift, QA-06) | ➖ |
 | New, not previously catalogued | QA-01 (clippy red), QA-02 (flake), QA-03 (fuzz not committed), QA-04 (no coverage), QA-06 (doc drift ×5), QA-07/08/11/12 | ➖ (process/documentation consistency) |
 
@@ -314,7 +316,35 @@ residual families 3 → 1, divergence 74 → 50.
 
 Runbook: `python3 scripts/fuzz-parity.py --corpus-only && python3 scripts/fuzz-parity.py`
 
-## 17. Longitudinal note
+## 17. Remediation closure record — 2026-08-10 (post-baseline)
+
+Baseline #1 gate was **BLOCKED** (P0 QA-01 + P1 NR-16). End-of-cycle state:
+
+| Finding | Status | Evidence |
+|---------|--------|----------|
+| QA-01 clippy `-D warnings` P0 | **FIXED** | line removed; `cargo clippy --all-targets -- -D warnings` exit 0 |
+| QA-02 flaky integration test | **FIXED** | rate-limit state isolated; 8/8 full-suite runs (was 1/5) |
+| NR-16 Release AppImage P1 | **FIXED** | root cause chain: observation (`30771210870`) → local reproduction → desktopTemplate Categories empty-value + strip/`.relr.dyn` → `ed0603d` → local AppImage → CI main green (`31350151123`) → Release CI green (`31350607763`) → v1.6.4 published, 8 assets, cosign keyless |
+| QA-03 fuzz harness not committed | **FIXED** | `scripts/fuzz-parity.py` + seed committed; `code_diff=0` on 7 600 URLs; residual pinned to 1 family (§16) |
+| §8b P2 error-code divergence | **FIXED** | fuzz `code_diff=0`; live Rust probes 57/57 + 18/18 |
+| **QA-09 browser-discovery parity** | **OPEN** (unchanged) | A2 parity work (`c6709e1`) covered open-URL/error-code class + added `NETRAIL_NO_OPEN` dry-run; it did **not** align known_browsers (Rust 7 vs Python 13), `--incognito` default, or `Name=` parse order. Not papered over — carries to Baseline #2 |
+
+Release gate at end of cycle: **UNBLOCKED**. The 4.12 weighted score remains the
+historical photo of Baseline #1; Baseline #2 (future date) recomputes the score with
+the same instrument. Sequence preserved: Baseline #1 → remediation → 1.6.4 released →
+Baseline #2.
+
+**Release tag traceability.** `v1.6.4` permanently points at the release snapshot
+commit `a32df00` (the commit the Release CI `31350607763` validated). The
+post-release documentation refresh R5b (`20b47be`) landed on `main` **after** the
+release and was deliberately **not** re-tagged (moving the tag would re-open the
+release state and re-introduce the uncertainty just removed). R5b therefore belongs
+to the post-release line of history, not to the published snapshot — so a future
+reader who asks "why is NR-16=FIXED not in the v1.6.4 tree?" finds the answer here:
+the closure evidence is the CI runs and the published assets, both recorded against
+`a32df00`/`31350607763`.
+
+## 18. Longitudinal note
 
 This document is baseline #1. Each release should answer not just "did tests pass?" but
 "is NetRail more or less enterprise-ready than the previous baseline?" — same instrument,
