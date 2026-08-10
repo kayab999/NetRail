@@ -344,9 +344,8 @@ Baseline #1 gate was **BLOCKED** (P0 QA-01 + P1 NR-16). End-of-cycle state:
 | **QA-05 webview E2E** | **FIXED** (policy: manual release gate) | Decision and rationale documented in `docs/RELEASE_ASSURANCE.md` ("Webview E2E — gate manual de release"): webview validation happens as a manual gate before tagging (6/6 checks incl. focus-search bridge, global-shortcut, docs bridge, modal guard), with exact prerequisites, commands and evidence-to-record; CI covers the API-level surface of the same bridges (`/api/docs`, parity smoke). xvfb CI explicitly rejected as policy: display/shortcut focus is fragile under xvfb and would make the gate intermittently blocking. `RELEASE_ASSURANCE.md` header/counts refreshed to v1.6.4 (207/130) |
 
 Release gate at end of cycle: **UNBLOCKED**. The 4.12 weighted score remains the
-historical photo of Baseline #1; Baseline #2 (future date) recomputes the score with
-the same instrument. Sequence preserved: Baseline #1 → remediation → 1.6.4 released →
-Baseline #2.
+historical photo of Baseline #1; the recompute with the same instrument is §18 below.
+Sequence preserved: Baseline #1 → remediation → 1.6.4 released → Baseline #2.
 
 **Release tag traceability.** `v1.6.4` permanently points at the release snapshot
 commit `a32df00` (the commit the Release CI `31350607763` validated). The
@@ -358,7 +357,168 @@ reader who asks "why is NR-16=FIXED not in the v1.6.4 tree?" finds the answer he
 the closure evidence is the CI runs and the published assets, both recorded against
 `a32df00`/`31350607763`.
 
-## 18. Longitudinal note
+## 18. Baseline #2 — recompute (2026-08-10)
+
+Same instrument (§1–§10): same 10 dimensions, same weights, same score rubric, same
+stopping rule. Recomputed against the as-built tree after all §17/T1–T5 closures.
+Only criteria whose score changed are listed; everything else retains its Baseline #1
+score. Verification re-run during this recompute: `cargo clippy --all-targets -- -D warnings`
+exit 0 (the ex-P0 gate), `pytest tests/` 207 passed (was 199), `pytest tests/test_links.py`
+1 passed, debt-marker sweep 0 hits.
+
+| ID | Δ | Justification (evidence in §13/§16/§17) |
+|----|----|------------------------------------------|
+| D1.5 | 3→4 | ENV asymmetries now documented with stack ownership (QA-07, `8ea44dd`) |
+| D1.6 | 4→5 | `check-versions.sh` now covers CHANGELOG top entry + HEAD-tag advisory (QA-11, `fa102e8`) |
+| D2.2 | 4→5 | Attack-shape evidence now committed, reproducible and CI-gated (QA-03 T1): `code_diff`=0 on 7 600 URLs, residual pinned to one known family, CI refuses divergence — no fail-open class remains, and it is no longer reconstructable-only |
+| D3.3 | 3→5 | Fanout deadline symmetric (QA-10, CI `31375935523`): Rust `JoinSet`+`select!` vs Python explicit cancel + bounded wait; 5-property contract holds both stacks; `tests/test_fanout_deadline.py` 4/4 |
+| D3.6 | 2→5 | Full-suite deterministic (QA-02): 8/8 clean runs (was 1/5) |
+| D3.7 | 2→5 | Fuzz reproducible + CI-gated (QA-03 T1): committed harness, `--ci --binary` gate green on the gate commit |
+| D4.4 | 3→4 | JSON-log parity gap closed as an explicit documented non-goal (QA-08, `8ea44dd`): shared ops surface is the audit NDJSON schema; decision recorded, twin deliberately absent |
+| D5.5 | 3→5 | Deterministic full runs (QA-02, evidence as D3.6) |
+| D5.6 | 1→4 | Coverage measured and reported per merge (T5, CI `31410699870`): Python 77% (80% statement), Rust 57.50% lib; threshold gate deferred per T5 discipline, not raced — reported, not enforced |
+| D5.7 | 3→4 | Webview E2E policy recorded (QA-05): manual release gate in `RELEASE_ASSURANCE.md` (6/6 checks, prerequisites + evidence-to-record); xvfb CI rejected as policy |
+| D5.8 | 2→5 | Fuzz repeatable (QA-03 T1): same evidence as D3.7 |
+| D7.1 | 2→5 | Five prose-version drifts closed to 1.6.4 SSOT (QA-06, `fa102e8`) + `check-versions.sh` prose spot-lists |
+| D7.3 | 2→5 | Cross-doc link integrity automated (QA-12, `tests/test_links.py`): 40 docs, relative targets + GitHub anchors, CI-gated via pytest; two checker defects and one genuine cross-doc rot found and closed during shakedown |
+| D7.5 | 4→5 | CHANGELOG↔tag alignment now checked by the version gate (QA-11) |
+| D8.1 | 3→5 | Gates green in as-built (QA-01 closed): clippy `-D warnings` exit 0, re-verified in this recompute |
+| D8.4 | 2→5 | Release pipeline healthy end-to-end (NR-16 closed): v1.6.4 published, 8 assets, cosign keyless, Release CI `31350607763` green |
+| D8.5 | 3→4 | Coverage job added to CI (T5); remaining gaps (Docker build/push, Windows/macOS) are documented decisions |
+
+Unchanged by evidence, so honestly passthrough: D1 4.3→**4.6**, D2 4.7→**4.8**, D3 4.1→**4.9**, D4 4.4→**4.6**, D5 3.6→**4.8**, D6 4.0→**4.0**, D7 3.0→**4.3**, D8 3.8→**4.8**, D9 4.5→**4.5**, D10 4.2→**4.2**.
+
+### 18.1 Executive scorecard — Baseline #2
+
+| Domain | Weight | Baseline #1 | Baseline #2 | Weighted |
+|--------|--------|-------------|-------------|----------|
+| D1 Architectural consistency | 15% | 4.3 | 4.6 | 0.690 |
+| D2 Security consistency | 20% | 4.7 | 4.8 | 0.960 |
+| D3 Robustness & fault tolerance | 15% | 4.1 | 4.9 | 0.735 |
+| D4 Reliability & operations | 8% | 4.4 | 4.6 | 0.368 |
+| D5 Test quality & coverage | 12% | 3.6 | 4.8 | 0.576 |
+| D6 Frontend & UX | 6% | 4.0 | 4.0 | 0.240 |
+| D7 Documentation integrity | 8% | 3.0 | 4.3 | 0.344 |
+| D8 Release & supply chain | 8% | 3.8 | 4.8 | 0.384 |
+| D9 Performance & stability | 4% | 4.5 | 4.5 | 0.180 |
+| D10 Process & debt | 4% | 4.2 | 4.2 | 0.168 |
+| **Total** | 100% | **4.12** | **4.65** | |
+
+### 18.2 Verdict — Baseline #2
+
+```
+Weighted Score:       4.65 / 5.00   (Baseline #1: 4.12, Δ +0.53)
+Enterprise Band:      Ship-grade (≥ 4.50)
+Release Gate:         UNBLOCKED — no open P0/P1 on the register
+```
+
+Hard-stop re-check at recompute: the single P0 (QA-01, clippy) and the P1 (NR-16,
+release assets) are both closed with CI-recorded evidence, re-verified as-built during
+this recompute. No new P0/P1 surfaced. The gate that blocked Baseline #1 is green.
+
+### 18.3 What keeps it at 4.65 and not higher (honest residue)
+
+- D1.4/D7.4: API_ERRORS.md completeness remains manual-only — no emitted-code sweep
+  is automated (open P3).
+- D6.4: no automated accessibility checks; A-level a11y improvements human-verified
+  only (open P3).
+- D4.4: JSON-log twin is a documented non-goal, not an implementation — 4 by
+  decision-recording, not by parity.
+- D9.4: encrypted-history overhead still not benchmarked (open P3).
+- D5.6: coverage is reported per merge but the threshold gate is deferred by policy
+  (T5 discipline: observability before enforcement).
+- D7.6/D10 ledger: the register itself is carried honestly, including these open P3s.
+
+Next baseline (#3) must recompute with this same instrument and delta against 4.65,
+including closing or consciously re-dating the P3 residue above.
+
+### 18.4 Phase transition — release-readiness mode (product-lead decision, 2026-08-10)
+
+**NetRail exits remediation phase and enters release-candidate mode. Baseline #2 is
+the release-readiness baseline for 1.6.5.**
+
+No T8 hardening wave: the +0.53 delta came from evidence, not from instrument
+manipulation (D6/D9/D10 with no new evidence did not move). The next phase is
+deliberately boring: **freeze → clean verification → build → inspect → RC → smoke →
+release.**
+
+**R1 — Scope freeze (from this point):**
+
+- no large refactors, no architectural changes;
+- no new P2/P3 finding is automatically converted into work;
+- no API contract changes except critical defects;
+- no reopening of closed findings without new evidence;
+- permitted work is limited to release mechanics, version/documentation
+  consistency, and the R2/R3 gates below.
+
+**Residue classification (decision on §18.3):**
+
+| Residue | Decision |
+|---------|----------|
+| API_ERRORS completeness manual-only (D1.4/D7.4) | **Accepted debt** |
+| a11y not automated (D6.4) | **Accepted debt** |
+| JSON log parity twin absent (D4.4) | **Non-goal** (recorded decision) |
+| encrypted-history overhead unbenchmarked (D9.4) | **Measurement debt** — schedule with next performance pass |
+| coverage threshold gate (D5.6) | **Policy decision pending** — revisit at Baseline #3 |
+
+Ship-grade does not mean zero debt; it means the remaining debt is understood,
+located, and does not compromise the release criterion.
+
+**Tag and release policy:**
+
+- `v1.6.4 → a32df00` is immutable history: it will not be moved, amended or
+  re-pointed under any circumstance (§17 tag traceability).
+- 1.6.5 gets its own snapshot: version SSOT bump → RC → release. The post-1.6.4
+  line of work (T1–T5, §17 remediations, Baseline #2) belongs to 1.6.5, not to
+  v1.6.4.
+- Pre-tag human gate (QA-05 policy, `docs/RELEASE_ASSURANCE.md`): the webview E2E
+  manual gate (6/6 checks) re-executes before tagging. It is display-dependent and
+  not executable in this session — it remains on the human release checklist.
+
+```
+1.6.4 (a32df00)
+  └── post-release remediation T1–T5 + §17 closures
+        └── Baseline #2 = 4.65 SHIP-GRADE (release-readiness gate)
+              └── R2 clean-checkout verification → RC → 1.6.5
+```
+
+### 18.5 R2 record — final verification from clean checkout (2026-08-10)
+
+Per §15 protocol, executed from a **fresh local clone** (`git clone` → HEAD `135ba17`)
+in `/tmp/opencode/netrail-rc`, own venv (Python 3.13.3), own `CARGO_TARGET_DIR`
+(rustc 1.90.0). Not the dev session: every dependency resolved from scratch.
+
+| Step | Result |
+|------|--------|
+| `check-versions.sh` | exit 0, 5/5 locations = 1.6.4 (HEAD-tag advisory note, non-release commit as expected) |
+| `pytest tests/` | **207 passed** — reproduces recorded count |
+| `cargo test` | **130 passed, 0 failed** — reproduces recorded count |
+| `cargo clippy --all-targets -- -D warnings` | exit 0 (the ex-P0 gate) |
+| `parity-api-smoke.sh <debug netrail-api>` | OK — golden probes + ETag/If-Match + browser parity (4 browsers) |
+| `fuzz-parity.py --ci --binary` | GATE OK — code_diff=0, residual pinned at 50 (known `0xzz` family) |
+| `e2e-api-smoke.sh` | OK — health/static/typed errors/open-blocks |
+| `cargo audit --file Cargo.lock` | exit 0, 0 vulnerabilities + 19 allowed warnings |
+| `pip-audit -r requirements.txt` | 0 known vulnerabilities |
+| `npm audit --audit-level=high` | 0 vulnerabilities |
+| `pytest --cov=netrail` | **77%** total (80% stmts) — reproduces CI figure |
+| `test_links.py` + `test_docs.py` | 1 + 3 passed (40-doc link integrity) |
+| debt-marker sweep | 0 hits |
+| `cargo build --release --bin netrail-api` | Finished, clean (9m 51s from zero) |
+
+Equivalence check: every number recorded in the remediation cycle (§13/§17,
+RELEASE_ASSURANCE.md: pytest 207, cargo 130, coverage 77%, clippy 0) was
+independently reproduced from a clean tree — the evaluated state is real.
+
+Honest scope note — what R2 did **not** do here, by design:
+- webview E2E manual gate (QA-05 policy): display-dependent, human action pre-tag;
+- Rust coverage run + AppImage/.deb/.rpm + SBOM attestation + cosign:
+  CI-owned (release.yml), pinned in history against future release runs;
+- R2's purpose is reproducibility of the **evaluated state**, not discovery —
+  no new findings were burnt, per R1.
+
+Outcome: **clean-tree state = evaluated state. Ready for R3 (RC).**
+
+## 19. Longitudinal note
 
 This document is baseline #1. Each release should answer not just "did tests pass?" but
 "is NetRail more or less enterprise-ready than the previous baseline?" — same instrument,
