@@ -1,6 +1,6 @@
 # NetRail — Architecture & Lifecycle Blueprint
 
-> **Current product:** NetRail **1.6.4** (Rust-primary, dual-stack). Lifecycle tables below retain historical phase labels; rows marked ✅ are shipped. Open items are backlog, not “still in Phase 1.” Residual risk: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). Remaining-work plan: [docs/HANDOFF_OPENCODE_2026-08-02.md](HANDOFF_OPENCODE_2026-08-02.md) §9.
+> **Current product:** NetRail **1.6.5** (Rust-primary, dual-stack). Lifecycle tables below retain historical phase labels; rows marked ✅ are shipped. Open items are backlog, not “still in Phase 1.” Residual risk: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). Remaining-work plan: [docs/HANDOFF_OPENCODE_2026-08-02.md](HANDOFF_OPENCODE_2026-08-02.md) §9.
 
 ## Vision
 

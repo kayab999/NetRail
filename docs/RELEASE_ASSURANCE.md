@@ -4,8 +4,9 @@ Un documento de confianza, no técnico. Para quien llega por primera vez y quier
 saber **qué garantías ofrece el proyecto** y **dónde están respaldadas** sin leer
 el código. Cada fila apunta a la evidencia concreta (test, script o documento).
 
-> Estado a fecha del corte **v1.6.4** (2026-08-10). Las cifras de tests son las de
-> la suite local justo antes del cierre del ciclo de remediación (pytest 207, cargo 130).
+> Estado a fecha del corte **v1.6.5 (RC)** (2026-08-10). Las cifras de tests son las
+> de la suite local del ciclo de remediación + verificación R2 desde checkout limpio
+> (pytest 207, cargo 130) — reproducidas sin desviación.
 
 ## Garantías, por área
 
@@ -28,6 +29,7 @@ arquitectura:
 | 1.6.1 | Endurecimiento | DNS pin A15, webview E2E, CI firmado, FTS sync, 422s, CSP token |
 | 1.6.2 | Endurecimiento + evidencia | Chaos suite, harness de estabilidad, benchmarks dual-stack |
 | 1.6.3 | Reproducibilidad y cadena de suministro | E2 SBOM-in-bundle, E3 snapshot CSS, E5 fixtures golden |
+| 1.6.5 | Release-readiness (RC) | Post-1.6.4 remediation: clippy P0 green, fuzz diferencial CI-gated, parity de browsers, fanout simétrico, cobertura visible (sin gate), link-integrity, docs SSOT; Baseline #2 = **4.65 SHIP-GRADE** como gate de readiness. Verificación R2 desde checkout limpio |
 | Próximos | Funcionalidad / arquitectura | Fuera del alcance de 1.6.3: DNS resolve-and-warn, RBAC, TLS pinning, Windows/macOS, LLM on-device, MCP |
 
 ## Cómo verificar por uno mismo

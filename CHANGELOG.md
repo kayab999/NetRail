@@ -2,6 +2,26 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.6.5] — 2026-08-10 (release-readiness)
+
+### Fixed
+
+- **QA-01 (P0):** clippy `-D warnings` gate green as-built (unused import removed).
+- **QA-02 (P2):** flaky integration test (`settings_put_with_fresh_if_match…`) — rate-limit state isolated; 8/8 full-suite runs (was 1/5).
+- **QA-09 (P2):** browser-discovery parity — canonical fixture SSOT (13 known browsers); Rust/Python aligned (unknown default flag, section-scoped `.desktop` parse, per-call desktop dirs, token-first Exec resolution); live parity probe green.
+- **QA-10 (P2):** fanout deadline symmetry — Rust `JoinSet`+`select!` on shared deadline (partial results kept), Python explicit cancel + bounded wait; 5-property contract holds both stacks.
+- **QA-12 (P3):** cross-doc link-integrity checker (40 docs, relative targets + GitHub anchors), CI-gated; one genuine cross-doc rot found and repaired during shakedown.
+- **QA-06 (P3):** prose-version drifts closed to SSOT (5 docs) + `check-versions.sh` prose spot-lists.
+
+### Added
+
+- **qa-03 (P2):** differential open-URL fuzz committed and CI-gated (`scripts/fuzz-parity.py --ci --binary`): `code_diff=0` on 7 600 URLs, residual pinned to one known family (50 `0xzz`), CI refuses divergence.
+- **QA-04/T5:** coverage observability per merge — Python 77% (80% stmts), Rust 57.5% lines (`--lib`); reported, gate deferred by policy.
+- **QA-05 (T6):** webview E2E as explicit manual pre-tag release gate (`docs/RELEASE_ASSURANCE.md`); xvfb CI rejected as policy.
+- **QA-07/QA-08 (P3):** DISTRIBUTION env table with stack ownership; JSON-log parity twin recorded as deliberate non-goal.
+- **QA-11 (P3):** `check-versions.sh` covers CHANGELOG top entry + HEAD-tag advisory.
+- **Baseline #2** (`docs/QA_EVALUATION_2026-08-09.md` §18): 4.12 → **4.65 SHIP-GRADE**, gate UNBLOCKED — release-readiness baseline for this version. R2 clean-checkout verification reproduced every recorded number (pytest 207, cargo 130, audits 0, parity/fuzz/e2e green).
+
 ## [1.6.4] — 2026-08-02
 
 ### Added
