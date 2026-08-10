@@ -99,28 +99,39 @@ def search_with_fallback(
     backends_used: list[str] = []
     provenance_chain: list[str] = []
 
-    with ThreadPoolExecutor(max_workers=max(1, len(backends))) as pool:
-        futures = {
-            pool.submit(_query_backend, backend, query, mode, max_results): backend
-            for backend in backends
-        }
-        try:
-            for future in as_completed(futures, timeout=FANOUT_DEADLINE_SECONDS):
-                name, provenance, batch, err = future.result()
-                if err:
-                    logger.warning("backend search failed: %s", err)
-                    errors.append(err)
-                    continue
-                if batch:
-                    backends_used.append(name)
-                    provenance_chain.append(provenance)
-                    batches.append((name, batch))
-                else:
-                    logger.warning("%s returned zero parseable results", name)
-                    errors.append(f"{name}: returned no results")
-        except FuturesTimeout:
-            logger.warning("fanout timed out after %.0fs", FANOUT_DEADLINE_SECONDS)
-            errors.append("fanout: timed out after 20 seconds")
+    pool = ThreadPoolExecutor(max_workers=max(1, len(backends)))
+    futures = {}
+    for backend in backends:
+        future = pool.submit(_query_backend, backend, query, mode, max_results)
+        futures[future] = backend
+    try:
+        for future in as_completed(futures, timeout=FANOUT_DEADLINE_SECONDS):
+            name, provenance, batch, err = future.result()
+            if err:
+                logger.warning("backend search failed: %s", err)
+                errors.append(err)
+                continue
+            if batch:
+                backends_used.append(name)
+                provenance_chain.append(provenance)
+                batches.append((name, batch))
+            else:
+                logger.warning("%s returned zero parseable results", name)
+                errors.append(f"{name}: returned no results")
+    except FuturesTimeout:
+        logger.warning("fanout timed out after %.0fs", FANOUT_DEADLINE_SECONDS)
+        errors.append("fanout: timed out after 20 seconds")
+        # Cancel queued work and stop waiting on the pool (QA-10): the old
+        # `with ThreadPoolExecutor` blocked in __exit__ on hung/queued futures,
+        # stretching the request wall time past the 20s deadline. Pending
+        # futures are cancelled outright; already-running backend threads are
+        # left to finish under their own HTTP timeouts (brave/searxng 12s,
+        # wikipedia 15s, ddgs ~5s per engine), so nothing runs unbounded.
+        for future in futures:
+            future.cancel()
+        pool.shutdown(wait=False, cancel_futures=True)
+    else:
+        pool.shutdown(wait=True)
 
     if strategy == "fallback":
         flat = [item for _, batch in batches for item in batch]

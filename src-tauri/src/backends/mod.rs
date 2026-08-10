@@ -211,52 +211,23 @@ pub async fn search_with_fanout(
         return empty_response(query, mode);
     }
 
-    match tokio::time::timeout(
-        FANOUT_DEADLINE,
-        search_with_fanout_inner(client, query, mode, max_results, settings),
-    )
-    .await
-    {
-        Ok(response) => response,
-        Err(_) => {
-            let mut errors = vec!["fanout: timed out after 20 seconds".into()];
-            let unavailable: Vec<String> = get_enabled_backends(settings, client)
-                .into_iter()
-                .filter(|b| !b.is_available(client))
-                .map(|b| format!("{}: unavailable", b.name()))
-                .collect();
-            errors.extend(unavailable);
-            SearchResponse {
-                query: query.into(),
-                mode,
-                results: vec![],
-                backends_used: vec!["none".into()],
-                provenance_chain: vec!["Search timed out".into()],
-                sovereignty_step: 1,
-                errors,
-                search_strategy: settings.search_strategy.clone(),
-            }
-        }
-    }
-}
-
-async fn search_with_fanout_inner(
-    client: &Client,
-    query: &str,
-    mode: SearchMode,
-    max_results: usize,
-    settings: &Settings,
-) -> SearchResponse {
+    // QA-10: the deadline is an abort-on-remainder, not a discard-all. Tasks
+    // that completed before the deadline keep their partial results (partial →
+    // 200 + errors[]); only the still-running remainder is aborted. This
+    // mirrors the Python side where as_completed(timeout) keeps completed
+    // batches and cancels the rest — the old `tokio::time::timeout` wrapper
+    // dropped every completed batch too, asymmetrically turning partial
+    // results into a 502 FANOUT_TOTAL_FAILURE.
     let enabled = get_enabled_backends(settings, client);
     let availability = join_all(enabled.iter().map(|b| backend_available(b, client))).await;
 
     let mut backends = Vec::new();
-    let mut unavailable = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
     for (backend, available) in enabled.into_iter().zip(availability) {
         if available {
             backends.push(backend);
         } else {
-            unavailable.push(format!("{}: unavailable", backend.name()));
+            errors.push(format!("{}: unavailable", backend.name()));
         }
     }
 
@@ -268,17 +239,38 @@ async fn search_with_fanout_inner(
             backends_used: vec!["none".into()],
             provenance_chain: vec!["No backend available".into()],
             sovereignty_step: 1,
-            errors: unavailable,
+            errors,
             search_strategy: settings.search_strategy.clone(),
         };
     }
 
-    let tasks = backends.iter().map(|backend| {
-        query_backend(client, backend.clone(), query, mode, max_results)
-    });
-    let outcomes = join_all(tasks).await;
+    let mut tasks = tokio::task::JoinSet::new();
+    let query_owned = query.to_string();
+    for backend in backends {
+        let client = client.clone();
+        let query = query_owned.clone();
+        tasks.spawn(async move { query_backend(&client, backend, &query, mode, max_results).await });
+    }
 
-    let mut errors = unavailable;
+    let mut outcomes: Vec<Result<BackendBatch, String>> = Vec::new();
+    let mut timed_out = false;
+    let deadline = tokio::time::sleep(FANOUT_DEADLINE);
+    tokio::pin!(deadline);
+    loop {
+        tokio::select! {
+            next = tasks.join_next() => match next {
+                Some(Ok(result)) => outcomes.push(result),
+                Some(Err(_join_error)) => {}
+                None => break,
+            },
+            _ = &mut deadline => {
+                timed_out = true;
+                tasks.abort_all();
+                break;
+            }
+        }
+    }
+
     let mut batches: Vec<(String, Vec<SearchResult>)> = Vec::new();
     let mut backends_used = Vec::new();
     let mut provenance_chain = Vec::new();
@@ -300,6 +292,11 @@ async fn search_with_fanout_inner(
             }
         }
     }
+
+    if timed_out {
+        errors.push("fanout: timed out after 20 seconds".into());
+    }
+
 
     let mut results = if settings.search_strategy == "fallback" {
         let flat: Vec<SearchResult> = batches.iter().flat_map(|(_, r)| r.clone()).collect();
