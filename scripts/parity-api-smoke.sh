@@ -263,4 +263,31 @@ assert status == 200, (status, body)
 print("settings ETag/If-Match probes: passed")
 PYEOF
 
+echo "== Browser-discovery live parity (QA-09 T2) =="
+PYTHONPATH="$ROOT" "$PY" - <<'PYEOF'
+import json, urllib.request
+
+base = "http://127.0.0.1:7421"
+with urllib.request.urlopen(base + "/api/browsers") as resp:
+    rust = json.loads(resp.read())
+
+from netrail.browsers import discover_browsers
+
+py = [
+    {
+        "id": b.id,
+        "name": b.name,
+        "executable": b.executable,
+        "supports_private": b.private_flag is not None,
+    }
+    for b in discover_browsers()
+]
+rust = sorted(rust, key=lambda b: b["name"].lower())
+py = sorted(py, key=lambda b: b["name"].lower())
+assert rust == py, ("browser-discovery parity divergence (QA-09):\n"
+                    f"rust={json.dumps(rust, indent=2)}\n"
+                    f"py  ={json.dumps(py, indent=2)}")
+print(f"browser-discovery parity OK ({len(rust)} browsers)")
+PYEOF
+
 echo "PARITY SMOKE OK (Python + Rust $BIN)"

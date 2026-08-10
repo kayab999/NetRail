@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "note": "Canonical browser-discovery contract (QA-09 T2, 2026-08-10). Both stacks' tests read this file; drift from either implementation fails. Decisions: (1) union known-table of 13 ids; (2) unknown binaries receive NO fabricated private flag — mode is 'normal' when private is requested (privacy never claimed, flags never guessed); (3) desktop parse is [Desktop Entry]-section scoped (localized Name[xx]= and Desktop Action sections are ignored); Type must equal 'Application' exactly; NoDisplay=true only rejected inside [Desktop Entry]; (4) flatpak host lookup uses the basename of the first Exec token.",
+  "known_browsers": [
+    { "id": "firefox", "name": "Firefox", "private_flag": "--private-window" },
+    { "id": "firefox-esr", "name": "Firefox ESR", "private_flag": "--private-window" },
+    { "id": "google-chrome", "name": "Google Chrome", "private_flag": "--incognito" },
+    { "id": "google-chrome-stable", "name": "Google Chrome", "private_flag": "--incognito" },
+    { "id": "chromium", "name": "Chromium", "private_flag": "--incognito" },
+    { "id": "chromium-browser", "name": "Chromium", "private_flag": "--incognito" },
+    { "id": "brave-browser", "name": "Brave", "private_flag": "--incognito" },
+    { "id": "microsoft-edge", "name": "Microsoft Edge", "private_flag": "--inprivate" },
+    { "id": "microsoft-edge-stable", "name": "Microsoft Edge", "private_flag": "--inprivate" },
+    { "id": "opera", "name": "Opera", "private_flag": "--private" },
+    { "id": "vivaldi", "name": "Vivaldi", "private_flag": "--incognito" },
+    { "id": "waterfox", "name": "Waterfox", "private_flag": "--private-window" },
+    { "id": "librewolf", "name": "LibreWolf", "private_flag": "--private-window" }
+  ],
+  "unknown_browser_private_flag": null,
+  "entry_section": "Desktop Entry"
+}

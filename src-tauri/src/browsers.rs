@@ -1,5 +1,4 @@
 use serde::Serialize;
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -20,16 +19,26 @@ struct BrowserSpec {
     private_flag: Option<&'static str>,
 }
 
-fn known_browsers() -> HashMap<&'static str, BrowserSpec> {
-    HashMap::from([
+// Canonical known-browser table (QA-09 T2) — single source of truth is
+// tests/fixtures/browsers.json; tests assert this table equals the fixture.
+// Keep order deterministic (binary name ascending); HashMap iteration would
+// make fallback discovery order nondeterministic.
+fn known_browsers() -> Vec<(&'static str, BrowserSpec)> {
+    vec![
         ("firefox", BrowserSpec { name: "Firefox", private_flag: Some("--private-window") }),
+        ("firefox-esr", BrowserSpec { name: "Firefox ESR", private_flag: Some("--private-window") }),
         ("google-chrome", BrowserSpec { name: "Google Chrome", private_flag: Some("--incognito") }),
+        ("google-chrome-stable", BrowserSpec { name: "Google Chrome", private_flag: Some("--incognito") }),
         ("chromium", BrowserSpec { name: "Chromium", private_flag: Some("--incognito") }),
+        ("chromium-browser", BrowserSpec { name: "Chromium", private_flag: Some("--incognito") }),
         ("brave-browser", BrowserSpec { name: "Brave", private_flag: Some("--incognito") }),
         ("microsoft-edge", BrowserSpec { name: "Microsoft Edge", private_flag: Some("--inprivate") }),
+        ("microsoft-edge-stable", BrowserSpec { name: "Microsoft Edge", private_flag: Some("--inprivate") }),
+        ("opera", BrowserSpec { name: "Opera", private_flag: Some("--private") }),
         ("vivaldi", BrowserSpec { name: "Vivaldi", private_flag: Some("--incognito") }),
+        ("waterfox", BrowserSpec { name: "Waterfox", private_flag: Some("--private-window") }),
         ("librewolf", BrowserSpec { name: "LibreWolf", private_flag: Some("--private-window") }),
-    ])
+    ]
 }
 
 fn desktop_dirs() -> Vec<PathBuf> {
@@ -41,8 +50,9 @@ fn desktop_dirs() -> Vec<PathBuf> {
 }
 
 fn host_which(token: &str) -> Option<String> {
+    let basename = Path::new(token).file_name()?.to_str()?.to_string();
     let output = Command::new("flatpak-spawn")
-        .args(["--host", "which", token])
+        .args(["--host", "which", &basename])
         .output()
         .ok()?;
     if output.status.success() {
@@ -70,25 +80,46 @@ fn parse_desktop(path: &Path) -> Option<(String, String, bool)> {
     let mut name = path.file_stem()?.to_str()?.to_string();
     let mut exec = String::new();
     let mut is_browser = false;
+    // Desktop entries are section-scoped (QA-09 T2): keys of [Desktop Action …]
+    // and localized Name[xx]= variants must NOT leak into the entry (a later
+    // action section used to override the entry Name).
+    let mut in_entry = false;
+    let mut saw_entry = false;
 
     for line in content.lines() {
-        if line.starts_with("Name=") {
-            name = line.trim_start_matches("Name=").to_string();
-        } else if line.starts_with("Exec=") {
-            exec = line.trim_start_matches("Exec=").split('%').next()?.trim().to_string();
-        } else if line.starts_with("Categories=") || line.starts_with("MimeType=") {
-            let lower = line.to_lowercase();
-            if lower.contains("webbrowser") || lower.contains("x-scheme-handler/http") {
+        let line = line.trim();
+        if line.starts_with('[') && line.ends_with(']') {
+            in_entry = line == "[Desktop Entry]";
+            saw_entry |= in_entry;
+            continue;
+        }
+        if !in_entry {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("Name=") {
+            name = rest.to_string();
+        } else if let Some(rest) = line.strip_prefix("Exec=") {
+            exec = rest.split('%').next()?.trim().to_string();
+        } else if let Some(rest) = line.strip_prefix("Categories=") {
+            if rest.to_lowercase().contains("webbrowser") {
                 is_browser = true;
             }
-        } else if (line.starts_with("Type=") && !line.contains("Application"))
-            || line.starts_with("NoDisplay=true")
-        {
-            return None;
+        } else if let Some(rest) = line.strip_prefix("MimeType=") {
+            if rest.to_lowercase().contains("x-scheme-handler/http") {
+                is_browser = true;
+            }
+        } else if let Some(rest) = line.strip_prefix("Type=") {
+            if rest.trim() != "Application" {
+                return None;
+            }
+        } else if let Some(rest) = line.strip_prefix("NoDisplay=") {
+            if rest.trim().eq_ignore_ascii_case("true") {
+                return None;
+            }
         }
     }
 
-    if exec.is_empty() || !is_browser {
+    if !saw_entry || exec.is_empty() || !is_browser {
         return None;
     }
     Some((name, exec, true))
@@ -115,17 +146,17 @@ pub fn discover_browsers() -> Vec<BrowserInfo> {
                 continue;
             }
             seen.push(resolved.clone());
-            let stem = Path::new(&resolved)
+            let stem_name = Path::new(&resolved)
                 .file_name()
                 .and_then(|s| s.to_str())
                 .unwrap_or("browser")
                 .to_string();
-            let spec = known.get(stem.as_str());
+            let spec = known.iter().find(|(stem, _)| *stem == stem_name.as_str());
             browsers.push(BrowserInfo {
-                id: stem.clone(),
-                name: spec.map(|s| s.name.to_string()).unwrap_or(name),
+                id: stem_name.clone(),
+                name: spec.map(|s| s.1.name.to_string()).unwrap_or(name),
                 executable: resolved,
-                supports_private: spec.and_then(|s| s.private_flag).is_some(),
+                supports_private: spec.and_then(|s| s.1.private_flag).is_some(),
             });
         }
     }
@@ -168,7 +199,10 @@ fn find_browser(browser_id: Option<&str>) -> Option<BrowserInfo> {
 }
 
 fn private_flag_for(browser_id: &str) -> Option<&'static str> {
-    known_browsers().get(browser_id).and_then(|s| s.private_flag)
+    known_browsers()
+        .iter()
+        .find(|(stem, _)| *stem == browser_id)
+        .and_then(|(_, spec)| spec.private_flag)
 }
 
 fn spawn(mut cmd: Command) {
@@ -254,9 +288,171 @@ pub fn open_url(url: &str, settings: &Settings) -> NetRailResult<OpenResult> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Write;
     use super::*;
     use crate::config::Settings;
+    use serde::Deserialize;
     use serial_test::serial;
+    #[derive(Deserialize)]
+    struct Fixture {
+        known_browsers: Vec<FixtureBrowser>,
+    }
+
+    #[derive(Deserialize)]
+    struct FixtureBrowser {
+        id: String,
+        name: String,
+        private_flag: Option<String>,
+    }
+
+    fn write_desktop(lines: &[&str]) -> tempfile::TempDir {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let path = dir.path().join("test-browser.desktop");
+        let mut f = std::fs::File::create(&path).expect("create");
+        f.write_all(lines.join("\n").as_bytes()).expect("write");
+        drop(f);
+        dir
+    }
+
+    fn browser_desktop_lines<'a>(extra: &'a [&'a str]) -> Vec<&'a str> {
+        let mut lines: Vec<&'a str> = vec![
+            "[Desktop Entry]",
+            "Type=Application",
+            "Name=Test Browser",
+            "Exec=test-browser %U",
+            "MimeType=x-scheme-handler/http;",
+        ];
+        lines.extend_from_slice(extra);
+        lines
+    }
+
+    #[test]
+    fn known_table_matches_fixture() {
+        let fixture: Fixture =
+            serde_json::from_str(include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../tests/fixtures/browsers.json"))).expect("fixture parses");
+        let known = known_browsers();
+        assert_eq!(known.len(), fixture.known_browsers.len(),
+                   "known table must match fixture (drift detected)");
+        for (stem, spec) in &known {
+            let want = fixture.known_browsers.iter()
+                .find(|b| &b.id == stem)
+                .unwrap_or_else(|| panic!("fixture missing {stem}"));
+            assert_eq!(spec.name, want.name, "name mismatch for {stem}");
+            assert_eq!(spec.private_flag.map(str::to_string),
+                       want.private_flag, "flag mismatch for {stem}");
+        }
+    }
+
+    #[test]
+    fn parse_desktop_scopes_name_to_entry_section() {
+        let dir = write_desktop(&[
+            "[Desktop Entry]",
+            "Type=Application",
+            "Name=Test Browser",
+            "Exec=test-browser %U",
+            "MimeType=x-scheme-handler/http;",
+            "",
+            "[Desktop Action new-window]",
+            "Name=New Window",
+        ]);
+        let (name, exec, _) =
+            parse_desktop(&dir.path().join("test-browser.desktop")).expect("parses");
+        assert_eq!(name, "Test Browser", "action section Name leaked into entry");
+        assert_eq!(exec, "test-browser");
+    }
+
+    #[test]
+    fn parse_desktop_ignores_localized_name_variant() {
+        let dir = write_desktop(&browser_desktop_lines(&[
+            "Name[de]=Lokaler Browser",
+        ]));
+        let (name, _, _) =
+            parse_desktop(&dir.path().join("test-browser.desktop")).expect("parses");
+        assert_eq!(name, "Test Browser", "localized Name[xx]= must not override Name");
+    }
+
+    #[test]
+    fn parse_desktop_requires_exact_application_type() {
+        for bad in ["Application2", "X-Application", "application"] {
+            let dir = write_desktop(&browser_desktop_lines(&[
+                &format!("Type={bad}"),
+            ]));
+            assert!(parse_desktop(&dir.path().join("test-browser.desktop")).is_none(),
+                    "Type={bad} must be rejected");
+        }
+    }
+
+    #[test]
+    fn parse_desktop_nodisplay_only_rejected_inside_entry() {
+        let inside = write_desktop(&browser_desktop_lines(&["NoDisplay=true"]));
+        assert!(parse_desktop(&inside.path().join("test-browser.desktop")).is_none());
+        let outside = write_desktop(&browser_desktop_lines(&[
+            "",
+            "[Desktop Action foo]",
+            "NoDisplay=true",
+        ]));
+        assert!(parse_desktop(&outside.path().join("test-browser.desktop")).is_some(),
+                "NoDisplay outside [Desktop Entry] must be ignored");
+    }
+
+    #[test]
+    fn parse_desktop_requires_entry_section_header() {
+        let dir = write_desktop(&[
+            "Type=Application",
+            "Name=No Section",
+            "Exec=test-browser",
+            "Categories=Network;",
+        ]);
+        assert!(parse_desktop(&dir.path().join("test-browser.desktop")).is_none(),
+                "missing [Desktop Entry] header must be rejected (configparser parity)");
+    }
+
+    #[test]
+    fn parse_desktop_truncates_exec_at_percent() {
+        let dir = write_desktop(&browser_desktop_lines(&[
+            "Exec=env FOO=1 test-browser --profile %u %U",
+        ]));
+        let (_, exec, _) =
+            parse_desktop(&dir.path().join("test-browser.desktop")).expect("parses");
+        assert_eq!(exec, "env FOO=1 test-browser --profile");
+    }
+
+    #[test]
+    #[serial]
+    fn unknown_browser_gets_no_fabricated_private_flag() {
+        let home = tempfile::TempDir::new().expect("tempdir");
+        let bin = tempfile::TempDir::new().expect("tempdir");
+        let bin_path = bin.path().join("unknown-browser-bin");
+        std::fs::write(&bin_path, "#!/bin/sh\n").expect("fake binary");
+        let mut perms = std::fs::metadata(&bin_path).expect("meta").permissions();
+        use std::os::unix::fs::PermissionsExt;
+        perms.set_mode(0o755);
+        std::fs::set_permissions(&bin_path, perms).expect("chmod");
+
+        let apps = home.path().join(".local/share/applications");
+        std::fs::create_dir_all(&apps).expect("apps dir");
+        let mut f = std::fs::File::create(apps.join("unknown-browser.desktop")).expect("create");
+        writeln!(f, "[Desktop Entry]\nType=Application\nName=Unknown Co.\nExec={}\nCategories=Network;WebBrowser;",
+                 bin_path.display()).expect("write");
+
+        std::env::set_var("HOME", home.path());
+        let mut path = bin.path().as_os_str().to_owned();
+        path.push(":");
+        path.push(std::env::var_os("PATH").unwrap_or_default().as_os_str());
+        std::env::set_var("PATH", &path);
+
+        let found = discover_browsers();
+        std::env::remove_var("HOME");
+        std::env::remove_var("PATH");
+
+        let unknown = found.iter().find(|b| b.id == "unknown-browser-bin")
+            .expect("fake browser discovered");
+        assert_eq!(unknown.name, "Unknown Co.", "display name must come from the entry");
+        assert!(!unknown.supports_private,
+                "unknown binaries must not be claimed private-capable");
+        assert!(private_flag_for(&unknown.id).is_none(),
+                "unknown binaries must never receive a fabricated private flag");
+    }
 
     #[test]
     #[serial]

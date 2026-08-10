@@ -18,10 +18,14 @@ class Browser:
     private_flag: str | None
 
 
-DESKTOP_DIRS = [
-    Path("/usr/share/applications"),
-    Path.home() / ".local/share/applications",
-]
+def desktop_dirs() -> list[Path]:
+    # Computed per call (not at import): $HOME may change across the process
+    # life (tests, harnesses), mirroring the Rust side which resolves home
+    # inside each discovery.
+    return [
+        Path("/usr/share/applications"),
+        Path.home() / ".local/share/applications",
+    ]
 
 KNOWN_BROWSERS: dict[str, tuple[str, str | None]] = {
     "firefox": ("Firefox", "--private-window"),
@@ -97,7 +101,7 @@ def _resolve_executable(command: str) -> str | None:
             return token
         return _host_which(command) or token
 
-    resolved = shutil.which(Path(token).name) or shutil.which(token)
+    resolved = shutil.which(token) or shutil.which(Path(token).name)
     return resolved
 
 
@@ -117,7 +121,7 @@ def discover_browsers() -> list[Browser]:
     seen: set[str] = set()
     browsers: list[Browser] = []
 
-    for desktop_dir in DESKTOP_DIRS:
+    for desktop_dir in desktop_dirs():
         if not desktop_dir.is_dir():
             continue
         for desktop_file in sorted(desktop_dir.glob("*.desktop")):
@@ -133,7 +137,10 @@ def discover_browsers() -> list[Browser]:
                 continue
 
             stem = Path(resolved).name
-            display_name, private_flag = KNOWN_BROWSERS.get(stem, (name, "--incognito"))
+            # Unknown binaries never receive a fabricated private flag (QA-09
+            # canonical contract: privacy is never claimed for browsers we do
+            # not know, and unknown flags are never guessed).
+            display_name, private_flag = KNOWN_BROWSERS.get(stem, (name, None))
             browser_id = stem
 
             seen.add(resolved)
