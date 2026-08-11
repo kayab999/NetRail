@@ -205,7 +205,7 @@ fn private_flag_for(browser_id: &str) -> Option<&'static str> {
         .and_then(|(_, spec)| spec.private_flag)
 }
 
-fn spawn(mut cmd: Command) {
+fn spawn(mut cmd: Command) -> Result<(), std::io::Error> {
     cmd.env_remove("LD_PRELOAD");
     if is_flatpak() {
         let program = cmd.get_program().to_string_lossy().to_string();
@@ -220,10 +220,11 @@ fn spawn(mut cmd: Command) {
         }
         cmd = wrapped;
     }
-    let _ = cmd
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn();
+    // A-16: a failed launch (ENOENT, fork failure) must surface as an error,
+    // not a silent success response. Stdio::null has no error path; only the
+    // spawn result is propagated.
+    cmd.stdout(Stdio::null()).stderr(Stdio::null()).spawn()?;
+    Ok(())
 }
 
 #[derive(Debug, Serialize)]
@@ -269,7 +270,15 @@ pub fn open_url(url: &str, settings: &Settings) -> NetRailResult<OpenResult> {
         }
     }
     cmd.arg(url);
-    spawn(cmd);
+    spawn(cmd).map_err(|err| NetRailError::Internal {
+        code: "BROWSER_SPAWN_FAILED",
+        message: format!(
+            "Failed to launch browser {} ({}): {}",
+            browser.executable,
+            browser.name,
+            err
+        ),
+    })?;
 
     let mode = if private && browser.supports_private {
         "private"
@@ -488,5 +497,15 @@ mod tests {
         }
         std::env::remove_var("NETRAIL_NO_OPEN");
         assert!(!dry_run_enabled());
+    }
+
+    #[test]
+    fn spawn_reports_failure_for_missing_executable() {
+        let mut cmd = std::process::Command::new("/definitely/not/a/real/browser");
+        cmd.arg("https://example.com/");
+        assert!(
+            spawn(cmd).is_err(),
+            "A-16: a failed launch must surface as Err, not silent success"
+        );
     }
 }

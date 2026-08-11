@@ -245,16 +245,26 @@ def test_token_injection_csp_allows_script_hash(monkeypatch):
     monkeypatch.setenv("NETRAIL_API_TOKEN", "hash-test-token")
     response = client.get("/")
     csp = response.headers.get("Content-Security-Policy", "")
+    assert "sha256-aN9klVksJOk4OThOcI2OMlo7DsWPc+W7cPY4E+ODbD8=" in csp, csp
     assert "script-src 'self' 'sha256-" in csp, csp
     assert "NETRAIL_API_TOKEN=\"hash-test-token\"" in response.text
     assert "script-src 'self' 'unsafe-inline'" not in csp
     monkeypatch.delenv("NETRAIL_API_TOKEN", raising=False)
     response = client.get("/")
+    # A-18: the inline splash failsafe hash must be present in the Python CSP
+    # exactly as in the Rust CSP (src-tauri/src/security.rs) so the 2.5s
+    # splash-dismiss failsafe in index.html runs even if app.js throws.
     assert response.headers.get("Content-Security-Policy") == (
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' https: data:; connect-src 'self'; upgrade-insecure-requests; "
+        "default-src 'self'; script-src 'self' "
+        "'sha256-aN9klVksJOk4OThOcI2OMlo7DsWPc+W7cPY4E+ODbD8='; "
+        "style-src 'self' 'unsafe-inline'; "
+        "img-src 'self' https: data:; connect-src 'self'; "
         "frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
     )
+    # Regression pin (2026-08-10): `upgrade-insecure-requests` must never come
+    # back — WebKitGTK upgrades loopback http subresources to https and the
+    # plain-http UI server then fails every asset (white screen, dead UI).
+    assert "upgrade-insecure-requests" not in response.headers.get("Content-Security-Policy")
     assert "NETRAIL_API_TOKEN" not in response.text
 
 

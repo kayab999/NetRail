@@ -24,3 +24,16 @@ def test_open_url_reports_flatpak_sandbox(monkeypatch):
         with patch("netrail.browsers._spawn_process"):
             result = open_url("https://example.com", private_mode=True)
     assert result["sandbox"] == "flatpak-host"
+
+
+def test_spawn_failure_surfaces_as_runtime_error():
+    with patch(
+        "netrail.browsers.subprocess.Popen",
+        side_effect=FileNotFoundError("no such file"),
+    ):
+        try:
+            _spawn_process(["/missing/browser", "https://example.com"], {})
+        except RuntimeError as exc:
+            assert "/missing/browser" in str(exc)
+        else:
+            raise AssertionError("A-16: spawn failure must raise RuntimeError")

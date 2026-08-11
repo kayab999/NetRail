@@ -108,13 +108,19 @@ def _resolve_executable(command: str) -> str | None:
 def _spawn_process(cmd: list[str], env: dict[str, str]) -> None:
     if is_flatpak():
         cmd = ["flatpak-spawn", "--host", *cmd]
-    subprocess.Popen(
-        cmd,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-        env=env,
-    )
+    try:
+        subprocess.Popen(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
+            env=env,
+        )
+    except OSError as exc:
+        # A-16 (Rust BROWSER_SPAWN_FAILED parity): a failed launch must not be
+        # reported as success; surface it as a RuntimeError so the /api/open
+        # handler can fall back to the system browser instead of a bare 500.
+        raise RuntimeError(f"Failed to launch browser {cmd[0]}: {exc}") from exc
 
 
 def discover_browsers() -> list[Browser]:

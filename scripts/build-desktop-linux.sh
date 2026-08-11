@@ -110,7 +110,9 @@ fi
 
 (
   cd dist/release
-  sha256sum -- * >SHA256SUMS 2>/dev/null || sha256sum ./* >SHA256SUMS
+  # Exclude the previous SHA256SUMS from the glob so re-runs stay idempotent
+  # (a self-referenced checksum line can never verify).
+  sha256sum -- $(find . -maxdepth 1 -type f ! -name SHA256SUMS | sort) >SHA256SUMS
 )
 
 echo ""
