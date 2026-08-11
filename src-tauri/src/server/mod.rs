@@ -254,6 +254,10 @@ async fn health(State(state): State<AppState>) -> Json<serde_json::Value> {
     if let serde_json::Value::Object(ref mut map) = history {
         map.insert("encrypt_requested".into(), encrypt_requested.into());
         map.insert("encryption_active".into(), encryption_ok.into());
+        map.insert(
+            "encryption_state".into(),
+            crate::history::cipher_state(encrypt_requested, encryption_ok).into(),
+        );
         if encrypt_requested && !encryption_ok {
             map.insert(
                 "encryption_warning".into(),

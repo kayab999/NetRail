@@ -42,12 +42,15 @@ from netrail.security import pin_open_host, validate_open_url
 STATIC_DIR = static_dir()
 
 CSP = (
+    # No `upgrade-insecure-requests`: WebKitGTK upgrades http subresources to
+    # https — including 127.0.0.1 — killing every subresource load against a
+    # plain-http loopback server (white UI). Keep in lock-step with Rust CSP
+    # (src-tauri/src/security.rs), including the inline splash failsafe hash.
     "default-src 'self'; "
-    "script-src 'self'; "
+    "script-src 'self' 'sha256-aN9klVksJOk4OThOcI2OMlo7DsWPc+W7cPY4E+ODbD8='; "
     "style-src 'self' 'unsafe-inline'; "
     "img-src 'self' https: data:; "
     "connect-src 'self'; "
-    "upgrade-insecure-requests; "
     "frame-ancestors 'none'; "
     "base-uri 'self'; "
     "form-action 'self'"
@@ -284,7 +287,11 @@ def index() -> Response:
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
-    from netrail.history.crypto import encryption_active, ensure_encryption_key
+    from netrail.history.crypto import (
+        cipher_state,
+        encryption_active,
+        ensure_encryption_key,
+    )
 
     settings = load_settings()
     backends = get_enabled_backends(settings)
@@ -298,6 +305,7 @@ def health() -> dict[str, Any]:
     history = store.stats() if store else {"enabled": False}
     history["encrypt_requested"] = encrypt_requested
     history["encryption_active"] = encryption_ok
+    history["encryption_state"] = cipher_state(encrypt_requested, encryption_ok)
     if encrypt_requested and not encryption_ok:
         history["encryption_warning"] = (
             "History encryption is enabled but no key is available."

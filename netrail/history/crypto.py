@@ -7,11 +7,10 @@ if TYPE_CHECKING:
     from cryptography.fernet import Fernet
 
 _fernet: "Fernet | None" = None
-_encryption_enabled = True
 
 
 def _load_fernet() -> "Fernet | None":
-    global _fernet, _encryption_enabled
+    global _fernet
     if _fernet is not None:
         return _fernet
 
@@ -34,7 +33,6 @@ def _load_fernet() -> "Fernet | None":
             pass
 
     if key_material is None:
-        _encryption_enabled = False
         return None
 
     _fernet = Fernet(key_material)
@@ -43,13 +41,12 @@ def _load_fernet() -> "Fernet | None":
 
 def ensure_encryption_key() -> bool:
     """Create and store a Fernet key when encryption is requested."""
-    global _fernet, _encryption_enabled
+    global _fernet
 
     from cryptography.fernet import Fernet
 
     if os.environ.get("NETRAIL_DB_KEY"):
         _fernet = Fernet(os.environ["NETRAIL_DB_KEY"].encode("utf-8"))
-        _encryption_enabled = True
         return True
 
     try:
@@ -58,22 +55,39 @@ def ensure_encryption_key() -> bool:
         stored = keyring.get_password("netrail", "db-key")
         if stored:
             _fernet = Fernet(stored.encode("utf-8"))
-            _encryption_enabled = True
             return True
 
         key = Fernet.generate_key()
         keyring.set_password("netrail", "db-key", key.decode("utf-8"))
         _fernet = Fernet(key)
-        _encryption_enabled = True
         return True
     except Exception:  # noqa: BLE001
-        _encryption_enabled = False
         _fernet = None
         return False
 
 
 def encryption_active() -> bool:
     return _load_fernet() is not None
+
+
+def cipher_state(encrypt_requested: bool, encryption_active: bool) -> str:
+    """Canonical history cipher state from the /api/health flags.
+
+    encrypted: encryption requested and a key is active.
+    degraded: encryption requested but no key is available (keyring/headless).
+    plaintext: encryption not requested (an orphan key is ignored).
+    """
+    if encrypt_requested and encryption_active:
+        return "encrypted"
+    if encrypt_requested:
+        return "degraded"
+    return "plaintext"
+
+
+def reset_for_tests() -> None:
+    """Test helper: drop the cached Fernet so the next call re-reads env/keyring."""
+    global _fernet
+    _fernet = None
 
 
 def encrypt_text(value: str, *, force_plain: bool = False) -> bytes:

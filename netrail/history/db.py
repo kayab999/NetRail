@@ -101,6 +101,10 @@ def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(path, check_same_thread=False, timeout=5)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA busy_timeout = 5000")
+    # A-01: FK enforcement is per-connection (SQLite defaults OFF), so the
+    # migrate-time `PRAGMA foreign_keys = ON` alone is insufficient — a
+    # reconnect on a pre-existing v1 DB would silently orphan results/visits.
+    conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")
     _migrate(conn)
     return conn

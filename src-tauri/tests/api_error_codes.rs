@@ -156,6 +156,57 @@ async fn invalid_settings_returns_config_max_results() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
+async fn health_reports_encryption_state_encrypted() {
+    let dir = TempDir::new().unwrap();
+    let key = Fernet::generate_key();
+    std::env::set_var("NETRAIL_DB_KEY", &key);
+    std::env::set_var(
+        "NETRAIL_DB_PATH",
+        dir.path().join("netrail.db").to_string_lossy().as_ref(),
+    );
+
+    let settings = Settings {
+        history_enabled: true,
+        history_encrypt: true,
+        ..Settings::default()
+    };
+    let mut app = build_router(test_state(settings));
+    let (status, json) = request_json(&mut app, "GET", "/api/health", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let history = &json["history"];
+    assert_eq!(history["encrypt_requested"], true);
+    assert_eq!(history["encryption_active"], true);
+    assert_eq!(history["encryption_state"], "encrypted");
+
+    std::env::remove_var("NETRAIL_DB_KEY");
+    std::env::remove_var("NETRAIL_DB_PATH");
+}
+
+#[tokio::test]
+#[serial_test::serial]
+async fn health_reports_encryption_state_plaintext() {
+    let dir = TempDir::new().unwrap();
+    std::env::set_var(
+        "NETRAIL_DB_PATH",
+        dir.path().join("netrail.db").to_string_lossy().as_ref(),
+    );
+    let settings = Settings {
+        history_enabled: true,
+        history_encrypt: false,
+        ..Settings::default()
+    };
+    let mut app = build_router(test_state(settings));
+    let (status, json) = request_json(&mut app, "GET", "/api/health", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let history = &json["history"];
+    assert_eq!(history["encrypt_requested"], false);
+    assert_eq!(history["encryption_state"], "plaintext");
+    std::env::remove_var("NETRAIL_DB_PATH");
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn unknown_doc_returns_doc_not_found() {
     let settings = Settings::default();
     let mut app = build_router(test_state(settings));
@@ -177,6 +228,7 @@ async fn history_disabled_returns_history_disabled() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn empty_collection_name_returns_collection_name_invalid() {
     let dir = TempDir::new().unwrap();
     let key = Fernet::generate_key();
@@ -207,6 +259,7 @@ async fn empty_collection_name_returns_collection_name_invalid() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn missing_history_entry_returns_history_entry_not_found() {
     let dir = TempDir::new().unwrap();
     let key = Fernet::generate_key();
@@ -360,7 +413,9 @@ async fn settings_get_returns_etag() {
 
 /// Env isolation: these tests mutate process-global `XDG_CONFIG_HOME`/DB env
 /// vars, so they must not race each other (or `add_collection_item_respects_
-/// mutate_rate_limit`) across the parallel test threads.
+/// mutate_rate_limit` — losing `NETRAIL_DB_PATH` mid-run makes its store fall
+/// back to the real user DB and die with a locked/busy HISTORY_DISABLED 400)
+/// across the parallel test threads.
 #[tokio::test]
 #[serial_test::serial]
 async fn settings_put_with_stale_if_match_returns_settings_conflict() {

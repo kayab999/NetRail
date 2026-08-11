@@ -1,0 +1,35 @@
+{
+  "description": "Canonical settings directivity model shared by the Rust and Python stacks (A-11). Reference semantics: Rust SharedStore::ensure — the history store is rebound lazily whenever (history_enabled, history_encrypt) differ from the mode it was opened with; reopen runs the TTL purge; open failure degrades to history-disabled; a disabled store is rebound to None. Python get_store() must exhibit the same effective-mode transitions. Each vector: apply 'from' mode, then 'put' mode, then observe /api/health history fields (or SharedStore behavior on the Rust side).",
+  "settings_transitions": [
+    {
+      "id": "t_stable_no_rebind",
+      "from": {"history_enabled": true, "history_encrypt": true},
+      "put": {"history_enabled": true, "history_encrypt": true},
+      "expect": {"enabled": true, "encrypt_requested": true, "encryption_state": "encrypted"}
+    },
+    {
+      "id": "t_disable_closes",
+      "from": {"history_enabled": true, "history_encrypt": true},
+      "put": {"history_enabled": false, "history_encrypt": true},
+      "expect": {"enabled": false}
+    },
+    {
+      "id": "t_enable_reopens",
+      "from": {"history_enabled": false, "history_encrypt": false},
+      "put": {"history_enabled": true, "history_encrypt": true},
+      "expect": {"enabled": true, "encrypt_requested": true, "encryption_state": "encrypted"}
+    },
+    {
+      "id": "t_encrypt_to_plaintext",
+      "from": {"history_enabled": true, "history_encrypt": true},
+      "put": {"history_enabled": true, "history_encrypt": false},
+      "expect": {"enabled": true, "encrypt_requested": false, "encryption_state": "plaintext"}
+    },
+    {
+      "id": "t_plaintext_to_encrypt",
+      "from": {"history_enabled": true, "history_encrypt": false},
+      "put": {"history_enabled": true, "history_encrypt": true},
+      "expect": {"enabled": true, "encrypt_requested": true, "encryption_state": "encrypted"}
+    }
+  ]
+}

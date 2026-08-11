@@ -116,6 +116,33 @@ def test_collections_export(temp_store):
     assert "url,title" in csv_data
 
 
+def test_foreign_keys_stay_on_after_reconnect_and_cascade_on_delete(tmp_path, monkeypatch):
+    monkeypatch.setenv("NETRAIL_DB_PATH", str(tmp_path / "n.db"))
+
+    first = connect()
+    assert first.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+    first.close()
+
+    second = connect()
+    assert second.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+
+    second.execute(
+        "INSERT INTO queries (query_text_enc, mode, backends_used) VALUES (?, 'web', '[\"ddgs\"]')",
+        (b"enc",),
+    )
+    query_id = second.execute("SELECT last_insert_rowid()").fetchone()[0]
+    second.execute(
+        "INSERT INTO results (query_id, url, url_norm, title_enc, source_backend) "
+        "VALUES (?, 'https://a.test', 'https://a.test', ?, 'ddgs')",
+        (query_id, b"enc"),
+    )
+    second.execute("DELETE FROM queries")
+    orphans = second.execute("SELECT COUNT(*) FROM results").fetchone()[0]
+    assert orphans == 0
+
+    second.close()
+
+
 def test_purge_expired(temp_store):
     temp_store.record_search("old query", "web", ["ddgs"], [])
     purged = temp_store.purge_expired(0)

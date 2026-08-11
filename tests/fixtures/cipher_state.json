@@ -1,0 +1,29 @@
+{
+  "description": "Canonical history cipher-state mapping shared by the Rust and Python stacks. Derived from the existing /api/health flags (encrypt_requested, encryption_active): encrypted = requested AND active; degraded = requested AND NOT active; plaintext = NOT requested (active key is irrelevant when encryption is not requested). The field is inserted unconditionally on /api/health, even when history is disabled.",
+  "cipher_state": [
+    {
+      "id": "t_encrypted",
+      "encrypt_requested": true,
+      "encryption_active": true,
+      "expect": "encrypted"
+    },
+    {
+      "id": "t_degraded_no_key",
+      "encrypt_requested": true,
+      "encryption_active": false,
+      "expect": "degraded"
+    },
+    {
+      "id": "t_plaintext_disabled",
+      "encrypt_requested": false,
+      "encryption_active": false,
+      "expect": "plaintext"
+    },
+    {
+      "id": "t_plaintext_orphan_key",
+      "encrypt_requested": false,
+      "encryption_active": true,
+      "expect": "plaintext"
+    }
+  ]
+}

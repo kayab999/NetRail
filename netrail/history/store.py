@@ -15,6 +15,7 @@ from netrail.history.crypto import decrypt_text, encrypt_text, ensure_encryption
 from netrail.history.db import connect, normalize_url
 
 _store: "HistoryStore | None" = None
+_store_mode: tuple[bool, bool] = (False, False)
 _encryption_degraded: bool = False
 
 
@@ -384,31 +385,47 @@ class HistoryStore:
 
 
 def get_store() -> HistoryStore | None:
-    """Return history store. Encrypt-on with no key degrades to plaintext (Rust parity)."""
-    global _store, _encryption_degraded
+    """Return history store. Encrypt-on with no key degrades to plaintext (Rust parity).
+
+    The store is rebound like Rust SharedStore::ensure whenever
+    (history_enabled, history_encrypt) differ from the mode it was opened
+    with (A-11 directivity): a closed store opens on re-enable, an enabled
+    store closes on disable, and flipping history_encrypt reopens with the
+    new mode and re-runs the TTL purge.
+    """
+    global _store, _store_mode, _encryption_degraded
     settings = load_settings()
-    if not settings.get("history_enabled", True):
+    enabled = bool(settings.get("history_enabled", True))
+    want_encrypt = bool(settings.get("history_encrypt", True))
+    mode = (enabled, want_encrypt)
+
+    if not enabled:
+        _store = None
+        _store_mode = (False, False)
         return None
 
-    if _store is None:
-        want_encrypt = bool(settings.get("history_encrypt", True))
-        if want_encrypt:
-            ensure_encryption_key()
-        from netrail.history.crypto import encryption_active
+    if _store is not None and _store_mode == mode:
+        return _store
 
-        use_encrypt = want_encrypt and encryption_active()
-        if want_encrypt and not encryption_active():
-            _encryption_degraded = True
-        try:
-            _store = HistoryStore(connect(), encrypt=use_encrypt)
-        except sqlite3.Error:
-            # Chaos-safe: an unwritable/unopenable database must degrade to
-            # history-disabled (typed HISTORY_DISABLED) instead of a 500 (Rust
-            # SharedStore parity); the next call retries the open.
-            _store = None
-            return None
-        ttl = int(settings.get("history_ttl_days", 90))
-        _store.purge_expired(ttl)
+    _store = None
+    _store_mode = mode
+    if want_encrypt:
+        ensure_encryption_key()
+    from netrail.history.crypto import encryption_active
+
+    use_encrypt = want_encrypt and encryption_active()
+    if want_encrypt and not encryption_active():
+        _encryption_degraded = True
+    try:
+        _store = HistoryStore(connect(), encrypt=use_encrypt)
+    except sqlite3.Error:
+        # Chaos-safe: an unwritable/unopenable database must degrade to
+        # history-disabled (typed HISTORY_DISABLED) instead of a 500 (Rust
+        # SharedStore parity); the next call retries the open.
+        _store = None
+        return None
+    ttl = int(settings.get("history_ttl_days", 90))
+    _store.purge_expired(ttl)
 
     return _store
 
@@ -419,6 +436,7 @@ def init_history_on_startup() -> None:
 
 def reset_store_for_tests() -> None:
     """Test helper: drop singleton so next get_store() re-evaluates settings/key."""
-    global _store, _encryption_degraded
+    global _store, _store_mode, _encryption_degraded
     _store = None
+    _store_mode = (False, False)
     _encryption_degraded = False

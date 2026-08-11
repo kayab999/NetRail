@@ -23,6 +23,21 @@ pub fn encryption_degraded_message() -> &'static str {
     ENCRYPTION_DEGRADED_MESSAGE
 }
 
+/// Canonical history cipher state from the /api/health flags.
+///
+/// encrypted: encryption requested and a key is active.
+/// degraded: encryption requested but no key is available (keyring/headless).
+/// plaintext: encryption not requested (an orphan key is ignored).
+pub fn cipher_state(encrypt_requested: bool, encryption_active: bool) -> &'static str {
+    if encrypt_requested && encryption_active {
+        return "encrypted";
+    }
+    if encrypt_requested {
+        return "degraded";
+    }
+    "plaintext"
+}
+
 fn mark_encryption_degraded() {
     ENCRYPTION_DEGRADED.store(true, Ordering::Relaxed);
 }
@@ -119,6 +134,10 @@ pub fn connect() -> Result<Connection, rusqlite::Error> {
     }
     let conn = Connection::open(path)?;
     conn.busy_timeout(std::time::Duration::from_secs(5))?;
+    // QA-02/A-01: FK enforcement is per-connection (SQLite defaults OFF), so
+    // the migrate-time `PRAGMA foreign_keys = ON` alone is insufficient — a
+    // reconnect on a pre-existing v1 DB would silently orphan results/visits.
+    conn.execute_batch("PRAGMA foreign_keys = ON;")?;
     let _mode: String = conn.query_row("PRAGMA journal_mode = WAL", [], |row| row.get(0))?;
     migrate(&conn)?;
     Ok(conn)
@@ -703,6 +722,100 @@ mod tests {
     }
 
     #[test]
+    fn cipher_state_golden_fixture() {
+        let raw = include_str!("../../../tests/fixtures/cipher_state.json");
+        let fixture: serde_json::Value =
+            serde_json::from_str(raw).expect("cipher_state.json must parse");
+        for vector in fixture["cipher_state"].as_array().expect("cipher_state array") {
+            let id = vector["id"].as_str().unwrap_or("?");
+            let requested = vector["encrypt_requested"].as_bool().expect("flag");
+            let active = vector["encryption_active"].as_bool().expect("flag");
+            let expect = vector["expect"].as_str().expect("expect");
+            assert_eq!(
+                cipher_state(requested, active),
+                expect,
+                "cipher_state {id}"
+            );
+        }
+    }
+
+    #[test]
+    fn cipher_state_mapping_is_exhaustive() {
+        assert_eq!(cipher_state(true, true), "encrypted");
+        assert_eq!(cipher_state(true, false), "degraded");
+        assert_eq!(cipher_state(false, true), "plaintext");
+        assert_eq!(cipher_state(false, false), "plaintext");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn settings_directivity_golden_fixture() {
+        let raw = include_str!("../../../tests/fixtures/settings_transitions.json");
+        let fixture: serde_json::Value = serde_json::from_str(raw).unwrap();
+        let dir = TempDir::new().unwrap();
+        let key = Fernet::generate_key();
+        std::env::set_var("NETRAIL_DB_KEY", &key);
+        std::env::set_var(
+            "NETRAIL_DB_PATH",
+            dir.path().join("netrail.db").to_string_lossy().as_ref(),
+        );
+
+        for vector in fixture["settings_transitions"].as_array().unwrap() {
+            let id = vector["id"].as_str().unwrap_or("?");
+            let frm = &vector["from"];
+            let put = &vector["put"];
+            let expect = &vector["expect"];
+            let expect_enabled = expect["enabled"].as_bool().unwrap();
+
+            let from_settings = Settings {
+                history_enabled: frm["history_enabled"].as_bool().unwrap(),
+                history_encrypt: frm["history_encrypt"].as_bool().unwrap(),
+                ..Settings::default()
+            };
+            let put_settings = Settings {
+                history_enabled: put["history_enabled"].as_bool().unwrap(),
+                history_encrypt: put["history_encrypt"].as_bool().unwrap(),
+                ..Settings::default()
+            };
+
+            let shared = SharedStore::new(&from_settings);
+            let got = shared.with_store(&put_settings, |store| {
+                let want_encrypt = put["history_encrypt"].as_bool().unwrap();
+                store
+                    .record_search("directivity probe", "web", &[], &[])
+                    .expect("record");
+                let blob: Vec<u8> = store
+                    .conn
+                    .query_row(
+                        "SELECT query_text_enc FROM queries ORDER BY id DESC LIMIT 1",
+                        [],
+                        |row| row.get(0),
+                    )
+                    .expect("read blob");
+                if want_encrypt {
+                    assert!(
+                        String::from_utf8_lossy(&blob).starts_with("gAAAA"),
+                        "{id}: expected Fernet blob after rebind"
+                    );
+                } else {
+                    assert_eq!(
+                        blob, b"directivity probe",
+                        "{id}: expected plaintext blob after rebind"
+                    );
+                }
+            });
+            assert_eq!(
+                got.is_some(),
+                expect_enabled,
+                "{id}: rebind opened/closed store"
+            );
+        }
+
+        std::env::remove_var("NETRAIL_DB_KEY");
+        std::env::remove_var("NETRAIL_DB_PATH");
+    }
+
+    #[test]
     #[serial_test::serial]
     fn decrypts_python_fernet_blob() {
         let dir = TempDir::new().unwrap();
@@ -911,6 +1024,59 @@ conn.commit()
         assert_eq!(mode, "wal");
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
         assert_eq!(version, SCHEMA_VERSION);
+        std::env::remove_var("NETRAIL_DB_PATH");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn foreign_keys_stay_on_after_reconnect_and_cascade_on_delete() {
+        let dir = TempDir::new().unwrap();
+        std::env::set_var(
+            "NETRAIL_DB_PATH",
+            dir.path().join("n.db").to_string_lossy().as_ref(),
+        );
+
+        // First connect migrates and stamps user_version = 1 (A-01: the
+        // migrate-time pragma was the only FK enablement before).
+        {
+            let conn = connect().unwrap();
+            let fk: i64 = conn
+                .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
+                .unwrap();
+            assert_eq!(fk, 1);
+        }
+
+        // Simulate a pre-existing v1 database: the reconnect must re-enable
+        // FK enforcement, so a DELETE FROM queries cascades to results.
+        let conn = connect().unwrap();
+        let fk: i64 = conn
+            .query_row("PRAGMA foreign_keys", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(fk, 1);
+
+        conn.execute(
+            "INSERT INTO queries (query_text_enc, mode, backends_used) VALUES (?1, 'web', '[\"ddgs\"]')",
+            params![b"enc".to_vec()],
+        )
+        .unwrap();
+        let query_id = conn.last_insert_rowid();
+        conn.execute(
+            "INSERT INTO results (query_id, url, url_norm, title_enc, source_backend) VALUES (?1, 'https://a.test', 'https://a.test', ?2, 'ddgs')",
+            params![query_id, b"enc".to_vec()],
+        )
+        .unwrap();
+        conn.execute("DELETE FROM queries WHERE id = ?1", params![query_id])
+            .unwrap();
+
+        let orphans: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM results WHERE query_id = ?1",
+                params![query_id],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(orphans, 0, "FK cascade must remove orphaned results");
+
         std::env::remove_var("NETRAIL_DB_PATH");
     }
 
