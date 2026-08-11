@@ -155,7 +155,7 @@ Release CI: `.github/workflows/release.yml` on tag `v*` (clippy + tests + AppIma
 | R1 | No API auth on localhost | Design v1; optional token later |
 | R2 | DDGS HTML scrape / captcha | External; Wikipedia + recovery UX |
 | R3 | Dual Rust/Python surface | **Policy:** Rust production; Python compatibility (see DISTRIBUTION) |
-| R4 | Public GitHub Latest may lag | ✅ **v1.6.5 is Latest** (release-readiness RC, 2026-08-10; published Latest still v1.6.4 until RC lands) |
+| R4 | Public GitHub Latest may lag | ✅ **v1.6.6 is Latest** (release-readiness RC, 2026-08-10; published Latest still v1.6.4 until RC lands) |
 | R5 | Draft releases v1.2.0/1.2.1 | ✅ Removed after 1.2.2 publish |
 | R6 | Local AppImage needs patchelf | Documented; CI **requires** AppImage on release |
 | R7 | Image CDN privacy (Images mode) | `no-referrer` set; still loads remote URLs |

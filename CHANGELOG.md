@@ -2,6 +2,22 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.6.6] — 2026-08-11 (security convergence)
+
+### Added
+
+- **A-05 (P1, fetch-time backend SSRF guard):** backend URLs are re-validated at **fetch time** in both stacks, not only at save time. SearXNG search + health checks resolve the hostname and block per-IP: cloud metadata (IPv4 `169.254.169.254` / IPv6 `fd00:ec2::254`) and link-local/unspecified always; other non-public targets only under `strict_backend_urls`; empty resolution fails closed (`BACKEND_URL_DNS_UNRESOLVABLE`). IP-literal backends skip resolution. Injectable resolver in both stacks for tests; shared fixture gains 8 `resolved_ips` vectors (27→35 backend vectors).
+- **A-06 (cipher-state model):** `/api/health` now reports a canonical `history.encryption_state` (`encrypted` / `degraded` / `plaintext`) derived from the existing `encrypt_requested`/`encryption_active` flags, pinned by the shared fixture `tests/fixtures/cipher_state.json` (gold tests both stacks + live parity smoke assertion).
+- **A-11 (settings directivity):** `get_store()` (Python) now rebinds the history store whenever `(history_enabled, history_encrypt)` change — matching Rust `SharedStore::ensure` (effective mode follows the latest settings at every access; re-open runs the TTL purge; open failure degrades to `HISTORY_DISABLED`). Shared fixture `tests/fixtures/settings_transitions.json` (6 vectors) consumed by gold tests on both stacks, plus a live directivity probe in `parity-api-smoke.sh` (encrypted ↔ plaintext ↔ disabled, all reflected immediately).
+- **UX:** footer shows a live encryption-state chip (`history: encrypted` / `degraded (unencrypted session)` / `plaintext`); the static "encrypted history" footer claim was removed because it was misleading while degraded. Banner behavior unchanged.
+- **A-10 fixture extension:** URL-policy fixture grown to 84 open_url + 35 backend_url vectors (CGNAT/TEST-NET/benchmark/protocol IPv4 forms, full RFC 4291 reserved-v6 table, NAT64, ORCHIDv2); differential probe corpus extended with the v6 host pool (12 160 URLs, `code_diff=0`, known DNS-stage residual pinned at 50).
+
+### Fixed
+
+- **A-10 (canonical IPv6 semantics, Python 3.13):** `is_site_local` is the deprecated RFC 3513 site-local (`fec0::/10`), not ULA; `3fff::/20` and `2001::/23` boundary bit-math corrected on both stacks; Rust `Ipv4Addr::is_shared()` is unstable (E0658) and was replaced with an explicit CGNAT check (`100.64.0.0/10`).
+- **A-05:** Rust fetch fanout (SearXNG health/search via reqwest) had no SSRF guard — now gated by the same fetch-time validation; `BackendKind::Searxng` carries its strict flag.
+- **Dead code:** removed write-only `_encryption_enabled` global (`netrail/history/crypto.py`); clippy `-D warnings` clean.
+
 ## [1.6.5] — 2026-08-10 (release-readiness)
 
 ### Fixed
@@ -12,6 +28,9 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 - **QA-10 (P2):** fanout deadline symmetry — Rust `JoinSet`+`select!` on shared deadline (partial results kept), Python explicit cancel + bounded wait; 5-property contract holds both stacks.
 - **QA-12 (P3):** cross-doc link-integrity checker (40 docs, relative targets + GitHub anchors), CI-gated; one genuine cross-doc rot found and repaired during shakedown.
 - **QA-06 (P3):** prose-version drifts closed to SSOT (5 docs) + `check-versions.sh` prose spot-lists.
+- **QA-13 (P0, found by the QA-05 webview gate):** CSP `upgrade-insecure-requests` removed from both stacks (Rust + Python) — WebKitGTK (the desktop webview, 2.50.4) upgrades **loopback** http subresources to https and the plain-http UI server then fails every static/API asset: white UI, no browser detection, dead eval bridges. Chromium exempts localhost; WebKit does not. Proven by a 4-variant A/B in a real WebKit engine (with/without the directive). PET trick regression pin in `tests/test_api.py`; parity test updated.
+- **QA-14 (P3):** `api_error_codes` integration flake (QA-02 family) — `empty_collection_name…` and `missing_history_entry…` raced `NETRAIL_DB_PATH`/`NETRAIL_DB_KEY` against the serialized env group; a stolen var mid-run made `HistoryStore::open` fall back to the real user DB and die with `locked`/`disk I/O error` → spurious `HISTORY_DISABLED` 400. Both now `#[serial_test::serial]` (family of 5). Was 1/6–1/15 of suite runs; after fix: 0/200 binary + 0/8 full-suite + full gate green. Diagnostic instrumentation (reverted) proved the exact sqlite errors and paths.
+- **QA-15 (P3):** `scripts/build-desktop-linux.sh` SHA256SUMS idempotency — `sha256sum *` self-referenced the pre-existing checksum file, so re-runs always failed verification; glob now excludes it.
 
 ### Added
 

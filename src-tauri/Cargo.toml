@@ -1,6 +1,6 @@
 [package]
 name = "netrail"
-version = "1.6.5"
+version = "1.6.6"
 default-run = "netrail"
 description = "Local research console — search first, browse second"
 authors = ["Carlos Hernández <https://github.com/kayab999>"]
