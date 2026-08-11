@@ -16,7 +16,7 @@ use types::{SearchMode, SearchResponse, SearchResult};
 #[derive(Debug, Clone)]
 pub enum BackendKind {
     Ddgs,
-    Searxng(String),
+    Searxng(String, bool),
     Brave(Option<String>),
 }
 
@@ -24,7 +24,7 @@ impl BackendKind {
     pub fn name(&self) -> &str {
         match self {
             Self::Ddgs => "ddgs",
-            Self::Searxng(_) => "searxng",
+            Self::Searxng(_, _) => "searxng",
             Self::Brave(_) => "brave",
         }
     }
@@ -32,7 +32,7 @@ impl BackendKind {
     pub fn provenance(&self) -> String {
         match self {
             Self::Ddgs => ddgs::PROVENANCE.into(),
-            Self::Searxng(url) => format!("SearXNG @ {url} (your instance, your engines)"),
+            Self::Searxng(url, _) => format!("SearXNG @ {url} (your instance, your engines)"),
             Self::Brave(_) => brave::PROVENANCE.into(),
         }
     }
@@ -40,7 +40,9 @@ impl BackendKind {
     pub fn is_available(&self, client: &Client) -> bool {
         match self {
             Self::Ddgs => DdgsBackend::new(client.clone()).is_available(),
-            Self::Searxng(url) => SearxngBackend::new(client.clone(), url).is_available(),
+            Self::Searxng(url, strict) => {
+                SearxngBackend::new(client.clone(), url, *strict).is_available()
+            }
             Self::Brave(env) => {
                 BraveBackend::from_env_var(client.clone(), env.as_deref()).is_some()
             }
@@ -56,8 +58,8 @@ impl BackendKind {
     ) -> NetRailResult<Vec<SearchResult>> {
         match self {
             Self::Ddgs => DdgsBackend::new(client.clone()).search(query, mode, max_results).await,
-            Self::Searxng(url) => {
-                SearxngBackend::new(client.clone(), url)
+            Self::Searxng(url, strict) => {
+                SearxngBackend::new(client.clone(), url, *strict)
                     .search(query, mode, max_results)
                     .await
             }
@@ -96,7 +98,10 @@ pub fn get_enabled_backends(settings: &Settings, client: &Client) -> Vec<Backend
                 "searxng" => {
                     if let Some(url) = entry.url.clone().or_else(|| settings.searxng_url.clone())
                     {
-                        backends.push(BackendKind::Searxng(url));
+                        backends.push(BackendKind::Searxng(
+                            url,
+                            settings.strict_backend_urls,
+                        ));
                     }
                 }
                 "brave"
@@ -120,7 +125,10 @@ pub fn get_enabled_backends(settings: &Settings, client: &Client) -> Vec<Backend
         match backend_id.as_str() {
             "ddgs" if settings.ddgs_enabled => backends.push(BackendKind::Ddgs),
             "searxng" if settings.searxng_url.is_some() => {
-                backends.push(BackendKind::Searxng(settings.searxng_url.clone().unwrap()));
+                backends.push(BackendKind::Searxng(
+                    settings.searxng_url.clone().unwrap(),
+                    settings.strict_backend_urls,
+                ));
             }
             "brave" if settings.brave_enabled && BraveBackend::from_env(client.clone()).is_some()
             =>
@@ -139,11 +147,11 @@ pub fn get_enabled_backends(settings: &Settings, client: &Client) -> Vec<Backend
 async fn backend_available(backend: &BackendKind, client: &Client) -> bool {
     match backend {
         BackendKind::Ddgs => DdgsBackend::new(client.clone()).is_available(),
-        BackendKind::Searxng(url) => {
+        BackendKind::Searxng(url, strict) => {
             if let Some(cached) = searxng::cached_health(url) {
                 return cached;
             }
-            searxng::check_health(client, url).await
+            searxng::check_health(client, url, *strict).await
         }
         BackendKind::Brave(env) => {
             BraveBackend::from_env_var(client.clone(), env.as_deref()).is_some()

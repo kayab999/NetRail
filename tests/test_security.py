@@ -4,6 +4,7 @@ import pytest
 
 from netrail.errors import NetRailError
 from netrail.security import (
+    check_backend_fetch_url,
     check_resolved_host,
     pin_open_host,
     resolve_host_ips,
@@ -285,3 +286,114 @@ def test_property_parse_browser_ipv4_never_panics_on_arbitrary_input():
     ]
     for inp in fuzz_inputs:
         _ = _parse_browser_ipv4(inp)
+
+
+# --- A-05: backend fetch-time SSRF guard (check_backend_fetch_url) ---
+
+def _backend_ips(*addrs: str):
+    return lambda _h: [ipaddress.ip_address(a) for a in addrs]
+
+
+def _expect_backend_code(url: str, code: str, *, strict: bool = False, ips=None):
+    with pytest.raises(NetRailError) as exc:
+        check_backend_fetch_url(url, strict=strict, resolver=ips)
+    assert exc.value.code == code
+
+
+def test_backend_fetch_blocks_metadata_resolution_non_strict():
+    _expect_backend_code(
+        "http://company-searxng.internal:8080",
+        "BACKEND_URL_CLOUD_METADATA",
+        ips=_backend_ips("169.254.169.254"),
+    )
+
+
+def test_backend_fetch_blocks_aws_metadata_ipv6_resolution():
+    _expect_backend_code(
+        "http://searxng.example:8080",
+        "BACKEND_URL_CLOUD_METADATA",
+        ips=_backend_ips("fd00:ec2::254"),
+    )
+
+
+def test_backend_fetch_blocks_link_local_resolution_non_strict():
+    _expect_backend_code(
+        "http://searxng.lan:8080",
+        "BACKEND_URL_LINK_LOCAL",
+        ips=_backend_ips("fe80::1"),
+    )
+
+
+def test_backend_fetch_blocks_unspecified_resolution_non_strict():
+    _expect_backend_code(
+        "http://searxng.lan:8080",
+        "BACKEND_URL_LINK_LOCAL",
+        ips=_backend_ips("::"),
+    )
+
+
+def test_backend_fetch_fails_closed_on_empty_resolution():
+    _expect_backend_code(
+        "http://gone.invalid:8080",
+        "BACKEND_URL_DNS_UNRESOLVABLE",
+        ips=_backend_ips(),
+    )
+
+
+def test_backend_fetch_blocks_private_resolution_strict_only():
+    _expect_backend_code(
+        "http://searxng.lan:8080",
+        "BACKEND_URL_STRICT_PRIVATE",
+        strict=True,
+        ips=_backend_ips("10.0.0.5"),
+    )
+    assert (
+        check_backend_fetch_url(
+            "http://searxng.lan:8080", strict=False, resolver=_backend_ips("10.0.0.5")
+        )
+        == "http://searxng.lan:8080"
+    )
+
+
+def test_backend_fetch_allows_public_resolution_strict():
+    assert (
+        check_backend_fetch_url(
+            "http://searxng.example.com:8080",
+            strict=True,
+            resolver=_backend_ips("93.184.216.34"),
+        )
+        == "http://searxng.example.com:8080"
+    )
+
+
+def test_backend_fetch_never_resolves_ip_literals():
+    check_backend_fetch_url(
+        "http://127.0.0.1:8080",
+        resolver=lambda h: pytest.fail(f"resolver must not run for literals, got {h}"),
+    )
+    check_backend_fetch_url(
+        "http://[fd00::1]:8080",
+        resolver=lambda h: pytest.fail(f"resolver must not run for literals, got {h}"),
+    )
+
+
+def test_backend_fetch_blocked_hostname_search_raises():
+    from netrail.backends.searxng import SearXNGBackend
+
+    backend = SearXNGBackend(
+        "http://company-searxng.internal:8080",
+        resolver=_backend_ips("169.254.169.254"),
+    )
+    with pytest.raises(NetRailError) as exc:
+        backend.search("q", "web", 10)
+    assert exc.value.code == "BACKEND_URL_CLOUD_METADATA"
+
+
+def test_backend_fetch_blocked_hostname_is_available_false():
+    from netrail.backends.searxng import SearXNGBackend
+
+    backend = SearXNGBackend(
+        "http://company-searxng.internal:8080",
+        resolver=_backend_ips("169.254.169.254"),
+    )
+    assert backend.is_available() is False

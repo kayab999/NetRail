@@ -197,6 +197,26 @@ fn is_non_public_v4(ip: Ipv4Addr) -> bool {
         || ip.is_broadcast()
         || ip.is_multicast()
         || matches!(ip.octets()[0], 0 | 240..=255)
+        || is_canonical_reserved_v4(ip)
+}
+
+/// Canonical URL-policy table (A-10, 2026-08-10): IANA-registered ranges that
+/// are never globally routable and therefore never valid browser targets, kept
+/// explicit so Rust and Python classify identically regardless of stdlib
+/// version (`Ipv4Addr::is_shared` is unstable, so CGNAT is explicit here;
+/// Python's `is_private`/`is_reserved` only gained these ranges in 3.13):
+///   * 100.64.0.0/10         CGNAT/shared (RFC 6598) — explicit, is_shared unstable
+///   * 192.0.0.0/24          IETF protocol assignments
+///   * 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24  TEST-NET documentation
+///   * 198.18.0.0/15         benchmarking (RFC 2544)
+fn is_canonical_reserved_v4(ip: Ipv4Addr) -> bool {
+    let o = ip.octets();
+    (o[0] == 100 && (o[1] & 0xC0) == 0x40) // 100.64.0.0/10
+        || (o[0] == 192 && o[1] == 0 && o[2] == 0)
+        || (o[0] == 192 && o[1] == 0 && o[2] == 2)
+        || (o[0] == 198 && (o[1] & 0xfe) == 0x12)
+        || (o[0] == 198 && o[1] == 51 && o[2] == 100)
+        || (o[0] == 203 && o[1] == 0 && o[2] == 113)
 }
 
 fn is_non_public_v6(ip: Ipv6Addr) -> bool {
@@ -205,9 +225,47 @@ fn is_non_public_v6(ip: Ipv6Addr) -> bool {
         || ip.is_unicast_link_local()
         || ip.is_unique_local()
         || ip.is_multicast()
-        // RFC 6052 local-use NAT64 prefix 64:ff9b:1::/48 — not a decodable
-        // /96 form, and Python blocks it as reserved/private; keep parity.
-        || (ip.segments()[0] == 0x0064 && ip.segments()[1] == 0xff9b && ip.segments()[2] == 0x0001)
+        || is_canonical_reserved_v6(ip)
+}
+
+/// Canonical URL-policy IPv6 table (A-10, 2026-08-10): the union of Python's
+/// `is_reserved` (RFC 4291 "reserved for future use" routing-type schema)
+/// and `is_private` (IANA ipv6-special-registry "not globally reachable"):
+/// RFC 4291: `::/8`, `100::/8`, `200::/7`, `400::/6`, `800::/5`, `1000::/4`,
+/// `4000::/3`, `6000::/3`, `8000::/3`, `a000::/3`, `c000::/3`, `e000::/4`,
+/// `f000::/5`, `f800::/6`, `fe00::/9`.
+/// IANA private: 2001::/23 except ORCHIDv2 2001:20::/28, 2001:db8::/32,
+/// 2002::/16, 3fff::/20, 100::/64, fc00::/7.
+/// `::/8` also covers the NAT64 well-known prefix 64:ff9b::/96; embedded-IPv4
+/// forms are unmapped to their IPv4 before this check (SSRF), so only
+/// non-decodable members land here.
+fn is_canonical_reserved_v6(ip: Ipv6Addr) -> bool {
+    let b0 = ip.octets()[0];
+    let s = ip.segments();
+    let iana_private = (s[0] == 0x2001
+        && !(s[1] == 0x0020 && (s[2] & 0xF000) == 0) // ORCHIDv2 2001:20::/28
+        && s[1] <= 0x007F) // 2001::/23
+        || (s[0] == 0x2001 && s[1] == 0x0DB8) // 2001:db8::/32 (0x0DB8 > 0x007F)
+        || (s[0] == 0x2002) // 2002::/16
+        || (s[0] == 0x3FFF && s[1] <= 0x0FFF) // 3fff::/20
+        || (s[0] == 0x0100 && s[1] == 0 && s[2] == 0 && s[3] == 0) // 100::/64
+        || (s[0] & 0xFE00) == 0xFC00; // fc00::/7
+    let rfc4291 = b0 == 0x00 // ::/8
+        || b0 == 0x01 // 100::/8
+        || (b0 & 0xFE) == 0x02 // 200::/7
+        || (b0 & 0xFC) == 0x04 // 400::/6
+        || (b0 & 0xF8) == 0x08 // 800::/5
+        || (b0 & 0xF0) == 0x10 // 1000::/4
+        || (b0 & 0xE0) == 0x40 // 4000::/3
+        || (b0 & 0xE0) == 0x60 // 6000::/3
+        || (b0 & 0xE0) == 0x80 // 8000::/3
+        || (b0 & 0xE0) == 0xA0 // a000::/3
+        || (b0 & 0xE0) == 0xC0 // c000::/3 (fc00::/7 ULA matched by iana_private)
+        || (b0 & 0xF0) == 0xE0 // e000::/4
+        || (b0 & 0xF8) == 0xF0 // f000::/5
+        || (b0 & 0xFC) == 0xF8 // f800::/6
+        || (b0 == 0xFE && ip.octets()[1] < 0x80); // fe00::/9 (fe80::/10 link-local first)
+    iana_private || rfc4291
 }
 
 fn is_cloud_metadata_host(host: &str) -> bool {
@@ -383,6 +441,50 @@ pub fn validate_backend_url_with_options(raw: &str, strict: bool) -> NetRailResu
     Ok(trimmed.to_string())
 }
 
+/// A-05: fetch-time re-validation of a backend URL (parity anchor for the
+/// Python `check_backend_fetch_url`). Hostnames that will actually be fetched
+/// are resolved and the `block_backend_host` rules are applied to every
+/// resolved address: cloud metadata and unspecified/link-local are always
+/// rejected, other non-public ranges only when `strict`. Empty resolution
+/// fails closed (BACKEND_URL_DNS_UNRESOLVABLE). IP-literal backends are
+/// classified without DNS. `resolve` is injectable for tests; the desktop
+/// shell validates config offline at save time and the SearXNG fetch lives in
+/// the Python process, so this helper is the semantic anchor any future Rust
+/// fetch surface must call before issuing a request.
+pub fn check_backend_fetch_url(
+    raw: &str,
+    strict: bool,
+    resolve: impl Fn(&str) -> Vec<IpAddr>,
+) -> NetRailResult<()> {
+    let trimmed = raw.trim();
+    let parsed = Url::parse(trimmed).map_err(|_| NetRailError::InvalidBackendUrl {
+        code: "BACKEND_URL_INVALID",
+        message: "Invalid backend URL.".into(),
+    })?;
+    let host = parsed.host_str().ok_or_else(|| NetRailError::InvalidBackendUrl {
+        code: "BACKEND_URL_INVALID",
+        message: "Invalid backend URL.".into(),
+    })?;
+    let host_lower = host.trim_end_matches('.').to_lowercase();
+
+    block_backend_host(&host_lower, strict)?;
+    if parse_host_ip(&host_lower).is_some() {
+        return Ok(());
+    }
+
+    let ips = resolve(&host_lower);
+    if ips.is_empty() {
+        return Err(NetRailError::InvalidBackendUrl {
+            code: "BACKEND_URL_DNS_UNRESOLVABLE",
+            message: format!("Backend host {host} does not resolve."),
+        });
+    }
+    for ip in ips {
+        block_backend_host(&ip.to_string(), strict)?;
+    }
+    Ok(())
+}
+
 fn block_backend_host(host: &str, strict: bool) -> NetRailResult<()> {
     let host_lower = host.trim_end_matches('.').to_lowercase();
 
@@ -455,7 +557,11 @@ fn is_cloud_metadata_ip(ip: IpAddr) -> bool {
     }
 }
 
-pub const CSP: &str = "default-src 'self'; script-src 'self' 'sha256-aN9klVksJOk4OThOcI2OMlo7DsWPc+W7cPY4E+ODbD8='; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; upgrade-insecure-requests; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+// No `upgrade-insecure-requests`: WebKitGTK (the desktop webview) upgrades
+// http subresources to https — including 127.0.0.1 — and a loopback-only,
+// plain-http server then fails every static/API subresource load (white UI).
+// Chromium exempts localhost; WebKit does not (verified on 2.50.4, 2026-08-10).
+pub const CSP: &str = "default-src 'self'; script-src 'self' 'sha256-aN9klVksJOk4OThOcI2OMlo7DsWPc+W7cPY4E+ODbD8='; style-src 'self' 'unsafe-inline'; img-src 'self' https: data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
 
 #[cfg(test)]
 mod tests {
@@ -592,18 +698,30 @@ mod tests {
             let url = case["url"].as_str().expect("url");
             let expect = case["expect"].as_str().expect("expect");
             let strict = case["strict"].as_bool().unwrap_or(false);
+            let check = |u: &str, s: bool| -> NetRailResult<String> {
+                if let Some(ips) = case["resolved_ips"].as_array() {
+                    let addr: Vec<IpAddr> = ips
+                        .iter()
+                        .map(|v| v.as_str().expect("resolved_ips string").parse().expect("ip"))
+                        .collect();
+                    // A-05 fetch-time vectors: the hostname resolves to the
+                    // fixture addresses; classification must match save-time.
+                    check_backend_fetch_url(u, s, |_h| addr.clone())?;
+                    Ok(u.to_string())
+                } else {
+                    validate_backend_url_with_options(u, s)
+                }
+            };
             match expect {
                 "allow" => {
-                    let got = validate_backend_url_with_options(url, strict).unwrap_or_else(|e| {
-                        panic!("backend_url {id}: expected allow, got {e:?}")
-                    });
+                    let got = check(url, strict)
+                        .unwrap_or_else(|e| panic!("backend_url {id}: expected allow, got {e:?}"));
                     if let Some(normalized) = case["normalized"].as_str() {
                         assert_eq!(got, normalized, "backend_url {id}");
                     }
                 }
                 "block" => {
-                    let err = validate_backend_url_with_options(url, strict)
-                        .expect_err(&format!("backend_url {id}"));
+                    let err = check(url, strict).expect_err(&format!("backend_url {id}"));
                     if let Some(code) = case["code"].as_str() {
                         assert_eq!(err.error_code(), code, "backend_url {id}");
                     }
@@ -619,6 +737,63 @@ mod tests {
             validate_backend_url("http://127.0.0.1:8080").unwrap(),
             "http://127.0.0.1:8080"
         );
+    }
+
+    #[test]
+    fn backend_fetch_blocks_metadata_resolution_non_strict() {
+        let fake = |_: &str| vec![IpAddr::V4(Ipv4Addr::new(169, 254, 169, 254))];
+        let err = check_backend_fetch_url("http://company-searxng.internal:8080", false, fake)
+            .unwrap_err();
+        assert_eq!(err.error_code(), "BACKEND_URL_CLOUD_METADATA");
+    }
+
+    #[test]
+    fn backend_fetch_blocks_aws_metadata_ipv6_resolution() {
+        let fake = |_: &str| vec!["fd00:ec2::254".parse().unwrap()];
+        let err = check_backend_fetch_url("http://searxng.example:8080", false, fake).unwrap_err();
+        assert_eq!(err.error_code(), "BACKEND_URL_CLOUD_METADATA");
+    }
+
+    #[test]
+    fn backend_fetch_blocks_link_local_resolution_non_strict() {
+        let fake = |_: &str| vec!["fe80::1".parse().unwrap()];
+        let err = check_backend_fetch_url("http://searxng.lan:8080", false, fake).unwrap_err();
+        assert_eq!(err.error_code(), "BACKEND_URL_LINK_LOCAL");
+    }
+
+    #[test]
+    fn backend_fetch_blocks_unspecified_resolution_non_strict() {
+        let fake = |_: &str| vec![IpAddr::V6(Ipv6Addr::UNSPECIFIED)];
+        let err = check_backend_fetch_url("http://searxng.lan:8080", false, fake).unwrap_err();
+        assert_eq!(err.error_code(), "BACKEND_URL_LINK_LOCAL");
+    }
+
+    #[test]
+    fn backend_fetch_fails_closed_on_empty_resolution() {
+        let fake = |_: &str| vec![];
+        let err = check_backend_fetch_url("http://gone.invalid:8080", false, fake).unwrap_err();
+        assert_eq!(err.error_code(), "BACKEND_URL_DNS_UNRESOLVABLE");
+    }
+
+    #[test]
+    fn backend_fetch_blocks_private_resolution_strict_only() {
+        let fake = |_: &str| vec![IpAddr::V4(Ipv4Addr::new(10, 0, 0, 5))];
+        let err = check_backend_fetch_url("http://searxng.lan:8080", true, fake).unwrap_err();
+        assert_eq!(err.error_code(), "BACKEND_URL_STRICT_PRIVATE");
+        assert!(check_backend_fetch_url("http://searxng.lan:8080", false, fake).is_ok());
+    }
+
+    #[test]
+    fn backend_fetch_allows_public_resolution_strict() {
+        let fake = |_: &str| vec![IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34))];
+        assert!(check_backend_fetch_url("http://searxng.example.com:8080", true, fake).is_ok());
+    }
+
+    #[test]
+    fn backend_fetch_never_resolves_ip_literals() {
+        let fake = |h: &str| panic!("resolver must not run for IP literals, got {h}");
+        assert!(check_backend_fetch_url("http://127.0.0.1:8080", false, fake).is_ok());
+        assert!(check_backend_fetch_url("http://[fd00::1]:8080", false, fake).is_ok());
     }
 
     #[test]

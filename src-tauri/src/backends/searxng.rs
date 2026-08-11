@@ -1,5 +1,6 @@
 use super::types::{SearchMode, SearchResult};
 use crate::error::{NetRailError, NetRailResult};
+use crate::security::{check_backend_fetch_url, resolve_host_ips};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use reqwest::Client;
@@ -45,8 +46,13 @@ pub fn record_health(base_url: &str, ok: bool) {
     );
 }
 
-pub async fn check_health(client: &Client, base_url: &str) -> bool {
+pub async fn check_health(client: &Client, base_url: &str, strict: bool) -> bool {
     if !url_format_ok(base_url) {
+        return false;
+    }
+    // Fetch-time SSRF guard (A-05), same rules as Python's check_backend_fetch_url.
+    if check_backend_fetch_url(base_url, strict, resolve_host_ips).is_err() {
+        record_health(base_url, false);
         return false;
     }
     let url = format!("{}/healthz", base_url.trim_end_matches('/'));
@@ -62,13 +68,15 @@ pub async fn check_health(client: &Client, base_url: &str) -> bool {
 
 pub struct SearxngBackend {
     base_url: String,
+    strict: bool,
     client: Client,
 }
 
 impl SearxngBackend {
-    pub fn new(client: Client, base_url: &str) -> Self {
+    pub fn new(client: Client, base_url: &str, strict: bool) -> Self {
         Self {
             base_url: base_url.trim_end_matches('/').to_string(),
+            strict,
             client,
         }
     }
@@ -98,6 +106,9 @@ impl SearxngBackend {
         mode: SearchMode,
         max_results: usize,
     ) -> NetRailResult<Vec<SearchResult>> {
+        // Fetch-time SSRF guard (A-05): hostnames are resolved and classified
+        // with the same rules as save-time validation before any request.
+        check_backend_fetch_url(&self.base_url, self.strict, resolve_host_ips)?;
         let category = match mode {
             SearchMode::Images => "images",
             SearchMode::Web => "general",

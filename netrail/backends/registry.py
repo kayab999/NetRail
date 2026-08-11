@@ -10,7 +10,7 @@ from netrail.backends.merge import dedupe_results, merge_fanout
 from netrail.backends.searxng import SearXNGBackend
 from netrail.backends.types import SearchMode, SearchResponse, SearchResult
 from netrail.backends.wikipedia import WikipediaBackend
-from netrail.config import load_settings
+from netrail.config import load_settings, strict_backend_urls_from_env
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +20,9 @@ FANOUT_DEADLINE_SECONDS = 20.0
 
 def get_enabled_backends(settings: dict[str, Any] | None = None) -> list[Any]:
     settings = settings or load_settings()
+    # Backend fetches are made by this process: strict_backend_urls applies at
+    # fetch time too (A-05), same value as the save-time default.
+    strict_backend = bool(settings.get("strict_backend_urls")) or strict_backend_urls_from_env()
     backends: list[Any] = []
 
     structured = settings.get("backends") or []
@@ -33,7 +36,7 @@ def get_enabled_backends(settings: dict[str, Any] | None = None) -> list[Any]:
             elif backend_id == "searxng":
                 url = entry.get("url") or settings.get("searxng_url")
                 if url:
-                    backends.append(SearXNGBackend(url))
+                    backends.append(SearXNGBackend(url, strict=strict_backend))
             elif backend_id == "brave":
                 brave = BraveBackend.from_env_var(entry.get("api_key_env"))
                 if brave:
@@ -48,7 +51,7 @@ def get_enabled_backends(settings: dict[str, Any] | None = None) -> list[Any]:
         elif backend_id == "searxng":
             url = settings.get("searxng_url")
             if url:
-                backends.append(SearXNGBackend(url))
+                backends.append(SearXNGBackend(url, strict=strict_backend))
         elif backend_id == "brave" and settings.get("brave_enabled"):
             brave = BraveBackend.from_env()
             if brave:

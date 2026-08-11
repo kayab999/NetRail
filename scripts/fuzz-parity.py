@@ -53,7 +53,23 @@ HOST_POOL = [
     "münchen.de", "xn--mnchen-3ya.de", "%B4", "%89y", "084", "0", "01",
     "256.1.1.1", "1.256.1.1", "1.1.256.1", "1.1.1.256", "255.255.255.255",
     "240.0.0.1", "169.254.169.254", "10.0.0.1", "192.168.1.1", "172.16.0.1",
+    "100.64.0.1", "100.127.255.254", "192.0.0.9", "192.0.2.1", "198.18.0.1",
+    "198.19.255.255", "198.51.100.1", "203.0.113.1",
     "nip.io", "xip.io", "sslip.io", "localtest.me", "metadata.google.internal",
+]
+# IPv6 literal hosts (bracket form) covering the canonical A-10 policy:
+# embedded-IPv4 decodes, NAT64, RFC 4291 reserved blocks, IANA special-registry
+# "not globally reachable", ORCHIDv2 exception, ULA/link-local/multicast, GUA.
+V6_HOST_POOL = [
+    "[::1]", "[::]", "[::ffff:127.0.0.1]", "[::ffff:c0a8:101]",
+    "[::127.0.0.1]", "[::1.1.1.1]", "[::1234:5678]",
+    "[64:ff9b::101:101]", "[64:ff9b::7f00:1]", "[64:ff9b:1::7f00:1]",
+    "[64:ff9b:2::1]", "[100::1]", "[100:1::1]", "[200::1]", "[400::1]",
+    "[800::1]", "[1000::1]", "[4000::1]", "[5f00::1]", "[6000::1]",
+    "[8000::1]", "[a000::1]", "[c000::1]", "[e000::1]", "[f000::1]",
+    "[f800::1]", "[fe00::1]", "[fec0::1]", "[fe80::1]", "[fc00::1]",
+    "[fd00::1]", "[ff00::1]", "[2001::1]", "[2001:10::1]", "[2001:20::1]",
+    "[2001:db8::1]", "[2001:4860::1]", "[2002::1]", "[3fff::1]", "[3000::1]",
 ]
 PORT_TAILS = ["", ":1", ":80", ":443", ":65535", ":65536", ":99999", ":0",
               ":8080.", ".:80", ".", ":80:9604", ":8080:43279", ":1:0",
@@ -114,9 +130,9 @@ def spawn_server(binary: str, base: str) -> subprocess.Popen:
 def build_corpus(seed: int, min_urls: int, full: bool) -> list[str]:
     rng = random.Random(seed)
     urls: set[str] = set()
-    pool = list(HOST_POOL)
+    pool = list(HOST_POOL) + V6_HOST_POOL
     if full:
-        pool = HOST_POOL
+        pool = list(HOST_POOL) + V6_HOST_POOL
     for h in pool:
         for pt in PORT_TAILS:
             for s in SCHEMES:

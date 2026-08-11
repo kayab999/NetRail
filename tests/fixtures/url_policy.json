@@ -338,6 +338,182 @@
       "url": "http://%B4.3511866278/x",
       "expect": "block",
       "code": "OPEN_URL_INVALID"
+    },
+    {
+      "id": "reject_cgnat_shared",
+      "url": "http://100.64.0.1/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_protocol_assignment_v4",
+      "url": "http://192.0.0.9/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_test_net_1",
+      "url": "http://192.0.2.1/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_benchmark_v4",
+      "url": "http://198.18.0.1/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_test_net_2",
+      "url": "http://198.51.100.1/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_test_net_3",
+      "url": "http://203.0.113.1/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_discard_8",
+      "url": "http://[100::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_reserved_200_7",
+      "url": "http://[200::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_reserved_4000_3",
+      "url": "http://[4000::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_reserved_5f00",
+      "url": "http://[5f00::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_fe00_9",
+      "url": "http://[fe00::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_nat64_nondecodable",
+      "url": "http://[64:ff9b:2::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "allow_public_v6_gua",
+      "url": "http://[2001:4860::1]/",
+      "expect": "allow"
+    },
+    {
+      "id": "reject_6to4_v6",
+      "url": "http://[2002::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_3fff_doc_v6",
+      "url": "http://[3fff::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_iana_2001_23",
+      "url": "http://[2001:10::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_doc_2001db8",
+      "url": "http://[2001:db8::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "allow_orchidv2_v6",
+      "url": "http://[2001:20::1]/",
+      "expect": "allow"
+    },
+    {
+      "id": "allow_fec0_sitelocal",
+      "url": "http://[fec0::1]/",
+      "expect": "allow"
+    },
+    {
+      "id": "reject_v6_reserved_400_6",
+      "url": "http://[400::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_reserved_800_5",
+      "url": "http://[800::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_reserved_1000_4",
+      "url": "http://[1000::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_reserved_6000_3",
+      "url": "http://[6000::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_reserved_8000_3",
+      "url": "http://[8000::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_reserved_a000_3",
+      "url": "http://[a000::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_reserved_c000_3",
+      "url": "http://[c000::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_reserved_e000_4",
+      "url": "http://[e000::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_reserved_f000_5",
+      "url": "http://[f000::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "reject_v6_reserved_f800_6",
+      "url": "http://[f800::1]/",
+      "expect": "block",
+      "code": "OPEN_URL_PRIVATE"
+    },
+    {
+      "id": "allow_ipv4_compatible_numeric_public",
+      "url": "http://[::1234:5678]/",
+      "expect": "allow"
     }
   ],
   "backend_url": [
@@ -471,6 +647,94 @@
       "expect": "block",
       "code": "BACKEND_URL_STRICT_PRIVATE",
       "strict": true
+    },
+    {
+      "id": "reject_strict_cgnat_backend",
+      "url": "http://100.64.0.1:8080",
+      "expect": "block",
+      "code": "BACKEND_URL_STRICT_PRIVATE",
+      "strict": true
+    },
+    {
+      "id": "reject_strict_docnet_backend",
+      "url": "http://192.0.2.1:8080",
+      "expect": "block",
+      "code": "BACKEND_URL_STRICT_PRIVATE",
+      "strict": true
+    },
+    {
+      "id": "reject_strict_v6_reserved_backend",
+      "url": "http://[100::1]:8080",
+      "expect": "block",
+      "code": "BACKEND_URL_STRICT_PRIVATE",
+      "strict": true
+    },
+    {
+      "id": "allow_nonstrict_cgnat_backend",
+      "url": "http://100.64.0.1:8080",
+      "expect": "allow"
+    },
+    {
+      "id": "allow_nonstrict_docnet_backend",
+      "url": "http://192.0.2.1:8080",
+      "expect": "allow"
+    },
+    {
+      "id": "reject_resolved_metadata_backend",
+      "url": "http://company-searxng.internal:8080",
+      "expect": "block",
+      "code": "BACKEND_URL_CLOUD_METADATA",
+      "resolved_ips": ["169.254.169.254"],
+      "note": "Fetch-time (A-05): a hostname resolving to the cloud metadata IP is blocked even non-strict."
+    },
+    {
+      "id": "reject_resolved_aws_metadata_backend",
+      "url": "http://searxng.example:8080",
+      "expect": "block",
+      "code": "BACKEND_URL_CLOUD_METADATA",
+      "resolved_ips": ["fd00:ec2::254"]
+    },
+    {
+      "id": "reject_resolved_link_local_backend",
+      "url": "http://searxng.lan:8080",
+      "expect": "block",
+      "code": "BACKEND_URL_LINK_LOCAL",
+      "resolved_ips": ["fe80::1"]
+    },
+    {
+      "id": "reject_resolved_unspecified_backend",
+      "url": "http://searxng.lan:8080",
+      "expect": "block",
+      "code": "BACKEND_URL_LINK_LOCAL",
+      "resolved_ips": ["::"]
+    },
+    {
+      "id": "reject_resolved_unresolvable_backend",
+      "url": "http://gone.invalid:8080",
+      "expect": "block",
+      "code": "BACKEND_URL_DNS_UNRESOLVABLE",
+      "resolved_ips": []
+    },
+    {
+      "id": "reject_resolved_private_strict_backend",
+      "url": "http://searxng.lan:8080",
+      "expect": "block",
+      "code": "BACKEND_URL_STRICT_PRIVATE",
+      "strict": true,
+      "resolved_ips": ["10.0.0.5"]
+    },
+    {
+      "id": "allow_resolved_private_nonstrict_backend",
+      "url": "http://searxng.lan:8080",
+      "expect": "allow",
+      "resolved_ips": ["10.0.0.5"]
+    },
+    {
+      "id": "allow_resolved_public_strict_backend",
+      "url": "http://searxng.example.com:8080",
+      "expect": "allow",
+      "strict": true,
+      "resolved_ips": ["93.184.216.34"]
     }
   ]
 }

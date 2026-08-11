@@ -242,17 +242,83 @@ def _is_cloud_metadata_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> 
     return False
 
 
+# Canonical URL-policy tables (A-10, 2026-08-10): IANA-registered ranges that
+# are never globally routable, kept explicit so Python and Rust classify
+# identically regardless of stdlib version (Python's `is_private`/`is_reserved`
+# only grew CGNAT + these ranges in 3.13; the tables below are what keeps
+# parity on older Pythons). Mirrors src-tauri/src/security.rs
+# `is_canonical_reserved_v4/v6`. Embedded-IPv4 IPv6 forms are unmapped to
+# their IPv4 before classification (`_effective_ip`), so only non-decodable
+# NAT64/prefix members land in the v6 table.
+_V4_NON_PUBLIC_NETS = [
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("100.64.0.0/10"),  # CGNAT/shared (RFC 6598)
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.0.0.0/24"),  # IETF protocol assignments
+    ipaddress.ip_network("192.0.2.0/24"),  # TEST-NET-1 (documentation)
+    ipaddress.ip_network("192.168.0.0/16"),
+    ipaddress.ip_network("198.18.0.0/15"),  # benchmarking (RFC 2544)
+    ipaddress.ip_network("198.51.100.0/24"),  # TEST-NET-2
+    ipaddress.ip_network("203.0.113.0/24"),  # TEST-NET-3
+]
+_V6_NON_PUBLIC_NETS = [
+    # RFC 4291 "reserved for future use" routing-type schema — the exact range
+    # set Python `is_reserved` uses (verified vs ipaddress 3.13.3). `::/8`
+    # covers the NAT64 well-known prefix 64:ff9b::/96 and deprecated
+    # IPv4-compatible remnants; embedded-IPv4 forms are unmapped first.
+    ipaddress.ip_network("::/8"),
+    ipaddress.ip_network("100::/8"),
+    ipaddress.ip_network("200::/7"),
+    ipaddress.ip_network("400::/6"),
+    ipaddress.ip_network("800::/5"),
+    ipaddress.ip_network("1000::/4"),
+    ipaddress.ip_network("4000::/3"),
+    ipaddress.ip_network("6000::/3"),
+    ipaddress.ip_network("8000::/3"),
+    ipaddress.ip_network("a000::/3"),
+    ipaddress.ip_network("c000::/3"),
+    ipaddress.ip_network("e000::/4"),
+    ipaddress.ip_network("f000::/5"),
+    ipaddress.ip_network("f800::/6"),
+    ipaddress.ip_network("fe00::/9"),
+]
+
+
 def _is_non_public_v4(ip: ipaddress.IPv4Address) -> bool:
     return bool(
         ip.is_loopback
         or ip.is_unspecified
         or ip.is_link_local
-        or ip.is_private
         or ip.is_multicast
-        or ip.is_reserved
         or int(ip) < 0x01000000  # 0.0.0.0/8 "this network" (Rust parity)
-        or int(ip) >= 0xF0000000  # 240.0.0.0/4 class E
+        or int(ip) >= 0xF0000000  # 240.0.0.0/4 class E + 255.255.255.255
+        or any(ip in net for net in _V4_NON_PUBLIC_NETS)
     )
+
+
+def _is_v6_iana_private(ip: ipaddress.IPv6Address) -> bool:
+    """IANA ipv6-special-registry ranges that are "not globally reachable"
+    (Python 3.13 `is_private` semantics, kept explicit for stdlib parity):
+    2001::/23 except ORCHIDv2 2001:20::/28, 2001:db8::/32, 2002::/16,
+    3fff::/20, 100::/64, fc00::/7."""
+    b = ip.packed
+    if b[0] == 0x20 and b[1] == 0x01:
+        if (b[2] & 0xFE) == 0:
+            if b[2] == 0x00 and (b[3] & 0xF0) == 0x20:  # ORCHIDv2 2001:20::/28
+                return False
+            return True
+        if b[2] == 0x0D and b[3] == 0xB8:  # 2001:db8::/32
+            return True
+        return False
+    if b[0] == 0x20 and b[1] == 0x02:  # 2002::/16
+        return True
+    if b[0] == 0x3F and b[1] == 0xFF and (b[2] & 0xF0) == 0:  # 3fff::/20
+        return True
+    if b[0] == 0x01 and b[1] == 0x00 and b[2] == 0 and b[3] == 0:  # 100::/64
+        return True
+    if (b[0] & 0xFE) == 0xFC:  # fc00::/7 ULA
+        return True
+    return False
 
 
 def _is_non_public_v6(ip: ipaddress.IPv6Address) -> bool:
@@ -260,9 +326,11 @@ def _is_non_public_v6(ip: ipaddress.IPv6Address) -> bool:
         ip.is_loopback
         or ip.is_unspecified
         or ip.is_link_local
-        or ip.is_private  # ULA
+        or ip.is_private  # IANA special-registry "not globally reachable"
+        or ip.is_reserved  # RFC 4291 routing-type reserved schema
         or ip.is_multicast
-        or ip.is_reserved
+        or _is_v6_iana_private(ip)
+        or any(ip in net for net in _V6_NON_PUBLIC_NETS)
     )
 
 
@@ -487,6 +555,65 @@ def _block_backend_host(host: str, *, strict: bool = False) -> None:
                 "BACKEND_URL_STRICT_PRIVATE",
                 "strict_backend_urls rejects private/loopback backend hosts.",
             )
+
+
+def check_backend_fetch_url(
+    url: str,
+    *,
+    strict: bool = False,
+    resolver: Callable[[str], list[ipaddress.IPv4Address | ipaddress.IPv6Address]] | None = None,
+) -> str:
+    """Fetch-time re-validation of a backend URL (A-05). Hostnames that will
+    actually be fetched are resolved and the save-time rules are applied to
+    every resolved address: cloud metadata and unspecified/link-local are
+    always rejected, other non-public ranges only in strict mode. Empty
+    resolution fails closed (BACKEND_URL_DNS_UNRESOLVABLE). Literal-IP
+    backends are classified without DNS. ``resolver`` is injectable for tests
+    (no DNS in tests).
+    """
+    trimmed = url.strip()
+    try:
+        parsed = urlparse(trimmed)
+    except ValueError:
+        raise NetRailError("BACKEND_URL_INVALID", "Invalid backend URL.") from None
+
+    host = _normalize_host(parsed.hostname or "")
+    if not host:
+        raise NetRailError("BACKEND_URL_INVALID", "Invalid backend URL.")
+
+    _block_backend_host(host, strict=strict)
+    if _parse_host_ip(host) is not None:
+        return trimmed
+
+    ips = (resolver or resolve_host_ips)(host)
+    if not ips:
+        raise NetRailError(
+            "BACKEND_URL_DNS_UNRESOLVABLE",
+            f"Backend host {host} does not resolve.",
+        )
+    for raddr in ips:
+        raddr = _effective_ip(raddr)  # production resolver returns effective IPs; keep injected forms consistent
+        if _is_cloud_metadata_ip(raddr):
+            raise NetRailError(
+                "BACKEND_URL_CLOUD_METADATA",
+                "Cloud metadata addresses cannot be used as backend URLs.",
+            )
+        if raddr.is_unspecified or raddr.is_link_local:
+            raise NetRailError(
+                "BACKEND_URL_LINK_LOCAL",
+                "Unspecified or link-local addresses cannot be used as backend URLs.",
+            )
+        if strict:
+            if isinstance(raddr, ipaddress.IPv4Address):
+                private = _is_non_public_v4(raddr) or raddr.is_loopback
+            else:
+                private = _is_non_public_v6(raddr) or raddr.is_loopback
+            if private:
+                raise NetRailError(
+                    "BACKEND_URL_STRICT_PRIVATE",
+                    "strict_backend_urls rejects private/loopback backend hosts.",
+                )
+    return trimmed
 
 
 def validate_backend_url(url: str, *, strict: bool = False) -> str:
