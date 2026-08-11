@@ -109,8 +109,37 @@ assert h.get('status')=='ok'
 assert h.get('version')=='$EXPECTED_VERSION', h
 assert h.get('api_contract')=='1.4', h
 assert 'mutate_per_minute' in h.get('rate_limit', {}), h
-print('health ok', h['version'])
+# A-06: canonical cipher-state field must be present and consistent with the
+# /api/health flags (this run boots with NETRAIL_HISTORY_ENCRYPT=false).
+hist = h['history']
+state = hist['encryption_state']
+if hist['encrypt_requested'] and hist['encryption_active']:
+    expected = 'encrypted'
+elif hist['encrypt_requested']:
+    expected = 'degraded'
+else:
+    expected = 'plaintext'
+assert state == expected, (state, expected)
+assert state == 'plaintext', ('smoke boots plaintext', state)
+print('health ok', h['version'], '| cipher_state', state)
 "
+
+# CSP parity (A-18): the live Rust server must serve the exact CSP the Python
+# stack serves (incl. the inline splash failsafe script hash) and must never
+# restore `upgrade-insecure-requests` (WebKitGTK white-screen pin).
+"$PY" - <<'PYEOF'
+import sys, urllib.request
+sys.path.insert(0, ".")
+import netrail.main as main
+with urllib.request.urlopen("http://127.0.0.1:7421/") as resp:
+    rust_csp = resp.headers.get("Content-Security-Policy", "")
+assert rust_csp == main.CSP, (
+    "CSP parity divergence (A-18):\n"
+    f"rust={rust_csp!r}\npy  ={main.CSP!r}"
+)
+assert "upgrade-insecure-requests" not in rust_csp
+print("CSP parity OK (failsafe hash present, no upgrade-insecure-requests)")
+PYEOF
 
 probe POST /api/search '{"query":"","mode":"web"}' QUERY_INVALID 400
 
@@ -198,7 +227,10 @@ settings = {
 }
 fails = []
 for c in fixture["backend_url"]:
-    if c.get("strict"):
+    # Strict-mode vectors are covered by unit tests; resolved_ips vectors
+    # need a resolver injection the live API cannot provide (A-05 fetch-time
+    # guard is exercised by the gold tests on both stacks).
+    if c.get("strict") or "resolved_ips" in c:
         continue
     body = dict(settings, searxng_url=c["url"])
     status, resp = call("PUT", "/api/settings", body)
@@ -215,7 +247,10 @@ if fails:
     for f in fails:
         print("  ", f)
     sys.exit(1)
-print(f"fixture backend_url live vectors: {sum(1 for c in fixture['backend_url'] if not c.get('strict'))} passed")
+print(
+    "fixture backend_url live vectors: "
+    f"{sum(1 for c in fixture['backend_url'] if not c.get('strict') and 'resolved_ips' not in c)} passed"
+)
 PYEOF
 
 probe GET /api/docs/nope '' DOC_NOT_FOUND 404
@@ -289,5 +324,89 @@ assert rust == py, ("browser-discovery parity divergence (QA-09):\n"
                     f"py  ={json.dumps(py, indent=2)}")
 print(f"browser-discovery parity OK ({len(rust)} browsers)")
 PYEOF
+
+echo "== Cipher-state directivity live probe (A-11) =="
+DB_KEY="$("$PY" -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())')"
+kill -TERM "$(cat "$PID_FILE")" 2>/dev/null || true
+wait "$(cat "$PID_FILE")" 2>/dev/null || true
+# Reboot WITHOUT the NETRAIL_HISTORY_ENCRYPT pin so PUT /api/settings can flip
+# the effective cipher mode live (the store must rebind on every access).
+NETRAIL_DB_KEY="$DB_KEY" env -u NETRAIL_HISTORY_ENCRYPT "$BIN" >>"$LOG" 2>&1 &
+echo $! >"$PID_FILE"
+ready=0
+for _ in $(seq 1 40); do
+  if curl -sf http://127.0.0.1:7421/api/health >/dev/null 2>&1; then
+    ready=1
+    break
+  fi
+  sleep 0.25
+done
+[[ "$ready" -eq 1 ]] || { echo "timeout health (directivity boot)" >&2; exit 1; }
+
+"$PY" - <<'PYEOF'
+import json, urllib.request
+
+base = "http://127.0.0.1:7421"
+
+
+def call(method, path, data=None):
+    req = urllib.request.Request(
+        base + path,
+        data=json.dumps(data).encode() if data is not None else None,
+        headers={"Content-Type": "application/json"},
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.status, json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        return e.code, json.loads(e.read())
+
+
+settings = {
+    "search_strategy": "fanout",
+    "backend_order": ["ddgs"],
+    "ddgs_enabled": True,
+    "searxng_url": None,
+    "brave_enabled": False,
+    "private_mode": False,
+    "history_enabled": True,
+    "history_encrypt": True,
+    "history_ttl_days": 90,
+    "max_results": 25,
+}
+
+
+def state():
+    status, health = call("GET", "/api/health")
+    assert status == 200, (status, health)
+    return health["history"]
+
+
+# The binary boots unencrypted-requested only via PUT below, so establish the
+# plaintext mode first, then drive encrypted -> plaintext -> disabled -> enabled.
+assert call("PUT", "/api/settings", settings)[0] == 200
+assert state()["encrypt_requested"] is True
+assert state()["encryption_state"] == "encrypted"
+
+settings["history_encrypt"] = False
+assert call("PUT", "/api/settings", settings)[0] == 200
+assert state()["encryption_state"] == "plaintext", state()
+
+settings["history_encrypt"] = True
+assert call("PUT", "/api/settings", settings)[0] == 200
+assert state()["encryption_state"] == "encrypted", state()
+
+settings["history_enabled"] = False
+assert call("PUT", "/api/settings", settings)[0] == 200
+assert state()["enabled"] is False, state()
+
+settings["history_enabled"] = True
+assert call("PUT", "/api/settings", settings)[0] == 200
+assert state()["encryption_state"] == "encrypted", state()
+print("cipher-state directivity live probe: passed")
+PYEOF
+kill -TERM "$(cat "$PID_FILE")" 2>/dev/null || true
+wait "$(cat "$PID_FILE")" 2>/dev/null || true
 
 echo "PARITY SMOKE OK (Python + Rust $BIN)"
