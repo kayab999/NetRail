@@ -1,6 +1,6 @@
 # NetRail — Architecture & Lifecycle Blueprint
 
-> **Current product:** NetRail **1.6.5** (Rust-primary, dual-stack). Lifecycle tables below retain historical phase labels; rows marked ✅ are shipped. Open items are backlog, not “still in Phase 1.” Residual risk: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). Remaining-work plan: [docs/HANDOFF_OPENCODE_2026-08-02.md](HANDOFF_OPENCODE_2026-08-02.md) §9.
+> **Current product:** NetRail **1.6.6** (Rust-primary, dual-stack). Lifecycle tables below retain historical phase labels; rows marked ✅ are shipped. Open items are backlog, not “still in Phase 1.” Residual risk: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). Remaining-work plan: [docs/HANDOFF_OPENCODE_2026-08-02.md](HANDOFF_OPENCODE_2026-08-02.md) §9.
 
 ## Vision
 
@@ -201,6 +201,10 @@ Provenance is returned in API responses and shown in the UI. See [VIABILITY.md](
 ### Local history encryption (shipped)
 
 Optional Fernet field encryption for query text, titles, and snippets at `~/.local/share/netrail/netrail.db` (override `NETRAIL_DB_PATH`) with OS keyring or `NETRAIL_DB_KEY`. FTS5 tokens and visited/collection URLs remain plaintext by design — see [SECURITY.md](../SECURITY.md).
+
+**Cipher-state model (A-06):** the effective mode is one canonical state — `encrypted` (requested ∧ key active), `degraded` (requested ∧ no key), `plaintext` (not requested) — exposed as `history.encryption_state` on `/api/health` alongside the legacy `encrypt_requested`/`encryption_active`/`encryption_degraded` flags, and shown as a chip in the UI footer. Pinned by the shared fixture `tests/fixtures/cipher_state.json` (gold tests both stacks).
+
+**Settings directivity (A-11):** the store rebinds to the latest `(history_enabled, history_encrypt)` on every access — Rust `SharedStore::ensure` and the Python `get_store()` singleton now share the same semantics (re-open re-runs the TTL purge; open failure degrades to `HISTORY_DISABLED`; disable closes the store). Pinned by `tests/fixtures/settings_transitions.json`.
 
 ---
 

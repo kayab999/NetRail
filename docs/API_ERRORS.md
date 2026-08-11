@@ -47,6 +47,7 @@ The frontend branches on `code`; `detail` is human-readable. Rust (Tauri / `netr
 | `BACKEND_URL_DNS_REBINDING` | 400 | Rebinding hostname in backend URL |
 | `BACKEND_URL_CLOUD_METADATA` | 400 | 169.254.169.254, fd00:ec2::254, or known metadata hostnames |
 | `BACKEND_URL_LINK_LOCAL` | 400 | Link-local backend address |
+| `BACKEND_URL_DNS_UNRESOLVABLE` | 400 | Fetch-time guard: backend hostname resolved to no addresses (fails closed) |
 | `HISTORY_DISABLED` | 400 | History endpoints with history off |
 | `COLLECTION_NAME_INVALID` | 400 | Collection name empty or too long |
 | `COLLECTION_ITEM_TITLE_INVALID` | 400 | Item title empty or too long |
@@ -86,4 +87,4 @@ Python API tests: `tests/test_api.py`, `tests/test_security.py`
 
 ---
 
-*NetRail v1.2.2 — open-URL private/encoded IP codes included — maintained by [kayab999](https://github.com/kayab999)*
+*NetRail v1.6.5 — backend fetch-time codes included (A-05) — maintained by [kayab999](https://github.com/kayab999)*

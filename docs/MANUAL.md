@@ -26,7 +26,7 @@ The Tauri shell embeds the UI and starts the Rust API on `127.0.0.1:7421`. Use t
 On Ubuntu 24.04 without FUSE:
 
 ```bash
-APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.6.5_amd64.AppImage
+APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.6.6_amd64.AppImage
 ```
 
 ### Headless API (`netrail-api`)
@@ -192,6 +192,8 @@ NetRail is a **single-user localhost tool**. The API on `127.0.0.1:7421` has no 
 - FTS5 index tokens (SQLite cannot full-text search encrypted blobs)
 - Visited URLs and collection URLs (needed for re-open and deduplication)
 
+The footer shows the live encryption state as a chip: `history: encrypted`, `history: degraded (unencrypted session)`, or `history: plaintext` — the same value reported as `history.encryption_state` by `/api/health`. If you see `degraded`, set `NETRAIL_DB_KEY` (or fix the keyring) and restart; the security banner explains the same in amber.
+
 NetRail protects you from **cloud surveillance**, not from malware or untrusted local users. Use full-disk encryption (LUKS/FileVault) for that threat model.
 
 ### What stays local
@@ -226,6 +228,8 @@ All endpoints are local only.
 ```bash
 curl -s http://127.0.0.1:7421/api/health
 ```
+
+`history.encryption_state` reports the current history cipher mode (`encrypted` / `degraded` / `plaintext`); the UI footer shows the same state.
 
 ### Search
 

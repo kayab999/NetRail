@@ -4,7 +4,7 @@
 
 | Version | Supported |
 |---------|-----------|
-| 1.6.x   | Yes (current: 1.6.5) |
+| 1.6.x   | Yes (current: 1.6.6) |
 | 1.5.x   | Yes (security fixes) |
 | 1.4.x   | Yes (security fixes) |
 | 1.3.x   | Yes (security fixes) |
@@ -38,6 +38,8 @@ Backend HTTP clients **do not follow redirects**, so a SearXNG/Brave hop cannot 
 
 **Backend URLs** (e.g. self-hosted SearXNG) still **allow** localhost and private LAN hosts so operators can point at home instances. Cloud metadata and rebinding hostnames remain blocked.
 
+**Fetch-time re-validation (A-05):** save-time URL checks are reapplied at **fetch time** in both stacks. Each SearXNG search/health call resolves the hostname and evaluates every resolved IP: cloud metadata (`169.254.169.254`, `fd00:ec2::254`) and link-local/unspecified are always blocked; other private/loopback targets are blocked only under `strict_backend_urls`; an empty resolution fails closed (`BACKEND_URL_DNS_UNRESOLVABLE`). IP-literal backends never go through DNS. This closes the TOCTOU gap where a backend hostname could be re-pointed after validation.
+
 ## Read-only mode
 
 `NETRAIL_READONLY=1` rejects **administrative mutations** with HTTP `403 READONLY_MODE`:
@@ -59,6 +61,7 @@ Important tradeoff: when the token is set, `NETRAIL_INJECT_UI_TOKEN` (default **
 - Query text and result titles/snippets are encrypted with Fernet when a key is available (`NETRAIL_DB_KEY` or OS keyring).
 - The FTS5 index stores **plaintext tokens** of queries (required for local search).
 - If encryption is enabled but the keyring is unavailable (WSL, some window managers, headless), NetRail **degrades** to unencrypted history for the session and shows a **security banner** (Rust and Python). Prefer setting `NETRAIL_DB_KEY` in those environments.
+- `/api/health` reports a canonical `history.encryption_state` (`encrypted` / `degraded` / `plaintext`) derived from `encrypt_requested` + `encryption_active`; the web UI footer shows the same state as a chip. Setting changes via `PUT /api/settings` take effect immediately — the store rebinds on the next access (settings directivity, A-11).
 
 ## Reporting a vulnerability
 
