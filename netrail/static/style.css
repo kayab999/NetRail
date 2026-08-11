@@ -488,6 +488,30 @@ select {
   display: none;
 }
 
+.cipher-state {
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  line-height: 1.4;
+}
+
+.cipher-state--encrypted {
+  color: #7ee2a8;
+}
+
+.cipher-state--degraded {
+  color: #ffe08a;
+}
+
+.cipher-state--plaintext {
+  color: #f2a2a2;
+}
+
+.cipher-state.hidden {
+  display: none;
+}
+
 .result-card {
   /* Body always takes free space; actions stay content-sized.
      Without a thumb, two children map to 1fr | auto (not auto | 1fr | …),

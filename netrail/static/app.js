@@ -61,6 +61,13 @@ const els = {
   docBody: document.getElementById("doc-body"),
   docClose: document.getElementById("doc-close"),
   securityBanner: document.getElementById("security-banner"),
+  cipherState: document.getElementById("cipher-state"),
+};
+
+const CIPHER_STATE_LABEL = {
+  encrypted: "history: encrypted",
+  degraded: "history: degraded (unencrypted session)",
+  plaintext: "history: plaintext",
 };
 
 function showSecurityBanner(message) {
@@ -75,6 +82,21 @@ function applyHealthSecurity(health) {
     health.history?.encryption_warning ||
     null;
   if (message) showSecurityBanner(message);
+
+  if (!els.cipherState) return;
+  const state = health.history?.encryption_state;
+  if (!state || !CIPHER_STATE_LABEL[state]) {
+    els.cipherState.classList.add("hidden");
+    return;
+  }
+  els.cipherState.textContent = CIPHER_STATE_LABEL[state];
+  els.cipherState.classList.remove("hidden");
+  els.cipherState.classList.remove(
+    "cipher-state--encrypted",
+    "cipher-state--degraded",
+    "cipher-state--plaintext",
+  );
+  els.cipherState.classList.add(`cipher-state--${state}`);
 }
 
 function apiHeaders(extra = {}) {
