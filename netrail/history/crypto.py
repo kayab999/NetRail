@@ -100,16 +100,31 @@ def encrypt_text(value: str, *, force_plain: bool = False) -> bytes:
     return fernet.encrypt(value.encode("utf-8"))
 
 
+DECRYPTION_FAILED_MARKER = "[DECRYPTION_FAILED]"
+
+_FERNET_PREFIX = b"gAAAAA"
+
+
 def decrypt_text(blob: bytes | None, *, force_plain: bool = False) -> str:
     if blob is None:
         return ""
-    if force_plain:
+
+    # Every Fernet token is base64 and starts with the version byte 0x80,
+    # which encodes to the literal prefix "gAAAAA". Blobs without that prefix
+    # are plaintext rows and are passed through untouched. Blobs with it are
+    # encrypted rows: decrypt with the available key, and surface an explicit
+    # marker instead of base64 garbage when the key is missing, the mode is
+    # plaintext (force_plain), or the token cannot be opened (key mismatch /
+    # rotation / corruption).
+    if not blob.startswith(_FERNET_PREFIX):
         return blob.decode("utf-8")
+    if force_plain:
+        return DECRYPTION_FAILED_MARKER
 
     fernet = _load_fernet()
-    if fernet is None:
-        return blob.decode("utf-8")
-    try:
-        return fernet.decrypt(blob).decode("utf-8")
-    except Exception:  # noqa: BLE001 — legacy plaintext rows
-        return blob.decode("utf-8")
+    if fernet is not None:
+        try:
+            return fernet.decrypt(blob).decode("utf-8")
+        except Exception:  # noqa: BLE001 — wrong key or corrupt token
+            pass
+    return DECRYPTION_FAILED_MARKER
