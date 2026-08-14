@@ -20,6 +20,10 @@ def load_doc(slug: str) -> dict[str, str]:
         raise NetRailError("DOC_NOT_FOUND", f"document '{slug}'", status=404)
 
     path, title = mapping[slug]
+    if not path.is_file():
+        from netrail.errors import NetRailError
+
+        raise NetRailError("DOC_NOT_FOUND", f"document '{slug}'", status=404)
     markdown = path.read_text(encoding="utf-8")
     return {
         "slug": slug,

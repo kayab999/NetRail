@@ -1,12 +1,21 @@
 use fernet::Fernet;
 use std::env;
 
+fn usable_fernet_key(key: &str) -> bool {
+    Fernet::new(key).is_some()
+}
+
 pub fn encryption_active() -> bool {
-    get_key_material().is_some()
+    get_key_material()
+        .as_deref()
+        .is_some_and(usable_fernet_key)
 }
 
 pub fn ensure_encryption_key() -> bool {
-    get_key_material().is_some() || create_key().is_ok()
+    if let Some(key) = get_key_material() {
+        return usable_fernet_key(&key);
+    }
+    create_key().is_ok()
 }
 
 fn get_key_material() -> Option<String> {
@@ -136,6 +145,19 @@ mod tests {
         assert_eq!(decrypt_text(b"", true), "");
         let encrypted = encrypt_text("battery regulations EU", true);
         assert_eq!(decrypt_text(&encrypted, false), DECRYPTION_FAILED_MARKER);
+        std::env::remove_var("NETRAIL_DB_KEY");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn invalid_env_key_degrades_instead_of_panic() {
+        std::env::set_var("NETRAIL_DB_KEY", "not-a-valid-fernet-key");
+        assert!(!encryption_active());
+        let encrypted_looking = b"gAAAAAnot-a-valid-token";
+        assert_eq!(
+            decrypt_text(encrypted_looking, true),
+            DECRYPTION_FAILED_MARKER
+        );
         std::env::remove_var("NETRAIL_DB_KEY");
     }
 }

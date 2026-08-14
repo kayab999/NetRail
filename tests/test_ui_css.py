@@ -18,6 +18,7 @@ import re
 from pathlib import Path
 
 STYLE_CSS = Path(__file__).parent.parent / "netrail" / "static" / "style.css"
+APP_JS = Path(__file__).parent.parent / "netrail" / "static" / "app.js"
 
 RESULT_CARD_DESKTOP = "minmax(0, 1fr) auto"
 RESULT_CARD_IMAGE_DESKTOP = "96px minmax(0, 1fr) auto"
@@ -89,3 +90,16 @@ def test_mobile_collapses_result_card_to_single_column():
     blocks = _test_blocks()
     media = blocks[f"@media ({MOBILE_BREAKPOINT})"]
     assert _decl(media, "grid-template-columns") == "1fr"
+
+
+def test_search_and_open_do_not_put_settings():
+    """Readonly + mutate-budget contract: search/open must not PUT settings.
+
+    Settings persist on the browser/private control change handlers only.
+    """
+    src = APP_JS.read_text(encoding="utf-8")
+    assert "async function persistSettings()" in src
+    assert 'els.browserSelect.addEventListener("change", persistSettings)' in src
+    assert 'els.privateMode.addEventListener("change", persistSettings)' in src
+    # persistSettings() is the definition only — no call sites from search/open/donate.
+    assert src.count("persistSettings()") == 1

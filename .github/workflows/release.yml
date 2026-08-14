@@ -64,6 +64,8 @@ jobs:
           cargo audit
           cd ..
           npm audit --audit-level=high
+          python -m pip install -q pip-audit
+          python -m pip_audit -r requirements.txt
 
       - name: Build headless API binary
         working-directory: src-tauri

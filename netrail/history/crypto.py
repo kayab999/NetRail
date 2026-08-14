@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import TYPE_CHECKING
 
@@ -7,14 +8,29 @@ if TYPE_CHECKING:
     from cryptography.fernet import Fernet
 
 _fernet: "Fernet | None" = None
+_log = logging.getLogger(__name__)
+
+
+def _fernet_from_key_material(key_material: bytes) -> "Fernet | None":
+    """Build a Fernet instance or return None for unusable key material.
+
+    `cryptography.fernet.Fernet` raises ValueError on a non-32-byte urlsafe
+    key. Rust `Fernet::new` returns None in the same case; crashing here
+    turned `/api/health` into an untyped 500 when Docker/env had a placeholder.
+    """
+    from cryptography.fernet import Fernet
+
+    try:
+        return Fernet(key_material)
+    except (ValueError, TypeError) as exc:
+        _log.warning("history encryption key is not a valid Fernet key: %s", exc)
+        return None
 
 
 def _load_fernet() -> "Fernet | None":
     global _fernet
     if _fernet is not None:
         return _fernet
-
-    from cryptography.fernet import Fernet
 
     key_material: bytes | None = None
 
@@ -35,7 +51,7 @@ def _load_fernet() -> "Fernet | None":
     if key_material is None:
         return None
 
-    _fernet = Fernet(key_material)
+    _fernet = _fernet_from_key_material(key_material)
     return _fernet
 
 
@@ -46,16 +62,18 @@ def ensure_encryption_key() -> bool:
     from cryptography.fernet import Fernet
 
     if os.environ.get("NETRAIL_DB_KEY"):
-        _fernet = Fernet(os.environ["NETRAIL_DB_KEY"].encode("utf-8"))
-        return True
+        fernet = _fernet_from_key_material(os.environ["NETRAIL_DB_KEY"].encode("utf-8"))
+        _fernet = fernet
+        return fernet is not None
 
     try:
         import keyring
 
         stored = keyring.get_password("netrail", "db-key")
         if stored:
-            _fernet = Fernet(stored.encode("utf-8"))
-            return True
+            fernet = _fernet_from_key_material(stored.encode("utf-8"))
+            _fernet = fernet
+            return fernet is not None
 
         key = Fernet.generate_key()
         keyring.set_password("netrail", "db-key", key.decode("utf-8"))

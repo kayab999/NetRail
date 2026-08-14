@@ -10,6 +10,7 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 COPY src-tauri ./src-tauri
 COPY docs ./docs
+COPY README.md ./README.md
 COPY netrail/static ./netrail/static
 RUN cargo build --release --manifest-path src-tauri/Cargo.toml \
       --bin netrail-api --no-default-features

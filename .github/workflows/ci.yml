@@ -130,3 +130,4 @@ jobs:
           cargo audit --file src-tauri/Cargo.lock
           python -m pip install -q pip-audit
           python -m pip_audit -r requirements.txt
+          npm audit --audit-level=high

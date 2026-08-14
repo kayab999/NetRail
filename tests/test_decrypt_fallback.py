@@ -78,3 +78,15 @@ def test_empty_and_none(monkeypatch):
     _set_key(monkeypatch)
     assert decrypt_text(b"") == ""
     assert decrypt_text(None) == ""
+
+
+def test_invalid_env_key_does_not_raise(monkeypatch):
+    reset_for_tests()
+    monkeypatch.setenv("NETRAIL_DB_KEY", "not-a-valid-fernet-key")
+    from netrail.history.crypto import encryption_active, ensure_encryption_key
+
+    assert ensure_encryption_key() is False
+    assert encryption_active() is False
+    # A leftover encrypted blob still surfaces the marker, not a crash.
+    token = b"gAAAAA" + b"not-a-valid-token"
+    assert decrypt_text(token) == DECRYPTION_FAILED_MARKER

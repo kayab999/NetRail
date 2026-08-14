@@ -172,6 +172,12 @@ Preferences are stored locally at:
 | `browser_id` | Selected browser identifier | First detected browser |
 | `private_mode` | Open links in private/incognito | `false` |
 | `max_results` | Results per query (1–50) | `25` |
+| `search_strategy` | `fanout` (concurrent) or `fallback` (sequential) | `fanout` |
+| `searxng_url` | Self-hosted SearXNG base URL | unset |
+| `brave_enabled` | Enable Brave (key still via env only) | `false` |
+| `history_enabled` / `history_encrypt` | Local history + Fernet | `true` / `true` |
+| `history_ttl_days` | Auto-purge age | `90` |
+| `strict_backend_urls` | Reject private/loopback backend URLs | `false` |
 
 NetRail never syncs these settings to the cloud. There is no account system.
 
@@ -261,12 +267,21 @@ curl -s -X POST http://127.0.0.1:7421/api/open \
 curl -s http://127.0.0.1:7421/api/browsers
 ```
 
-### Read / write settings
+### List backends
 
 ```bash
-curl -s http://127.0.0.1:7421/api/settings
+curl -s http://127.0.0.1:7421/api/backends
+```
+
+### Read / write settings
+
+`GET /api/settings` returns a strong `ETag`. `PUT` accepts optional `If-Match`; a mismatch is `409 SETTINGS_CONFLICT`.
+
+```bash
+curl -s -D - http://127.0.0.1:7421/api/settings
 curl -s -X PUT http://127.0.0.1:7421/api/settings \
   -H 'Content-Type: application/json' \
+  -H 'If-Match: "etag-from-get"' \
   -d '{"browser_id":"brave-browser","private_mode":true,"max_results":25}'
 ```
 
@@ -289,6 +304,8 @@ curl -s -X POST http://127.0.0.1:7421/api/collections \
 curl -s -X POST http://127.0.0.1:7421/api/collections/1/items \
   -H 'Content-Type: application/json' \
   -d '{"url":"https://example.com","title":"Example","notes":"why it matters"}'
+curl -s 'http://127.0.0.1:7421/api/collections/1/export?fmt=json'
+curl -s 'http://127.0.0.1:7421/api/collections/1/export?fmt=csv'
 ```
 
 ### In-app documentation

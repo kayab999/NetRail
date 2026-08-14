@@ -558,7 +558,6 @@ function buildResultCard(item, index) {
 }
 
 async function openLink(url, resultId = null, forcePrivate = null) {
-  await persistSettings();
   const privateMode = forcePrivate ?? state.settings.private_mode;
   const result = await api("/api/open", {
     method: "POST",
@@ -585,7 +584,6 @@ async function runSearch() {
   showState("Searching…", `Fanout query for “${escapeHtml(query)}”. Your machine, your request.`);
 
   try {
-    await persistSettings();
     const payload = await api("/api/search", {
       method: "POST",
       body: JSON.stringify({
@@ -837,7 +835,6 @@ async function openDocView(slug) {
 async function openDonate() {
   closeHelpMenu();
   try {
-    await persistSettings();
     await api("/api/open", {
       method: "POST",
       body: JSON.stringify({

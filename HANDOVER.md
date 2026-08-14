@@ -3,12 +3,12 @@
 | Field | Value |
 |-------|--------|
 | **Product** | Local privacy-first research console for Linux |
-| **Version** | **1.6.4** (`scripts/check-versions.sh`) |
+| **Version** | **1.6.6** (`scripts/check-versions.sh`) |
 | **Primary path** | Rust Axum API + Tauri 2 desktop; Python for Docker/Flatpak/tests |
 | **License** | AGPL-3.0 |
 | **Repo** | https://github.com/kayab999/NetRail |
 | **Freeze date** | 2026-07-12 (invariants; state refreshed 2026-08-02) |
-| **HEAD note** | **1.6.4 on main** (`a12dbed` packaging + `e436e6d` NR remediations; tag `v1.6.4` pushed). Audit NR-01..NR-14 closed (collection item rate-limit, concurrent-safe atomic settings, audit event, constant-time token, readonly docs, etc.). Official distribution: **AppImage-first** — [packaging/README.md](packaging/README.md), `scripts/build-desktop-linux.sh`. **GitHub Release assets for v1.6.4 not yet published** — Release CI run failed at AppImage/`linuxdeploy` (see handoff §9 NR-16). Prior: 1.6.3 SBOM-in-bundle + fixture growth + CSS guard; 1.6.2 chaos/load/bench; 1.6.1 DNS pin A15 + E2E. Full agent handoff: [docs/HANDOFF_OPENCODE_2026-08-02.md](docs/HANDOFF_OPENCODE_2026-08-02.md). Audits: [AUDIT_ARCH](docs/AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE](docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). |
+| **HEAD note** | **1.6.6 SSOT** (security convergence A-05/A-06/A-10/A-11 + decrypt-marker fix). Primary path: Rust Axum + Tauri; Python for Docker/Flatpak/tests. Official distribution: **AppImage-first** — [packaging/README.md](packaging/README.md). v1.6.4 assets were published (NR-16 closed). Full agent handoff snapshot: [docs/HANDOFF_OPENCODE_2026-08-02.md](docs/HANDOFF_OPENCODE_2026-08-02.md) (historical 1.6.4). Release notes: [docs/RELEASE_v1.6.6.md](docs/RELEASE_v1.6.6.md). Audits: [AUDIT_ARCH](docs/AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE](docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). |
 
 ---
 
@@ -67,7 +67,7 @@ Entry: netrail (Tauri) | netrail-api | python -m netrail | Docker/Flatpak
 5. **Partial fanout failure** → 200 + `errors[]`; total failure → `FANOUT_TOTAL_FAILURE` 502.
 6. **Empty web fanout** → Wikipedia fallback (both stacks).
 7. **History:** encrypt when key available; degrade + banner if keyring missing; FTS tokens plaintext (documented).
-8. **Rate limits:** 90 searches / 120 opens per minute (`RATE_LIMITED` 429); `NETRAIL_RATE_LIMIT=0` disables.
+8. **Rate limits:** 90 searches / 120 opens / 60 mutations per minute (`RATE_LIMITED` 429); `NETRAIL_RATE_LIMIT=0` disables.
 9. **Version SSOT:** package.json ≡ Cargo.toml ≡ tauri.conf ≡ `netrail/__init__.py` ≡ `config.rs` VERSION — enforced by `scripts/check-versions.sh`.
 
 **Primary risks:** privacy (queries leave machine to backends), local-process API abuse (no auth), history integrity/encryption degrade.  
@@ -152,14 +152,14 @@ Release CI: `.github/workflows/release.yml` on tag `v*` (clippy + tests + AppIma
 
 | ID | Residual | Why not fixed / next step |
 |----|----------|---------------------------|
-| R1 | No API auth on localhost | Design v1; optional token later |
+| R1 | Unauthenticated localhost API by default | Design v1; optional `NETRAIL_API_TOKEN` ships (Bearer / `X-NetRail-Token`) |
 | R2 | DDGS HTML scrape / captcha | External; Wikipedia + recovery UX |
 | R3 | Dual Rust/Python surface | **Policy:** Rust production; Python compatibility (see DISTRIBUTION) |
-| R4 | Public GitHub Latest may lag | ✅ **v1.6.6 is Latest** (release-readiness RC, 2026-08-10; published Latest still v1.6.4 until RC lands) |
+| R4 | Public GitHub Latest may lag | ✅ **v1.6.6 is Latest** (release-readiness RC; confirm the GitHub Latest tag before announcing) |
 | R5 | Draft releases v1.2.0/1.2.1 | ✅ Removed after 1.2.2 publish |
 | R6 | Local AppImage needs patchelf | Documented; CI **requires** AppImage on release |
 | R7 | Image CDN privacy (Images mode) | `no-referrer` set; still loads remote URLs |
-| R8 | No Tauri webview E2E | **API E2E smoke** in CI (`scripts/e2e-api-smoke.sh`); no GTK driver |
+| R8 | Webview E2E is display-dependent | Manual pre-tag gate (`scripts/webview-e2e.sh`); API E2E smoke in CI |
 | R9 | Collection add uses open-URL policy | Private LAN URLs cannot be saved via API — intentional safety |
 
 ---
@@ -196,7 +196,7 @@ Original probes ran against `netrail-api` 1.6.2 + Python. Re-verification 2026-0
 | P2 | Error-code divergence on malformed URLs | Both block, different codes: `http:\\192.168.1.1\x` (Rust `PRIVATE` vs Python `NO_HOST`), `\\`-network-path public hosts (Rust 200 browser-compatible / Python `NO_HOST`), leading-zero/u32/hex octets (both block — safe), port >65535 (Python allow, Rust `INVALID`), `1.1.1.1\@2.2.2.2` (Rust 200 / Python `CREDENTIALS`), `[2001:db8::1]` (Python block / Rust allow), `[fec0::1]` (both allow). All core SSRF encodings (hex/octal/u32/short-form/v4-mapped/%-encoded/trailing-dot/nip.io) blocked by **both**. **Post-fix re-fuzz (10,000 URLs, live, 2026-08-03): 2,747 mismatches = 189 semantic + 2,558 code-only.** Semantic class breakdown of all 189: 58 Python `NO_HOST` vs Rust allow (`\\`-network-path, fail-closed), 57 Python `OPEN_URL_PRIVATE` vs Rust allow (IPv6 `::/8`-reserved via `is_reserved`, fail-closed), 74 Python allow vs Rust block (non-canonical IPv4 literals — integer/hex/leading-zero/malformed-port — **all verified NOT loopback/private**; parity gap only). **Zero `UnicodeEncodeError` 500s and zero NAT64-class divergences remain.** Golden-fixture live parity (sandboxed, post-fix): **57/57 open_url + 18/18 non-strict backend_url + ETag/If-Match contract all pass** on the rebuilt Rust binary. | **FIXED 2026-08-09:** Python mirrors the Rust `url` crate WHATWG rules, probed empirically live against the rebuilt binary (30+ vector matrices). (1) `_parse_whatwg_ipv4` (netrail/security.py) — single label parses as IPv4 iff all-digits or `0x`-hex (`0x` alone = 0 → 0.0.0.0; `0xzz` → DNS domain); dotted hosts with an all-digit/`0x` last label take the strict parse (octal 8/9 digits, mid-label `x`, part > 255, > 4 parts, empty parts, last-part bound `256^(5-parts)`, fold `a<<24|b`) — failure = `OPEN_URL_INVALID`/`BACKEND_URL_INVALID`; (2) port: `urlparse.port` `ValueError` (multi-colon `:80:9604`, `:8080.`) and port > 65535 → `INVALID`, port 0 allowed (Rust allows); (3) `_is_non_public_v4` adds 0.0.0.0/8 (Rust blocks `31` → 0.0.0.31 private). **Re-fuzz (7,600 URLs, live, same corpus classes + new): 50 residual py-allow/rust-block (0.66%), all the single `0xzz` DNS-family — Rust fails DNS inside open, Python in the later pin stage (same terminal state, no fail-open); `py_block_rust_allow` = 0, `code_diff` = 0 across all 7,600.** Regression: 19 new pytest vectors (tests/test_security.py → 54 pass). Known residual by design: DNS-dependent stage ordering (validate vs pin), `\\`-network-path, IPv6 reserved-class codes. |
 | P2 | **Smoke harness opens real browser** | `scripts/parity-api-smoke.sh` POSTs allow vectors to `/api/open` → spawned a real browser tab per vector and failed headless (BROWSER_NOT_FOUND→500). No dry-run support existed in either stack. | **FIXED 2026-08-03:** new `NETRAIL_NO_OPEN` env (any value except `0`/`false`/empty) makes `open_url` report `{browser/executable/sandbox: "dry-run"}` **without browser discovery or spawn** — Rust `browsers.rs:204`, Python `browsers.py:180`. `parity-api-smoke.sh` now exports it, so the harness is headless-safe with **no fake-browser PATH required** (verified: 57/57 open_url + 18/18 backend_url + ETag pass without fakebin). **Regression:** `netrail_no_open_returns_dry_run_without_discovery` + `dry_run_env_parsing` (Rust) and `test_open_dry_run_returns_without_browser` (Python) green. |
 | P2 | Blocked opens not audit-logged | Audit (opt-in `NETRAIL_AUDIT_LOG=1`) recorded only successful `open` (netrail/main.py, src-tauri/src/server/mod.rs); validation-failure and BROWSER_NOT_FOUND paths exited before `audit::log_event`. Attempted-block record missing. | **FIXED 2026-08-03:** both stacks now emit `open.blocked` (`{url_host, code, detail}`) for every rejected `/api/open` attempt (validation, DNS pin, browser spawn), alongside the success `open` event — Rust via closure wrap in `open_link` (server/mod.rs) + `audit_open_blocked`; Python via try/except `NetRailError` in `open_link` (main.py) + `_open_link_impl`. 429 rate-limit rejections intentionally **not** audited (pre-open, per-design). **Regression:** `open_blocked_audit_tests` (Rust ×2) + `test_audit_log_open_blocked` (Python) green; live verified both stacks (`OPEN_URL_LOCALHOST`, `OPEN_URL_INVALID` with correct `url_host`). Minor log-field divergence: unparseable-URL host is `null` in Rust, raw host string in Python (log detail only). |
-| P3 | **Browser-discovery parity divergence (new)** | Live on 1.6.4, same machine: `brave-browser-stable` → Rust `{name: "New Incognito Window", supports_private: false}` vs Python `{name: "Brave Web Browser", supports_private: true}`; `torbrowser-launcher` → Rust `supports_private: false` vs Python `true`. Root causes: (1) Rust `known_browsers()` has 7 entries (browsers.rs:23–33) vs Python 13 (browsers.py:26–40); (2) Python **defaults unknown stems to `--incognito`** (browsers.py:136) while Rust defaults to no flag (browsers.rs:128) — Python can append a flag the browser doesn't support (e.g. torbrowser-launcher); (3) .desktop `Name=` parsing differs: Rust takes the first raw `Name=` line (browsers.rs:75), Python configparser keeps the last. Same `browser_id` + `private_mode` → different actual behavior per stack. | Open |
+| P3 | **Browser-discovery parity divergence (new)** | Live on 1.6.4, same machine: `brave-browser-stable` → Rust `{name: "New Incognito Window", supports_private: false}` vs Python `{name: "Brave Web Browser", supports_private: true}`; `torbrowser-launcher` → Rust `supports_private: false` vs Python `true`. Root causes: (1) Rust `known_browsers()` has 7 entries (browsers.rs:23–33) vs Python 13 (browsers.py:26–40); (2) Python **defaults unknown stems to `--incognito`** (browsers.py:136) while Rust defaults to no flag (browsers.rs:128) — Python can append a flag the browser doesn't support (e.g. torbrowser-launcher); (3) .desktop `Name=` parsing differs: Rust takes the first raw `Name=` line (browsers.rs:75), Python configparser keeps the last. Same `browser_id` + `private_mode` → different actual behavior per stack. | **FIXED (QA-09, 1.6.5):** canonical 13-browser fixture; unknown stems get no flag; section-scoped `.desktop` parse |
 | P4 | `build_http_client` fallback (new, observation) | http_client.rs:17 `unwrap_or_else(|_| Client::new())` silently drops 15s timeout, `Policy::none` redirects, UA, keepalive if the builder ever fails (currently hard to trigger). | **Fixed 2026-08-03:** fallback now `tracing::warn!`s with the builder error, naming the dropped protections (http_client.rs:17). |
 | P4 | Fanout deadline asymmetry (observation) | Rust hard-aborts at 20s (`tokio::time::timeout`, backends/mod.rs:214–241); Python's `as_completed(timeout=20)` then blocks in `ThreadPoolExecutor.__exit__` (shutdown wait) for stragglers — bounded by the 12–15s backend timeouts, so the 20s deadline is effectively dead code. Response may still exceed 20s when a backend exceeds its own timeout. | Open (trivial) |
 | P4 | Inline failsafe script blocked by CSP (observation) | index.html:158–169 inline splash failsafe had no CSP hash (only the token script did) → dead under `script-src 'self'`. Harmless, but dead code. | **Fixed 2026-08-03:** the failsafe script's `sha256-aN9klVksJOk4OThOcI2OMlo7DsWPc+W7cPY4E+ODbD8=` is now whitelisted in `security::CSP`; regression test `csp_includes_failsafe_script_hash` (server/mod.rs) pins the hash to the actual index.html content so they cannot drift. Live header verified. |
@@ -257,14 +257,12 @@ Read first:
   packaging/README.md
   HANDOVER.md
 
-Version 1.6.4 SSOT. HEAD a12dbed on main (pushed). Tag v1.6.4 pushed.
-GitHub Release assets for v1.6.4 NOT published — CI failed at linuxdeploy/AppImage (NR-16).
+Version 1.6.6 SSOT. Read CHANGELOG [1.6.6] + docs/RELEASE_v1.6.6.md.
 
 Invariants: localhost-only API, no telemetry, open-URL + DNS pin, no Brave key on disk,
 version SSOT, typed errors, NETRAIL_READONLY gates admin mutations (history still on search/open),
 XDG data outside bundle, AppImage-first ship path (not PyInstaller).
 
-NEXT: fix Release CI AppImage/linuxdeploy and publish v1.6.4 assets. Then post-release doc refresh.
 Do not re-open closed audits without evidence. Don't-build backlog only if asked (Q16, R7, multi-user).
 
 Bootstrap:
@@ -292,7 +290,7 @@ Do not force-push. Do not amend published history.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Lifecycle roadmap |
 | [docs/RELEASE_ASSURANCE.md](docs/RELEASE_ASSURANCE.md) | Non-technical trust map |
 | [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | Ops packaging + env |
-| [docs/RELEASE_v1.6.4.md](docs/RELEASE_v1.6.4.md) | 1.6.4 notes |
+| [docs/RELEASE_v1.6.6.md](docs/RELEASE_v1.6.6.md) | 1.6.6 notes |
 | [docs/MANUAL.md](docs/MANUAL.md) | User manual |
 | [docs/AUDIT_ENTERPRISE_2026-07-31.md](docs/AUDIT_ENTERPRISE_2026-07-31.md) | Post-GA enterprise audit + workplan |
 | [docs/AUDIT_ARCH_2026-08-01.md](docs/AUDIT_ARCH_2026-08-01.md) | Architecture-level audit (code-as-built, both stacks, enterprise readiness) |
@@ -303,4 +301,4 @@ Do not force-push. Do not amend published history.
 
 ---
 
-*Handover for human/AI continuity — NetRail 1.6.4 — be honest, no scope creep, prefer durable repo state.*
+*Handover for human/AI continuity — NetRail 1.6.6 — be honest, no scope creep, prefer durable repo state.*

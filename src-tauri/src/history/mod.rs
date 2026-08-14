@@ -487,9 +487,9 @@ impl HistoryStore {
     pub fn create_collection(&self, name: &str) -> NetRailResult<serde_json::Value> {
         let name = name.trim();
         if name.is_empty() {
-            return Err(NetRailError::MissingField {
-                code: "COLLECTION_NAME_REQUIRED",
-                field: "name".into(),
+            return Err(NetRailError::InvalidConfig {
+                code: "COLLECTION_NAME_INVALID",
+                message: "Collection name must be 1-120 characters.".into(),
             });
         }
         self.conn

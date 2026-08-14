@@ -12,6 +12,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY netrail ./netrail
 COPY assets ./assets
+COPY docs ./docs
+COPY README.md ./README.md
 
 ENV NETRAIL_DB_PATH=/app/data/netrail.db \
     NETRAIL_AUTO_OPEN=false \

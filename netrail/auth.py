@@ -26,6 +26,18 @@ def inject_ui_token() -> bool:
     return raw not in {"0", "false", "False", "FALSE"}
 
 
+def _tokens_match(presented: str, expected: str) -> bool:
+    """Constant-time compare that stays on the 401 path for non-ASCII input.
+
+    hmac.compare_digest(str, str) raises TypeError on non-ASCII; Rust hashes
+    bytes and never leaves the AUTH_REQUIRED path.
+    """
+    try:
+        return hmac.compare_digest(presented.encode("utf-8"), expected.encode("utf-8"))
+    except (TypeError, ValueError):
+        return False
+
+
 def check_request_token(authorization: str | None, x_token: str | None) -> None:
     expected = api_token_from_env()
     if not expected:
@@ -33,11 +45,9 @@ def check_request_token(authorization: str | None, x_token: str | None) -> None:
     if authorization:
         auth = authorization.strip()
         for prefix in ("Bearer ", "bearer "):
-            if auth.startswith(prefix) and hmac.compare_digest(
-                auth[len(prefix) :].strip(), expected
-            ):
+            if auth.startswith(prefix) and _tokens_match(auth[len(prefix) :].strip(), expected):
                 return
-    if x_token and hmac.compare_digest(x_token.strip(), expected):
+    if x_token and _tokens_match(x_token.strip(), expected):
         return
     raise NetRailError(
         "AUTH_REQUIRED",

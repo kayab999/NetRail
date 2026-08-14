@@ -62,6 +62,7 @@ Important tradeoff: when the token is set, `NETRAIL_INJECT_UI_TOKEN` (default **
 - The FTS5 index stores **plaintext tokens** of queries (required for local search).
 - If encryption is enabled but the keyring is unavailable (WSL, some window managers, headless), NetRail **degrades** to unencrypted history for the session and shows a **security banner** (Rust and Python). Prefer setting `NETRAIL_DB_KEY` in those environments.
 - `/api/health` reports a canonical `history.encryption_state` (`encrypted` / `degraded` / `plaintext`) derived from `encrypt_requested` + `encryption_active`; the web UI footer shows the same state as a chip. Setting changes via `PUT /api/settings` take effect immediately — the store rebinds on the next access (settings directivity, A-11).
+- Rows that look like Fernet tokens (`gAAAAA…`) but cannot be opened (wrong/missing key, corrupt token, or plaintext mode) are shown as the literal marker `[DECRYPTION_FAILED]` instead of base64 garbage. Legacy plaintext rows (no Fernet prefix) are passed through. An invalid `NETRAIL_DB_KEY` degrades encryption for the session; it does not crash `/api/health`.
 
 ## Reporting a vulnerability
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import os
@@ -131,12 +132,12 @@ def load_settings() -> dict[str, Any]:
             )
             data = {}
 
-    merged = DEFAULTS.copy()
+    merged = copy.deepcopy(DEFAULTS)
     for key, value in data.items():
         if key in DEFAULTS:
             merged[key] = value
     if not merged.get("backends"):
-        merged["backends"] = [dict(item) for item in DEFAULT_BACKENDS]
+        merged["backends"] = copy.deepcopy(DEFAULT_BACKENDS)
     return _apply_env_overrides(merged)
 
 
@@ -194,10 +195,12 @@ def save_settings(settings: dict[str, Any]) -> dict[str, Any]:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             handle.write(json.dumps(payload, indent=2) + "\n")
         os.replace(tmp_path, target)
-    except Exception:
+    except OSError as exc:
         try:
             tmp_path.unlink(missing_ok=True)
         except OSError:
             pass
-        raise
+        from netrail.errors import NetRailError
+
+        raise NetRailError("CONFIG_SAVE_FAILED", str(exc), status=500) from exc
     return _apply_env_overrides(payload)

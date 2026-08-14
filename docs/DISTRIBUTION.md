@@ -182,7 +182,9 @@ NETRAIL_AUDIT_LOG=1            # optional: JSONL audit of search/open/settings/h
 
 The compose file binds `127.0.0.1:7421:7421`. **Do not** change this to `7421:7421` unless you intend to expose NetRail to your entire LAN (then set `NETRAIL_API_TOKEN`).
 
-Docker has no OS keyring — `NETRAIL_DB_KEY` is **required** for encrypted history.
+The process itself still listens on **container** `127.0.0.1:7421`. Docker's port proxy talks to the container veth address, so the published host port can be unreachable even when the in-container `HEALTHCHECK` is green. For a working loopback today, run with `network_mode: host`. Do not bind the process to `0.0.0.0` without an explicit redesign and `NETRAIL_API_TOKEN`.
+
+Docker has no OS keyring — `NETRAIL_DB_KEY` is **required** for encrypted history. A present-but-invalid key degrades history encryption (`encryption_state=degraded`); it does not crash the API.
 
 Build Rust image directly: `docker build -f Dockerfile.rust -t netrail-api .`
 
@@ -205,6 +207,18 @@ Build Rust image directly: `docker build -f Dockerfile.rust -t netrail-api .`
 | `NETRAIL_AUDIT_MAX_BYTES` | Audit rotation size cap (default 10 MiB); on write overflow the log is shifted to `<path>.1` (`.2`, …) | Both |
 | `NETRAIL_AUDIT_MAX_FILES` | Max rotated audit files kept (default 3; `0` disables rotation) | Both |
 | `NETRAIL_LOG_JSON` | `1` emits structured JSON logs (tracing-subscriber `json`) instead of plain text | Rust |
+| `NETRAIL_READONLY` | `1` enables read-only mode: all mutating endpoints (`PUT /api/settings`, history delete/purge, collection create/add) return `403 READONLY_MODE`; read endpoints (search, open, history, docs) keep working. Note: Search/visit logging remains active. | Both |
+| `SEARXNG_URL` / `NETRAIL_SEARXNG_URL` | Self-hosted SearXNG base URL | Both |
+| `BRAVE_SEARCH_API_KEY` / `NETRAIL_BRAVE_API_KEY` | Brave Search API key (never stored in settings). Presence force-enables the Brave backend even if `NETRAIL_BRAVE_ENABLED=false` | Both |
+| `NETRAIL_BRAVE_ENABLED` | `1`/`true` enables Brave in settings (overridden to on when an API key is present) | Both |
+| `NETRAIL_SEARCH_STRATEGY` | `fanout` or `fallback` | Both |
+| `NETRAIL_HISTORY_ENABLED` | Enable/disable history | Both |
+| `NETRAIL_HISTORY_ENCRYPT` | Field encryption on/off | Both |
+| `NETRAIL_HISTORY_TTL_DAYS` | Auto-purge age | Both |
+| `NETRAIL_MAX_RESULTS` | Default result cap (1–50) | Both |
+| `NETRAIL_NO_OPEN` | Any value except `0`/`false`/empty: `/api/open` returns `{browser,executable,sandbox:"dry-run"}` without discovering or spawning a browser (CI / parity harness) | Both |
+| `XDG_CONFIG_HOME` | Overrides settings dir via the `dirs` crate (`$XDG_CONFIG_HOME/netrail`) | Rust |
+| `XDG_DATA_HOME` | Rust: history DB + audit log via `dirs`. Python: **audit log only** (`$XDG_DATA_HOME/netrail/audit.log`). Python history DB is `$HOME/.local/share/netrail/netrail.db` unless `NETRAIL_DB_PATH` is set | Both |
 
 **Non-goal (QA-08, 2026-08-10):** structured JSON **application** logging on the
 Python stack is an explicit non-goal. Python's logging surface is limited to
@@ -213,15 +227,6 @@ all structured operational events on **both** stacks flow through the audit
 log (`NETRAIL_AUDIT_LOG`, NDJSON, identical schema), which is the parity
 surface that matters operationally. `NETRAIL_LOG_JSON` therefore applies to
 the Rust stack only — documented above as Rust-owned.
-| `NETRAIL_READONLY` | `1` enables read-only mode: all mutating endpoints (`PUT /api/settings`, history delete/purge, collection create/add) return `403 READONLY_MODE`; read endpoints (search, open, history, docs) keep working. Note: Search/visit logging remains active. | Both |
-| `SEARXNG_URL` / `NETRAIL_SEARXNG_URL` | Self-hosted SearXNG base URL | Both |
-| `BRAVE_SEARCH_API_KEY` / `NETRAIL_BRAVE_API_KEY` | Brave Search API key (never stored in settings) | Both |
-| `NETRAIL_SEARCH_STRATEGY` | `fanout` or `fallback` | Both |
-| `NETRAIL_HISTORY_ENABLED` | Enable/disable history | Both |
-| `NETRAIL_HISTORY_ENCRYPT` | Field encryption on/off | Both |
-| `NETRAIL_HISTORY_TTL_DAYS` | Auto-purge age | Both |
-| `NETRAIL_MAX_RESULTS` | Default result cap (1–50) | Both |
-| `XDG_DATA_HOME` | Overrides data dir (history DB, audit log) when set; default is `~/.local/share` | Python |
 
 ---
 
@@ -233,11 +238,11 @@ a system service (`User=netrail`, `ProtectSystem=strict`, `NoNewPrivileges`,
 
 ```bash
 sudo useradd --system --home /var/lib/netrail --shell /usr/sbin/nologin netrail
-sudo mkdir -p /var/lib/netrail /opt/netrail
-sudo cp packaging/netrail-api.service /etc/systemd/system/
-sudo cp target/release/netrail-api /opt/netrail/           # or the release asset
+sudo install -d -o netrail -g netrail /var/lib/netrail
+sudo install -m 755 -o root -g root dist/release/netrail-api /usr/local/bin/netrail-api
+sudo install -m 644 -o root -g root packaging/netrail-api.service /etc/systemd/system/
 sudo systemctl daemon-reload && sudo systemctl enable --now netrail-api
-curl -s http://127.0.0.1:7421/api/health | jq
+curl -s http://127.0.0.1:7421/api/health
 ```
 
 Note: with `User=` the OS keyring is unavailable — set `NETRAIL_DB_KEY`
@@ -264,7 +269,7 @@ sudo systemctl start netrail-api
 Suggested cron timer (online, while running):
 
 ```
-17 3 * * *  netrail  bash /opt/netrail/scripts/backup-db.sh
+17 3 * * *  netrail  bash /path/to/NetRail/scripts/backup-db.sh
 ```
 
 ---

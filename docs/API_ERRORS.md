@@ -16,7 +16,7 @@ The frontend branches on `code`; `detail` is human-readable. Rust (Tauri / `netr
 
 | Code | HTTP | When |
 |------|------|------|
-| `QUERY_INVALID` | 400 | Search query empty or longer than 500 characters |
+| `QUERY_INVALID` | 400 | Search query empty or longer than 500 characters, or `mode` is not `web`/`images` |
 | `OPEN_URL_INVALID` | 400 | URL is not http/https |
 | `OPEN_URL_INVALID_SCHEME` | 400 | Blocked scheme (javascript, data, file, …) |
 | `OPEN_URL_CREDENTIALS` | 400 | Embedded username/password in URL |
@@ -38,7 +38,6 @@ The frontend branches on `code`; `detail` is human-readable. Rust (Tauri / `netr
 | `CONFIG_MAX_RESULTS` | 400 | `max_results` not in 1–50 |
 | `CONFIG_HISTORY_TTL` | 400 | `history_ttl_days` over 3650 |
 | `CONFIG_SEARCH_STRATEGY` | 400 | Strategy not `fanout` or `fallback` |
-| `CONFIG_SAVE_FAILED` | 500 | Settings file I/O failed (temp write / rename); not a client validation error |
 | `BACKEND_URL_EMPTY` | 400 | Empty backend URL |
 | `BACKEND_URL_INVALID` | 400 | Unparseable backend URL |
 | `BACKEND_URL_INVALID_SCHEME` | 400 | Backend URL not http/https |
@@ -64,7 +63,7 @@ The frontend branches on `code`; `detail` is human-readable. Rust (Tauri / `netr
 | `FANOUT_TOTAL_FAILURE` | 502 | All backends failed; no results |
 | `BRAVE_HTTP_ERROR` | 502 | Brave API non-success status |
 | `SEARXNG_HTTP_ERROR` | 502 | SearXNG non-success status |
-| `DDGS_*` / `BRAVE_API_KEY_MISSING` | 502 | Backend-specific failures (see logs) |
+| `DDGS_*` / `BRAVE_API_KEY_MISSING` / `WIKIPEDIA_*` | 502 | Rust-typed backend failures (`DDGS_BOT_CHALLENGE`, `DDGS_SELECTOR`, `DDGS_IMAGES_PARSE`, `DDGS_VQD_TOKEN_MISSING`, `BRAVE_HTTP_ERROR`, `WIKIPEDIA_HTTP_ERROR`). Python reports the same class as fanout `errors[]` strings |
 
 Partial fanout (some backends fail) still returns **200** with `results` and an `errors[]` string list — not a typed error response.
 
@@ -78,7 +77,10 @@ Partial fanout (some backends fail) still returns **200** with `results` and an 
 | `NETWORK_CONNECT` | 500 | Outbound connection refused |
 | `NETWORK_ERROR` | 500 | Other reqwest errors |
 | `SEARCH_PAYLOAD` | 500 | Internal search response shape bug |
-| `INTERNAL` / `BROWSER_NOT_FOUND` | 500 | Unexpected or browser spawn failure |
+| `CONFIG_SAVE_FAILED` | 500 | Settings file I/O failed (temp write / rename) |
+| `BROWSER_NOT_FOUND` | 500 | No desktop browser discovered (Python may first try the system default) |
+| `BROWSER_SPAWN_FAILED` | 500 | Browser binary found but spawn failed (Rust). Python falls back to `webbrowser.open`, then `BROWSER_NOT_FOUND` |
+| `INTERNAL` | 500 | Unexpected server error |
 
 ## Regression tests
 
@@ -87,4 +89,4 @@ Python API tests: `tests/test_api.py`, `tests/test_security.py`
 
 ---
 
-*NetRail v1.6.5 — backend fetch-time codes included (A-05) — maintained by [kayab999](https://github.com/kayab999)*
+*NetRail v1.6.6 — backend fetch-time codes included (A-05) — maintained by [kayab999](https://github.com/kayab999)*

@@ -258,9 +258,9 @@ NetMedic IPC, MCP servers, or desktop launchers can wrap these calls in ~50 line
 
 The roadmap is organized into **phases** with explicit goals, deliverables, exit criteria, and risk notes. Dates are indicative — scope beats calendar.
 
-### Current state (2026-08-02)
+### Current state (2026-08-14)
 
-Released: **v1.6.4** (Linux packaging restored end-to-end: AppImage/deb/rpm published with keyless cosign signatures + SBOM, 8 assets, release CI `31350607763`; AppImage rebuilt from the same source assertions as CI). **v1.6.3** = reproducibility & supply chain (SBOM pinned in bundle — embedded in every binary via `--sbom` + packaged in deb/rpm/AppImage, release CI asserts both; golden URL-policy fixture grown 43→68 vectors + live backend parity; CSS regression guard for the `.result-card` grid). **v1.6.2** = hardening Sprints 2–4 (chaos/fault-injection suite + fixes, resource-stability load harness, dual-stack benchmarks; read-only mode + systemd + backup from 1.6.1 enterprise batch). **v1.6.1** = DNS pin A15, webview E2E, cosign-signed CI, FTS sync, typed 422s, CSP token.
+Released line: **v1.6.6** (security convergence: fetch-time backend SSRF guard, cipher-state, settings directivity, canonical v4/v6 policy) on top of **v1.6.5** (release-readiness: clippy gate, differential fuzz, browser-discovery parity, fanout deadline symmetry). **v1.6.4** restored Linux packaging end-to-end (AppImage/deb/rpm + keyless cosign + SBOM). **v1.6.3** = SBOM-in-bundle + fixture growth + CSS guard. **v1.6.2** = chaos/load/bench + read-only/systemd/backup. **v1.6.1** = DNS pin A15, webview E2E, signed CI, FTS sync, typed 422s, CSP token.
 
 Backlog shipped on `main` (all in v1.6.3 / Sprints):
 

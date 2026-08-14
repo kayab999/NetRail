@@ -505,7 +505,7 @@ async fn open_link(
             "open",
             serde_json::json!({
                 "url_host": url::Url::parse(&safe_url).ok().and_then(|u| u.host_str().map(str::to_string)),
-                "private_mode": body.private_mode,
+                "private_mode": settings.private_mode,
             }),
         );
         Ok(Json(serde_json::to_value(result).unwrap_or_default()))

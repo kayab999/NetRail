@@ -268,7 +268,9 @@ pub async fn search_with_fanout(
         tokio::select! {
             next = tasks.join_next() => match next {
                 Some(Ok(result)) => outcomes.push(result),
-                Some(Err(_join_error)) => {}
+                Some(Err(_join_error)) => {
+                    outcomes.push(Err("backend task failed".into()));
+                }
                 None => break,
             },
             _ = &mut deadline => {

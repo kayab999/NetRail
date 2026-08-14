@@ -1,4 +1,5 @@
 import ipaddress
+import uuid
 
 from fastapi.testclient import TestClient
 
@@ -162,6 +163,53 @@ def test_collection_empty_name_returns_collection_name_invalid():
     response = client.post("/api/collections", json={"name": ""})
     assert response.status_code == 400
     assert response.json()["code"] == "COLLECTION_NAME_INVALID"
+
+
+def test_collection_whitespace_title_returns_invalid():
+    created = client.post(
+        "/api/collections", json={"name": f"audit-title-{uuid.uuid4().hex[:8]}"}
+    )
+    assert created.status_code == 200, created.text
+    collection_id = created.json()["id"]
+    response = client.post(
+        f"/api/collections/{collection_id}/items",
+        json={"url": "https://example.com/", "title": "   "},
+    )
+    assert response.status_code == 400
+    assert response.json()["code"] == "COLLECTION_ITEM_TITLE_INVALID"
+
+
+def test_invalid_db_key_health_degrades(monkeypatch):
+    monkeypatch.setenv("NETRAIL_DB_KEY", "not-a-valid-fernet-key")
+    monkeypatch.setenv("NETRAIL_HISTORY_ENCRYPT", "true")
+    from netrail.history.crypto import reset_for_tests
+    from netrail.history.store import reset_store_for_tests
+
+    reset_for_tests()
+    reset_store_for_tests()
+    response = client.get("/api/health")
+    assert response.status_code == 200, response.text
+    history = response.json()["history"]
+    assert history["encryption_state"] == "degraded"
+    assert history["encryption_active"] is False
+
+
+def test_whitespace_only_query_returns_query_invalid():
+    response = client.post(
+        "/api/search", json={"query": "   ", "mode": "web", "max_results": 5}
+    )
+    assert response.status_code == 400
+    assert response.json()["code"] == "QUERY_INVALID"
+
+
+def test_non_ascii_configured_token_is_auth_required(monkeypatch):
+    # hmac.compare_digest(str, str) raises TypeError on non-ASCII; the
+    # configured token is the realistic non-ASCII input (headers stay ASCII).
+    monkeypatch.setenv("NETRAIL_API_TOKEN", "café-secret")
+    denied = client.get("/api/backends", headers={"Authorization": "Bearer wrong"})
+    assert denied.status_code == 401
+    assert denied.json()["code"] == "AUTH_REQUIRED"
+    monkeypatch.delenv("NETRAIL_API_TOKEN", raising=False)
 
 
 def test_invalid_mode_returns_query_invalid():

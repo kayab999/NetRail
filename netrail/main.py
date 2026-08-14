@@ -455,8 +455,11 @@ def get_doc_asset(filename: str) -> FileResponse:
 @app.post("/api/search")
 def run_search(req: Request, request: SearchRequest) -> dict[str, Any]:
     rate_limit.check_search(_request_identity(req))
+    query = request.query.strip()
+    if not query:
+        raise NetRailError("QUERY_INVALID", "Query must be 1-500 characters.")
     payload = search(
-        query=request.query,
+        query=query,
         mode=request.mode,
         max_results=request.max_results,
     )
@@ -464,7 +467,7 @@ def run_search(req: Request, request: SearchRequest) -> dict[str, Any]:
         "search",
         {
             "mode": request.mode,
-            "query_len": len(request.query),
+            "query_len": len(query),
             "max_results": request.max_results,
         },
     )
@@ -590,10 +593,16 @@ def add_collection_item(req: Request, collection_id: int, body: CollectionItemCr
     rate_limit.check_mutate(_request_identity(req))
     store = _require_store()
     safe_url = validate_open_url(body.url)
+    title = body.title.strip()
+    if not title:
+        raise NetRailError(
+            "COLLECTION_ITEM_TITLE_INVALID",
+            "Title must be 1-500 characters.",
+        )
     item = store.add_collection_item(
         collection_id,
         url=safe_url,
-        title=body.title,
+        title=title,
         notes=body.notes,
     )
     from urllib.parse import urlparse

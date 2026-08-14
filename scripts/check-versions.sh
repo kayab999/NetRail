@@ -40,6 +40,8 @@ docs/DISTRIBUTION.md:parity matrix ($expected)
 docs/MANUAL.md:NetRail_${expected}_amd64.AppImage
 SECURITY.md:current: $expected
 HANDOVER.md:**v$expected is Latest**
+README.md:**Version:** $expected
+docs/API_ERRORS.md:NetRail v$expected
 EOF
 
 # CHANGELOG latest entry + git tag of HEAD (QA-11).
