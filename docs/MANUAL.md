@@ -159,6 +159,10 @@ Enable **Private / incognito** before opening links. When active:
 - Each link opens in a new private window/tab (browser-dependent).
 - Your choice is saved to settings automatically.
 
+### Settings dialog (⚙)
+
+The **⚙ Settings** button opens the in-app settings: max results, SearXNG URL, search strategy, history on/off, history encryption, and history retention days. Values are validated by the API — an invalid SearXNG URL, for example, is rejected with a typed error shown in the dialog, and concurrent edits elsewhere surface as a conflict (reloaded automatically, review and retry).
+
 ### Settings persistence
 
 Preferences are stored locally at:
@@ -172,7 +176,7 @@ Preferences are stored locally at:
 | `browser_id` | Selected browser identifier | First detected browser |
 | `private_mode` | Open links in private/incognito | `false` |
 | `max_results` | Results per query (1–50) | `25` |
-| `search_strategy` | `fanout` (concurrent) or `fallback` (sequential) | `fanout` |
+| `search_strategy` | `fanout` (round-robin merge) or `fallback` (flattened list); backends are always queried in parallel | `fanout` |
 | `searxng_url` | Self-hosted SearXNG base URL | unset |
 | `brave_enabled` | Enable Brave (key still via env only) | `false` |
 | `history_enabled` / `history_encrypt` | Local history + Fernet | `true` / `true` |
@@ -358,10 +362,10 @@ NetRail is intentionally modular: network repair tools are a separate concern. O
 | Action | Shortcut |
 |--------|----------|
 | Focus NetRail window (Tauri) | **Ctrl+Shift+S** |
-| Submit search | **Enter** in the search field |
+| Submit search | **Enter** in the search field (always searches, even with a result highlighted) |
 | Move through results | **↑** / **↓** (when results are shown) |
-| Open highlighted result | **Enter** (with result highlighted) |
-| Open highlighted in private mode | **Shift+Enter** |
+| Open highlighted result | **Enter** with focus outside the search field (click a result first, then Enter) |
+| Open highlighted in private mode | **Shift+Enter** with focus outside the search field |
 | Copy highlighted URL | **Ctrl+C** (with search field focused) |
 | Export results | **Export** button (JSON); **Shift+click** for CSV |
 | Switch mode | Click **Web**, **Images**, or **History** tab |

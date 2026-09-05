@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout, as_completed
 from typing import Any
 
@@ -92,6 +93,7 @@ def search_with_fallback(
     query = query.strip()
     if not query:
         return SearchResponse(query=query, mode=mode)
+    fanout_start = time.monotonic()
 
     max_results = max(1, min(max_results, 50))
     strategy = settings.get("search_strategy", "fanout")
@@ -143,10 +145,26 @@ def search_with_fallback(
         merged = merge_fanout(batches, max_results)
 
     if not merged and mode == "web":
+        remaining = FANOUT_DEADLINE_SECONDS - (time.monotonic() - fanout_start)
+        if remaining <= 0:
+            logger.warning("wikipedia fallback skipped — fanout deadline exhausted")
+            errors.append("wikipedia: skipped (fanout deadline exhausted)")
+            return SearchResponse(
+                query=query,
+                mode=mode,
+                results=merged,
+                backends_used=backends_used or ["none"],
+                provenance_chain=provenance_chain or ["No backend returned results"],
+                sovereignty_step=_sovereignty_step(backends_used),
+                errors=errors,
+                search_strategy=strategy,
+            )
         logger.info("fanout empty — activating wikipedia fallback for %r", query)
         wiki = WikipediaBackend()
         try:
-            wiki_results = wiki.search(query, mode, max_results)
+            wiki_results = wiki.search(
+                query, mode, max_results, timeout=min(15.0, remaining)
+            )
             if wiki_results:
                 logger.info("wikipedia fallback succeeded (%d results)", len(wiki_results))
                 backends_used.append(wiki.name)

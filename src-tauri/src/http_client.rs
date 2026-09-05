@@ -6,6 +6,10 @@ pub const USER_AGENT: &str =
 
 /// Shared reqwest client for connection pooling and DNS caching across fanout backends.
 /// Redirects are disabled so a backend cannot bounce the process onto private/metadata targets.
+///
+/// Fail-closed (SEC): if the builder ever fails, panic instead of falling
+/// back to `Client::new()` — the fallback silently dropped the 15 s timeout,
+/// the redirect policy and the UA, re-enabling SSRF-via-redirect.
 pub fn build_http_client() -> Client {
     Client::builder()
         .user_agent(USER_AGENT)
@@ -15,11 +19,6 @@ pub fn build_http_client() -> Client {
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .unwrap_or_else(|err| {
-            tracing::warn!(
-                %err,
-                "reqwest client builder failed; falling back to Client::new() \
-                 (15s timeout, redirect-disable and UA protections dropped)"
-            );
-            Client::new()
+            panic!("reqwest client builder failed ({err}): refusing to run without timeout/redirect protections")
         })
 }

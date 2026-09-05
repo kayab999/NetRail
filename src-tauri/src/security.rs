@@ -278,6 +278,19 @@ pub fn normalize_host(host: &str) -> String {
     host.trim_end_matches('.').to_lowercase()
 }
 
+/// Loopback Host allowlist for the local API (DNS-rebinding depth).
+/// Only the loopback names the server actually binds may address it: a page
+/// hosted on `evil.com` that resolves to 127.0.0.1 sends `Host: evil.com`,
+/// which is rejected here before auth, routing or token logic. An absent
+/// Host (HTTP/1.0 probes, health checks) is allowed — the socket itself is
+/// loopback-bound, so there is nothing to verify against.
+pub fn host_allowed(host: &str) -> bool {
+    matches!(
+        host.trim().to_lowercase().as_str(),
+        "127.0.0.1:7421" | "localhost:7421" | "127.0.0.1" | "localhost"
+    )
+}
+
 fn block_unsafe_host(host: &str) -> NetRailResult<()> {
     let host_lower = normalize_host(host);
 
@@ -314,6 +327,17 @@ fn block_unsafe_host(host: &str) -> NetRailResult<()> {
 }
 
 fn block_ip(ip: IpAddr) -> NetRailResult<()> {
+    // Azure IMDS wire address is public-routable, so the tables below never
+    // catch it — block explicitly. (169.254.169.254 keeps its historic
+    // LINK_LOCAL code; ordering is intentional.)
+    if let IpAddr::V4(v4) = effective_ip(ip) {
+        if v4.octets() == [168, 63, 129, 16] {
+            return Err(NetRailError::InvalidOpenUrl {
+                code: "OPEN_URL_CLOUD_METADATA",
+                message: "Cloud metadata addresses cannot be opened from search results.".into(),
+            });
+        }
+    }
     match ip {
         IpAddr::V4(v4) if v4.is_loopback() || v4.is_unspecified() => {
             Err(NetRailError::InvalidOpenUrl {
@@ -551,7 +575,11 @@ fn block_backend_host(host: &str, strict: bool) -> NetRailResult<()> {
 
 fn is_cloud_metadata_ip(ip: IpAddr) -> bool {
     match effective_ip(ip) {
-        IpAddr::V4(v4) => v4.octets() == [169, 254, 169, 254],
+        // 169.254.169.254: AWS/GCP IMDS. 168.63.129.16: Azure IMDS wire
+        // address (public-routable, so the non-public tables never catch it).
+        IpAddr::V4(v4) => {
+            v4.octets() == [169, 254, 169, 254] || v4.octets() == [168, 63, 129, 16]
+        }
         // AWS IMDS IPv6: fd00:ec2::254
         IpAddr::V6(v6) => v6.segments() == [0xfd00, 0xec2, 0, 0, 0, 0, 0, 0x254],
     }
@@ -898,6 +926,43 @@ mod tests {
     }
 
     // --- S1: Invariant & Property Tests ---
+
+    #[test]
+    fn host_allowlist_accepts_loopback_only() {
+        for good in ["127.0.0.1:7421", "localhost:7421", "127.0.0.1", "localhost"] {
+            assert!(host_allowed(good), "{good}");
+        }
+        for bad in [
+            "evil.com",
+            "evil.com:7421",
+            "127.0.0.1.evil.com:7421",
+            "attacker.local:7421",
+            "testserver",
+            "",
+            "127.0.0.1:7422",
+        ] {
+            assert!(!host_allowed(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn rejects_azure_imds_open_url() {
+        let err = validate_open_url("http://168.63.129.16/").unwrap_err();
+        assert_eq!(err.error_code(), "OPEN_URL_CLOUD_METADATA");
+    }
+
+    #[test]
+    fn rejects_azure_imds_backend_url() {
+        let err = validate_backend_url("http://168.63.129.16/").unwrap_err();
+        assert_eq!(err.error_code(), "BACKEND_URL_CLOUD_METADATA");
+    }
+
+    #[test]
+    fn pin_open_host_blocks_azure_imds_resolution() {
+        let fake = |_: &str| vec![IpAddr::V4(Ipv4Addr::new(168, 63, 129, 16))];
+        let err = pin_open_host("https://metrics.example/", fake).unwrap_err();
+        assert_eq!(err.error_code(), "OPEN_URL_CLOUD_METADATA");
+    }
 
     #[test]
     fn property_normalize_host_is_idempotent() {

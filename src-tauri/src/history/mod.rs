@@ -42,7 +42,7 @@ fn mark_encryption_degraded() {
     ENCRYPTION_DEGRADED.store(true, Ordering::Relaxed);
 }
 
-const SCHEMA_VERSION: i64 = 1;
+const SCHEMA_VERSION: i64 = 2;
 
 /// Keep in sync with the `queries_fts` block inside SCHEMA_SQL.
 const FTS_CREATE_SQL: &str = "CREATE VIRTUAL TABLE IF NOT EXISTS queries_fts USING fts5(
@@ -75,6 +75,7 @@ CREATE TABLE IF NOT EXISTS results (
 
 CREATE INDEX IF NOT EXISTS idx_results_url_norm ON results(url_norm);
 CREATE INDEX IF NOT EXISTS idx_results_query_id ON results(query_id);
+CREATE INDEX IF NOT EXISTS idx_queries_timestamp ON queries(timestamp);
 
 CREATE TABLE IF NOT EXISTS visits (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,6 +124,24 @@ pub fn db_path() -> PathBuf {
         })
 }
 
+/// Best-effort `wal_checkpoint(TRUNCATE)` on the history DB, for desktop
+/// Quit paths that bypass axum's graceful drain (S2). Never fails the
+/// caller — a checkpoint that cannot run is a log line, not a crash.
+pub fn wal_checkpoint() {
+    let path = db_path();
+    if !path.exists() {
+        return;
+    }
+    let outcome = (|| -> Result<(), rusqlite::Error> {
+        let conn = Connection::open(&path)?;
+        conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")?;
+        Ok(())
+    })();
+    if let Err(err) = outcome {
+        tracing::warn!(error = %err, "wal_checkpoint(TRUNCATE) failed; WAL files may linger");
+    }
+}
+
 pub fn normalize_url(url: &str) -> String {
     url.trim().trim_end_matches('/').to_lowercase()
 }
@@ -144,12 +163,19 @@ pub fn connect() -> Result<Connection, rusqlite::Error> {
 }
 
 /// Schema versioning via `PRAGMA user_version`. Version 0 (fresh DB or any
-/// pre-migration database) applies the full idempotent schema and stamps 1.
+/// pre-migration database) applies the full idempotent schema and stamps 1;
+/// version 2 adds the TTL-purge index on `queries(timestamp)`.
 /// Future schema changes append `if current < N { ...; user_version = N }`.
 fn migrate(conn: &Connection) -> Result<(), rusqlite::Error> {
     let current: i64 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
-    if current < SCHEMA_VERSION {
+    if current < 1 {
         conn.execute_batch(SCHEMA_SQL)?;
+        conn.pragma_update(None, "user_version", 1)?;
+    }
+    if current < SCHEMA_VERSION {
+        conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_queries_timestamp ON queries(timestamp);",
+        )?;
         conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     }
     Ok(())
@@ -219,23 +245,30 @@ impl HistoryStore {
         if ttl_days == 0 {
             return Ok(0);
         }
+        // Single-statement delete (FK cascade clears results/visits) plus one
+        // FTS rebuild, all in one transaction — O(1) statements, atomic.
         let offset = format!("-{ttl_days} days");
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id FROM queries WHERE timestamp < datetime('now', ?1)")?;
-        let ids: Vec<i64> = stmt
-            .query_map(params![offset], |row| row.get(0))?
-            .filter_map(Result::ok)
-            .collect();
-
-        for id in &ids {
-            self.conn
-                .execute("DELETE FROM queries WHERE id = ?1", params![id])?;
+        self.conn.execute_batch("BEGIN IMMEDIATE")?;
+        let outcome = (|| -> NetRailResult<usize> {
+            let n = self.conn.execute(
+                "DELETE FROM queries WHERE timestamp < datetime('now', ?1)",
+                params![offset],
+            )?;
+            if n > 0 {
+                self.rebuild_fts_index()?;
+            }
+            Ok(n)
+        })();
+        match outcome {
+            Ok(n) => {
+                self.conn.execute_batch("COMMIT")?;
+                Ok(n)
+            }
+            Err(err) => {
+                let _ = self.conn.execute_batch("ROLLBACK");
+                Err(err)
+            }
         }
-        if !ids.is_empty() {
-            self.rebuild_fts_index()?;
-        }
-        Ok(ids.len())
     }
 
     pub fn record_search(
@@ -245,25 +278,26 @@ impl HistoryStore {
         backends_used: &[String],
         results: &[SearchResult],
     ) -> NetRailResult<(i64, HashMap<String, i64>)> {
+        // One search = one transaction (was N autocommits: 1 query + 1 FTS +
+        // 1 per result). Atomic and a single WAL flush.
         let backends_json = serde_json::to_string(backends_used)?;
-        self.conn
-            .execute(
+        self.conn.execute_batch("BEGIN IMMEDIATE")?;
+        let outcome = (|| -> NetRailResult<(i64, HashMap<String, i64>)> {
+            self.conn.execute(
                 "INSERT INTO queries (query_text_enc, mode, backends_used) VALUES (?1, ?2, ?3)",
                 params![self.enc(query), mode, backends_json],
             )?;
-        let query_id = self.conn.last_insert_rowid();
+            let query_id = self.conn.last_insert_rowid();
 
-        self.conn
-            .execute(
+            self.conn.execute(
                 "INSERT INTO queries_fts(rowid, query_text) VALUES (?1, ?2)",
                 params![query_id, query],
             )?;
 
-        let mut url_to_result_id = HashMap::new();
-        for item in results {
-            let url_norm = normalize_url(&item.url);
-            self.conn
-                .execute(
+            let mut url_to_result_id = HashMap::new();
+            for item in results {
+                let url_norm = normalize_url(&item.url);
+                self.conn.execute(
                     "INSERT INTO results (query_id, url, url_norm, title_enc, snippet_enc, source_backend)
                      VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                     params![
@@ -279,9 +313,20 @@ impl HistoryStore {
                         item.backend,
                     ],
                 )?;
-            url_to_result_id.insert(item.url.clone(), self.conn.last_insert_rowid());
+                url_to_result_id.insert(item.url.clone(), self.conn.last_insert_rowid());
+            }
+            Ok((query_id, url_to_result_id))
+        })();
+        match outcome {
+            Ok(v) => {
+                self.conn.execute_batch("COMMIT")?;
+                Ok(v)
+            }
+            Err(err) => {
+                let _ = self.conn.execute_batch("ROLLBACK");
+                Err(err)
+            }
         }
-        Ok((query_id, url_to_result_id))
     }
 
     pub fn get_visit_metadata(
@@ -511,6 +556,16 @@ impl HistoryStore {
             "created_at": Utc::now().to_rfc3339(),
             "item_count": 0,
         }))
+    }
+
+    /// Delete a collection and its items (FK cascade). Returns whether a row
+    /// existed — the API maps `false` to 404 COLLECTION_NOT_FOUND.
+    pub fn delete_collection(&self, collection_id: i64) -> NetRailResult<bool> {
+        let n = self.conn.execute(
+            "DELETE FROM collections WHERE id = ?1",
+            params![collection_id],
+        )?;
+        Ok(n > 0)
     }
 
     pub fn add_collection_item(
@@ -947,6 +1002,24 @@ conn.commit()
 
     #[test]
     #[serial_test::serial]
+    fn delete_collection_removes_collection_and_items() {
+        let dir = TempDir::new().unwrap();
+        let key = Fernet::generate_key();
+        let store = temp_store(&dir, &key);
+        let created = store.create_collection("Research").unwrap();
+        let id = created["id"].as_i64().unwrap();
+        store
+            .add_collection_item(id, "https://example.com/a", "A", None)
+            .unwrap();
+        assert!(store.delete_collection(id).unwrap());
+        assert!(!store.delete_collection(id).unwrap());
+        assert!(store.list_collections().unwrap().is_empty());
+        std::env::remove_var("NETRAIL_DB_KEY");
+        std::env::remove_var("NETRAIL_DB_PATH");
+    }
+
+    #[test]
+    #[serial_test::serial]
     fn fts_stays_synced_through_lifecycle() {
         let dir = TempDir::new().unwrap();
         let key = Fernet::generate_key();
@@ -1024,6 +1097,46 @@ conn.commit()
         assert_eq!(mode, "wal");
         let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
         assert_eq!(version, SCHEMA_VERSION);
+        let idx: Option<String> = conn
+            .query_row(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_queries_timestamp'",
+                [],
+                |r| r.get(0),
+            )
+            .optional()
+            .unwrap();
+        assert!(idx.is_some(), "fresh DB must carry the TTL-purge index");
+        std::env::remove_var("NETRAIL_DB_PATH");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn v1_database_migrates_to_v2_with_timestamp_index() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("n.db");
+        std::env::set_var("NETRAIL_DB_PATH", path.to_string_lossy().as_ref());
+        {
+            let conn = Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE queries (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+                 query_text_enc BLOB NOT NULL, mode TEXT NOT NULL, backends_used TEXT NOT NULL);
+                 PRAGMA user_version = 1;",
+            )
+            .unwrap();
+        }
+        let conn = connect().unwrap();
+        let version: i64 = conn.query_row("PRAGMA user_version", [], |r| r.get(0)).unwrap();
+        assert_eq!(version, 2);
+        let idx: Option<String> = conn
+            .query_row(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_queries_timestamp'",
+                [],
+                |r| r.get(0),
+            )
+            .optional()
+            .unwrap();
+        assert!(idx.is_some(), "v1 DB must gain the TTL-purge index");
         std::env::remove_var("NETRAIL_DB_PATH");
     }
 

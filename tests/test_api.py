@@ -70,6 +70,25 @@ def test_open_rejects_encoded_loopback_and_private():
         assert response.json()["code"] == code
 
 
+def test_open_rejects_azure_imds_with_code():
+    response = client.post("/api/open", json={"url": "http://168.63.129.16/"})
+    assert response.status_code == 400
+    assert response.json()["code"] == "OPEN_URL_CLOUD_METADATA"
+
+
+def test_host_allowlist_rejects_rebinding():
+    response = client.get("/api/health", headers={"host": "evil.com"})
+    assert response.status_code == 403
+    payload = response.json()
+    assert payload["code"] == "HOST_INVALID"
+    assert payload["status"] == 403
+
+
+def test_host_allowlist_accepts_loopback():
+    response = client.get("/api/health", headers={"host": "127.0.0.1:7421"})
+    assert response.status_code == 200
+
+
 def test_open_pins_hostname_resolution_before_spawn(monkeypatch):
     monkeypatch.setattr(
         "netrail.security.resolve_host_ips",
@@ -177,6 +196,45 @@ def test_collection_whitespace_title_returns_invalid():
     )
     assert response.status_code == 400
     assert response.json()["code"] == "COLLECTION_ITEM_TITLE_INVALID"
+
+
+def test_collection_delete_roundtrip_and_404():
+    created = client.post(
+        "/api/collections", json={"name": f"del-{uuid.uuid4().hex[:8]}"}
+    )
+    assert created.status_code == 200, created.text
+    collection_id = created.json()["id"]
+    assert (
+        client.post(
+            f"/api/collections/{collection_id}/items",
+            json={"url": "https://example.com/", "title": "A"},
+        ).status_code
+        == 200
+    )
+    deleted = client.delete(f"/api/collections/{collection_id}")
+    assert deleted.status_code == 200
+    assert deleted.json()["deleted_id"] == collection_id
+    again = client.delete(f"/api/collections/{collection_id}")
+    assert again.status_code == 404
+    assert again.json()["code"] == "COLLECTION_NOT_FOUND"
+
+
+def test_collection_delete_rejected_in_readonly(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("NETRAIL_READONLY", "1")
+    r = client.delete("/api/collections/1")
+    assert r.status_code == 403
+    assert r.json()["code"] == "READONLY_MODE"
+
+
+def test_history_limit_clamps_like_rust():
+    assert client.get("/api/history?limit=0").status_code == 200
+    assert client.get("/api/history?limit=9999").status_code == 200
+
+
+def test_swagger_docs_disabled():
+    assert client.get("/docs").status_code == 404
+    assert client.get("/openapi.json").status_code == 404
 
 
 def test_invalid_db_key_health_degrades(monkeypatch):
@@ -355,6 +413,37 @@ def test_settings_etag_roundtrip_and_conflict(monkeypatch, tmp_path):
 
     plain = client.put("/api/settings", json=_valid_settings_body())
     assert plain.status_code == 200
+
+
+def test_settings_dialog_fields_roundtrip(monkeypatch, tmp_path):
+    """The in-app settings dialog edits these fields — PUT must persist and
+    reject them with typed codes."""
+    monkeypatch.setenv("HOME", str(tmp_path))
+    body = {
+        **_valid_settings_body(),
+        "max_results": 10,
+        "searxng_url": "http://127.0.0.1:8080",
+        "search_strategy": "fallback",
+        "history_ttl_days": 30,
+    }
+    r = client.put("/api/settings", json=body)
+    assert r.status_code == 200, r.text
+    saved = r.json()
+    assert saved["max_results"] == 10
+    assert saved["searxng_url"] == "http://127.0.0.1:8080"
+    assert saved["search_strategy"] == "fallback"
+
+    bad = client.put(
+        "/api/settings",
+        json={**_valid_settings_body(), "searxng_url": "http://169.254.169.254/"},
+    )
+    assert bad.status_code == 400
+    assert bad.json()["code"] == "BACKEND_URL_CLOUD_METADATA"
+
+    bad_ttl = client.put(
+        "/api/settings", json={**_valid_settings_body(), "history_ttl_days": 99999}
+    )
+    assert bad_ttl.status_code == 400
 
 
 def test_rate_limit_buckets_are_per_identity():

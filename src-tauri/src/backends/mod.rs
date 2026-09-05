@@ -226,6 +226,7 @@ pub async fn search_with_fanout(
     // batches and cancels the rest — the old `tokio::time::timeout` wrapper
     // dropped every completed batch too, asymmetrically turning partial
     // results into a 502 FANOUT_TOTAL_FAILURE.
+    let start = std::time::Instant::now();
     let enabled = get_enabled_backends(settings, client);
     let availability = join_all(enabled.iter().map(|b| backend_available(b, client))).await;
 
@@ -319,23 +320,42 @@ pub async fn search_with_fanout(
     };
 
     if results.is_empty() && mode == SearchMode::Web {
+        // S3: the Wikipedia fallback lives INSIDE the fanout budget, never
+        // after it. Wall time stays ~FANOUT_DEADLINE even when every backend
+        // hangs (parity with Python registry.py).
+        let elapsed = start.elapsed();
+        let remaining = FANOUT_DEADLINE.saturating_sub(elapsed);
+        if remaining.is_zero() {
+            tracing::warn!("wikipedia fallback skipped — fanout deadline exhausted");
+            errors.push("wikipedia: skipped (fanout deadline exhausted)".into());
+        } else {
         tracing::info!(query = %query, "fanout empty — activating wikipedia fallback");
         let wiki = WikipediaBackend::new(client.clone());
-        match wiki.search(query, mode, max_results).await {
-            Ok(wiki_results) if !wiki_results.is_empty() => {
+        let wiki_outcome = tokio::time::timeout(
+            remaining,
+            wiki.search(query, mode, max_results),
+        )
+        .await;
+        match wiki_outcome {
+            Err(_) => {
+                tracing::warn!("wikipedia fallback timed out within fanout budget");
+                errors.push("wikipedia: timed out within fanout budget".into());
+            }
+            Ok(Ok(wiki_results)) if !wiki_results.is_empty() => {
                 tracing::info!(count = wiki_results.len(), "wikipedia fallback succeeded");
                 backends_used.push(wiki.name().into());
                 provenance_chain.push(wiki.provenance().into());
                 results = wiki_results;
             }
-            Ok(_) => {
+            Ok(Ok(_)) => {
                 tracing::warn!("wikipedia fallback returned no results");
                 errors.push("wikipedia: returned no results".into());
             }
-            Err(err) => {
+            Ok(Err(err)) => {
                 tracing::warn!(error = %err, "wikipedia fallback failed");
                 errors.push(format!("wikipedia: {err}"));
             }
+        }
         }
     }
 

@@ -10,6 +10,12 @@ from netrail.backends.types import OPERATORS, SearchMode, SearchResult
 
 logger = logging.getLogger(__name__)
 
+# Parity with Rust http_client::USER_AGENT: Wikipedia 403s default httpx UAs.
+USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+
 PROVENANCE = "Wikipedia OpenSearch + intro extracts (direct, no API key)"
 _OPENSEARCH = (
     "https://en.wikipedia.org/w/api.php"
@@ -38,11 +44,22 @@ class WikipediaBackend:
     def is_available(self) -> bool:
         return True
 
-    def search(self, query: str, mode: SearchMode, max_results: int) -> list[SearchResult]:
+    def search(
+        self,
+        query: str,
+        mode: SearchMode,
+        max_results: int,
+        timeout: float | None = None,
+    ) -> list[SearchResult]:
         if mode != "web":
             return []
 
-        client = self._client or httpx.Client(timeout=15.0, follow_redirects=True)
+        budget = timeout if timeout is not None else 15.0
+        client = self._client or httpx.Client(
+            timeout=budget,
+            follow_redirects=True,
+            headers={"User-Agent": USER_AGENT},
+        )
         owns_client = self._client is None
         try:
             response = client.get(

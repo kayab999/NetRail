@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -57,10 +58,47 @@ CSP = (
 )
 
 
+# TTL purge cadence for long-lived daemons (parity with Rust
+# `spawn_periodic_purge`): open() purges at bind, this covers months-long
+# uptimes. Best-effort — failures are logged, never fatal.
+_PURGE_INTERVAL_SECONDS = 6 * 3600
+
+
+async def _periodic_purge() -> None:
+    import logging as _logging
+
+    log = _logging.getLogger("netrail.history")
+    while True:
+        await asyncio.sleep(_PURGE_INTERVAL_SECONDS)
+        try:
+            settings = load_settings()
+            if not settings.get("history_enabled", True):
+                continue
+            ttl = int(settings.get("history_ttl_days", 90))
+            if ttl <= 0:
+                continue
+            from netrail.history.store import get_store
+
+            store = get_store()
+            if store is None:
+                continue
+            purged = store.purge_expired(ttl)
+            if purged:
+                log.info("periodic TTL history purge: %d queries", purged)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            log.warning("periodic TTL history purge failed: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     init_history_on_startup()
-    yield
+    purge_task = asyncio.create_task(_periodic_purge())
+    try:
+        yield
+    finally:
+        purge_task.cancel()
 
 
 app = FastAPI(
@@ -68,6 +106,12 @@ app = FastAPI(
     description="Local research console. No telemetry. No accounts.",
     version=__version__,
     lifespan=lifespan,
+    # No Swagger/ReDoc/OpenAPI on the loopback API: the surface is the
+    # documented {code,detail,status} contract (docs/API_ERRORS.md), and the
+    # Rust stack serves none either. Try-it-out on localhost is not a feature.
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
@@ -176,6 +220,43 @@ async def security_headers(request: Request, call_next) -> Response:
     if "Referrer-Policy" not in response.headers:
         response.headers["Referrer-Policy"] = "no-referrer"
     return response
+
+
+# Loopback Host allowlist (DNS-rebinding depth, parity with
+# src-tauri/src/security.rs `host_allowed`). Registered last so it runs
+# first, before auth and routing. `testserver` is the FastAPI TestClient
+# default — browsers navigating to http://127.0.0.1:7421 never send it, so
+# allowing it does not weaken the rebinding control.
+_ALLOWED_HOSTS = frozenset(
+    {
+        "127.0.0.1:7421",
+        "localhost:7421",
+        "127.0.0.1",
+        "localhost",
+        "testserver",
+    }
+)
+
+
+def _host_allowed(host: str) -> bool:
+    return host.strip().lower() in _ALLOWED_HOSTS
+
+
+@app.middleware("http")
+async def host_allowlist_middleware(request: Request, call_next) -> Response:
+    """Reject non-loopback Host headers (DNS rebinding). Absent Host
+    (HTTP/1.0) is allowed — the socket is loopback-bound."""
+    host = request.headers.get("host", "")
+    if host and not _host_allowed(host):
+        return JSONResponse(
+            status_code=403,
+            content={
+                "code": "HOST_INVALID",
+                "detail": f"Unexpected Host {host!r}; this API only serves 127.0.0.1:7421.",
+                "status": 403,
+            },
+        )
+    return await call_next(request)
 
 
 class SearchRequest(BaseModel):
@@ -538,12 +619,14 @@ def _open_link_impl(req: Request, request: OpenRequest) -> dict[str, str]:
 @app.get("/api/history")
 def get_history(
     q: str | None = None,
-    limit: int = Query(default=50, ge=1, le=200),
+    limit: int = Query(default=50),
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, Any]:
     store = _require_store()
     fts_q = _fts_query(q) if q else None
-    return store.list_history(q=fts_q, limit=limit, offset=offset)
+    # Parity with Rust `list_history(... clamp(1, 200))`: out-of-range limits
+    # clamp instead of 400 — history listing is a read, not a contract gate.
+    return store.list_history(q=fts_q, limit=max(1, min(limit, 200)), offset=offset)
 
 
 @app.delete("/api/history/{query_id}")
@@ -585,6 +668,21 @@ def create_collection(req: Request, body: CollectionCreate) -> dict[str, Any]:
     created = store.create_collection(body.name)
     audit.log_event("collection.create", {"name_len": len(body.name)})
     return created
+
+
+@app.delete("/api/collections/{collection_id}")
+def delete_collection(req: Request, collection_id: int) -> dict[str, Any]:
+    _ensure_mutable()
+    rate_limit.check_mutate(_request_identity(req))
+    store = _require_store()
+    if not store.delete_collection(collection_id):
+        raise NetRailError(
+            "COLLECTION_NOT_FOUND",
+            "Collection not found.",
+            status=404,
+        )
+    audit.log_event("collection.delete", {"collection_id": collection_id})
+    return {"status": "ok", "deleted_id": collection_id}
 
 
 @app.post("/api/collections/{collection_id}/items")

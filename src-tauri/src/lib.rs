@@ -8,6 +8,7 @@ pub mod docs;
 pub mod error;
 pub mod history;
 pub mod http_client;
+pub mod instance;
 pub mod logging;
 pub mod rate_limit;
 pub mod sbom;

@@ -142,6 +142,55 @@ async fn add_collection_item_rejected_in_readonly() {
 
 #[tokio::test]
 #[serial_test::serial]
+async fn delete_collection_rejected_in_readonly() {
+    std::env::set_var("NETRAIL_READONLY", "1");
+    let mut app = build_router(test_state(Settings::default()));
+    let (status, json) = request_json(&mut app, "DELETE", "/api/collections/1", None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(json["code"], "READONLY_MODE");
+    std::env::remove_var("NETRAIL_READONLY");
+}
+
+async fn request_json_host(
+    app: &mut axum::Router,
+    method: &str,
+    uri: &str,
+    host: &str,
+) -> (StatusCode, serde_json::Value) {
+    let req_body = Body::empty();
+    let request = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("host", host)
+        .body(req_body)
+        .unwrap();
+    let response = app.oneshot(request).await.unwrap();
+    let status = response.status();
+    let bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+    (status, json)
+}
+
+#[tokio::test]
+async fn rebinding_host_rejected_before_routing() {
+    let mut app = build_router(test_state(Settings::default()));
+    let (status, json) = request_json_host(&mut app, "GET", "/api/health", "evil.com").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(json["code"], "HOST_INVALID");
+}
+
+#[tokio::test]
+async fn loopback_host_accepted() {
+    let mut app = build_router(test_state(Settings::default()));
+    let (status, _) =
+        request_json_host(&mut app, "GET", "/api/health", "127.0.0.1:7421").await;
+    assert_eq!(status, StatusCode::OK);
+}
+
+#[tokio::test]
+#[serial_test::serial]
 async fn read_endpoints_keep_working_in_readonly() {
     std::env::set_var("NETRAIL_READONLY", "1");
     let dir = tempfile::TempDir::new().unwrap();

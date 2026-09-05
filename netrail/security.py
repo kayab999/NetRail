@@ -237,6 +237,10 @@ def _is_cloud_metadata_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> 
     ip = _effective_ip(ip)
     if ip == ipaddress.ip_address("169.254.169.254"):
         return True
+    # Azure IMDS wire address: public-routable, so the non-public tables
+    # never catch it — explicit, mirroring src-tauri/src/security.rs.
+    if ip == ipaddress.ip_address("168.63.129.16"):
+        return True
     if ip == ipaddress.ip_address("fd00:ec2::254"):
         return True
     return False
@@ -365,6 +369,14 @@ def _block_ip(
     ip: ipaddress.IPv4Address | ipaddress.IPv6Address,
 ) -> None:
     ip = _effective_ip(ip)
+    # Azure IMDS wire address is public-routable, so the tables below never
+    # catch it — block explicitly. (169.254.169.254 keeps its historic
+    # LINK_LOCAL code; ordering is intentional.)
+    if ip == ipaddress.ip_address("168.63.129.16"):
+        raise NetRailError(
+            "OPEN_URL_CLOUD_METADATA",
+            "Cloud metadata addresses cannot be opened from search results.",
+        )
     if isinstance(ip, ipaddress.IPv4Address):
         if ip.is_loopback or ip.is_unspecified:
             raise NetRailError(

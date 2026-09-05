@@ -390,10 +390,34 @@ def test_backend_fetch_blocked_hostname_search_raises():
 
 
 def test_backend_fetch_blocked_hostname_is_available_false():
-    from netrail.backends.searxng import SearXNGBackend
+    from netrail.backends.searxng import SearXNGBackend, _clear_health_cache
 
+    _clear_health_cache()
     backend = SearXNGBackend(
         "http://company-searxng.internal:8080",
         resolver=_backend_ips("169.254.169.254"),
     )
     assert backend.is_available() is False
+
+
+def test_searxng_health_cached_within_ttl(monkeypatch):
+    from netrail.backends import searxng as searxng_mod
+    from netrail.backends.searxng import SearXNGBackend
+
+    searxng_mod._clear_health_cache()
+    calls: list[str] = []
+
+    class _Resp:
+        status_code = 200
+
+    class _FakeClient:
+        def get(self, url: str):
+            calls.append(url)
+            return _Resp()
+
+    monkeypatch.setattr(searxng_mod, "_SHARED_HEALTH_CLIENT", _FakeClient())
+    backend = SearXNGBackend("http://searxng.test:8080")
+    monkeypatch.setattr(backend, "_check_fetch_url", lambda: None)
+    assert backend.is_available() is True
+    assert backend.is_available() is True
+    assert len(calls) == 1, "second probe must come from the 60s cache"

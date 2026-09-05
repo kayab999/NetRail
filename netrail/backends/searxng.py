@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import threading
+import time
 from typing import Callable
 from urllib.parse import urljoin
 
@@ -10,6 +12,48 @@ from netrail.backends.types import OPERATORS, SearchMode, SearchResult
 from netrail.security import check_backend_fetch_url
 
 logger = logging.getLogger(__name__)
+
+# Parity with Rust USER_AGENT (http_client.rs) and the 60 s SearXNG health
+# TTL (backends/searxng.rs): availability probes are cached so every search
+# does not pay an extra /healthz round-trip.
+USER_AGENT = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+)
+_HEALTH_TTL_SECONDS = 60.0
+_HEALTH_CACHE: dict[str, tuple[bool, float]] = {}
+_HEALTH_LOCK = threading.Lock()
+_SHARED_HEALTH_CLIENT = httpx.Client(
+    timeout=3.0,
+    follow_redirects=False,
+    headers={"User-Agent": USER_AGENT},
+)
+
+
+def _cache_key(base_url: str) -> str:
+    return base_url.rstrip("/").lower()
+
+
+def _cached_health(base_url: str) -> bool | None:
+    with _HEALTH_LOCK:
+        entry = _HEALTH_CACHE.get(_cache_key(base_url))
+    if entry is None:
+        return None
+    ok, checked_at = entry
+    if time.monotonic() - checked_at < _HEALTH_TTL_SECONDS:
+        return ok
+    return None
+
+
+def _record_health(base_url: str, ok: bool) -> None:
+    with _HEALTH_LOCK:
+        _HEALTH_CACHE[_cache_key(base_url)] = (ok, time.monotonic())
+
+
+def _clear_health_cache() -> None:
+    """Test hook: drop cached availability (mirrors Rust test isolation)."""
+    with _HEALTH_LOCK:
+        _HEALTH_CACHE.clear()
 
 
 class SearXNGBackend:
@@ -51,13 +95,17 @@ class SearXNGBackend:
     def is_available(self) -> bool:
         if not self.base_url.startswith(("http://", "https://")):
             return False
+        cached = _cached_health(self.base_url)
+        if cached is not None:
+            return cached
         try:
             self._check_fetch_url()
-            with httpx.Client(timeout=3.0, follow_redirects=False) as client:
-                response = client.get(f"{self.base_url}/healthz")
-                return response.status_code < 500
+            response = _SHARED_HEALTH_CLIENT.get(f"{self.base_url}/healthz")
+            ok = response.status_code < 500
         except Exception:
-            return False
+            ok = False
+        _record_health(self.base_url, ok)
+        return ok
 
     def search(self, query: str, mode: SearchMode, max_results: int) -> list[SearchResult]:
         self._check_fetch_url()

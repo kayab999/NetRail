@@ -35,6 +35,9 @@
           <button type="button" class="ghost-btn donate-btn" id="donate-btn" title="Support NetRail development">
             ☕ Donate
           </button>
+          <button type="button" class="ghost-btn" id="settings-btn" title="Search and history settings">
+            ⚙ Settings
+          </button>
         </nav>
         <div class="topbar-actions">
           <button type="button" id="export-btn" class="ghost-btn icon-action" title="Export results (JSON). Shift+click for CSV." aria-label="Export results" disabled>
@@ -142,8 +145,48 @@
           <input id="save-notes" type="text" placeholder="Why this link matters" />
         </label>
         <div class="dialog-actions">
+          <button type="button" id="collection-delete" class="ghost-btn" title="Delete the selected collection and its saved links">Delete</button>
           <button type="button" id="save-cancel" class="ghost-btn">Cancel</button>
           <button type="submit" id="save-confirm" class="open-btn">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="settings-dialog" class="save-dialog" aria-labelledby="settings-title">
+      <form method="dialog" id="settings-form">
+        <h3 id="settings-title">Settings</h3>
+        <p class="save-url">Saved to this machine only. Invalid values are rejected by the API with a typed error.</p>
+        <label>
+          Max results per search (1–50)
+          <input id="settings-max-results" type="number" min="1" max="50" step="1" />
+        </label>
+        <label>
+          SearXNG URL (empty = disabled)
+          <input id="settings-searxng-url" type="text" placeholder="http://127.0.0.1:8080" spellcheck="false" />
+        </label>
+        <label>
+          Search strategy
+          <select id="settings-strategy">
+            <option value="fanout">Fanout (round-robin merge)</option>
+            <option value="fallback">Fallback (flattened list)</option>
+          </select>
+        </label>
+        <label class="checkbox-wrap">
+          <input type="checkbox" id="settings-history-enabled" />
+          <span>Keep local search history</span>
+        </label>
+        <label class="checkbox-wrap">
+          <input type="checkbox" id="settings-history-encrypt" />
+          <span>Encrypt history (needs keyring or NETRAIL_DB_KEY, else plaintext with a banner)</span>
+        </label>
+        <label>
+          History keeps results for (days, 0 = keep)
+          <input id="settings-history-ttl" type="number" min="0" max="3650" step="1" />
+        </label>
+        <p id="settings-error" class="settings-error hidden" role="alert"></p>
+        <div class="dialog-actions">
+          <button type="button" id="settings-cancel" class="ghost-btn">Cancel</button>
+          <button type="submit" id="settings-confirm" class="open-btn">Save</button>
         </div>
       </form>
     </dialog>

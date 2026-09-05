@@ -159,6 +159,33 @@ def test_connect_enables_wal_and_stamps_schema_version(tmp_path, monkeypatch):
         conn.close()
 
 
+def test_v1_database_migrates_to_v2_with_timestamp_index(tmp_path, monkeypatch):
+    """A pre-existing v1 DB (no idx_queries_timestamp) gains the TTL-purge
+    index on next connect, stamped user_version = 2 (Rust parity)."""
+    import sqlite3
+
+    monkeypatch.setenv("NETRAIL_DB_PATH", str(tmp_path / "n.db"))
+    raw = sqlite3.connect(str(tmp_path / "n.db"))
+    raw.execute(
+        "CREATE TABLE queries (id INTEGER PRIMARY KEY AUTOINCREMENT, "
+        "timestamp TEXT NOT NULL DEFAULT (datetime('now')), "
+        "query_text_enc BLOB NOT NULL, mode TEXT NOT NULL, backends_used TEXT NOT NULL)"
+    )
+    raw.execute("PRAGMA user_version = 1")
+    raw.commit()
+    raw.close()
+
+    conn = connect()
+    try:
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+        idx = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_queries_timestamp'"
+        ).fetchone()
+        assert idx is not None
+    finally:
+        conn.close()
+
+
 def test_db_path_resolves_home_per_call(monkeypatch):
     """QA-16: db_path() must not freeze $HOME at import (config.py/browsers.py
     convention); changing $HOME between calls changes the default path."""

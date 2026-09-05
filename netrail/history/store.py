@@ -81,20 +81,17 @@ class HistoryStore:
     def purge_expired(self, ttl_days: int) -> int:
         if ttl_days <= 0:
             return 0
+        # Single-statement delete (FK cascade clears results/visits) plus one
+        # FTS rebuild, committed once — O(1) statements, atomic.
         cursor = self._conn.execute(
-            """
-            SELECT id FROM queries
-            WHERE timestamp < datetime('now', ?)
-            """,
+            "DELETE FROM queries WHERE timestamp < datetime('now', ?)",
             (f"-{int(ttl_days)} days",),
         )
-        ids = [row["id"] for row in cursor.fetchall()]
-        for query_id in ids:
-            self._conn.execute("DELETE FROM queries WHERE id = ?", (query_id,))
-        if ids:
+        purged = cursor.rowcount
+        if purged:
             self._rebuild_fts()
         self._conn.commit()
-        return len(ids)
+        return purged
 
     @_synchronized
     def record_search(
@@ -304,6 +301,16 @@ class HistoryStore:
         self._conn.commit()
         collection_id = int(cursor.lastrowid)
         return {"id": collection_id, "name": name, "created_at": datetime.now(timezone.utc).isoformat(), "item_count": 0}
+
+    @_synchronized
+    def delete_collection(self, collection_id: int) -> bool:
+        """Delete a collection and its items (FK cascade). False → 404."""
+        cursor = self._conn.execute(
+            "DELETE FROM collections WHERE id = ?",
+            (collection_id,),
+        )
+        self._conn.commit()
+        return cursor.rowcount > 0
 
     @_synchronized
     def add_collection_item(

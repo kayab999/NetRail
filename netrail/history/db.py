@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS results (
 
 CREATE INDEX IF NOT EXISTS idx_results_url_norm ON results(url_norm);
 CREATE INDEX IF NOT EXISTS idx_results_query_id ON results(query_id);
+CREATE INDEX IF NOT EXISTS idx_queries_timestamp ON queries(timestamp);
 
 CREATE TABLE IF NOT EXISTS visits (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,7 +76,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS queries_fts USING fts5(
 """
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 def normalize_url(url: str) -> str:
@@ -86,13 +87,18 @@ def _migrate(conn: sqlite3.Connection) -> None:
     """Version schema via PRAGMA user_version (Rust parity).
 
     Version 0 (fresh DB or any pre-migration database) applies the full
-    idempotent schema and stamps 1. Future schema changes append
+    idempotent schema and stamps 1; version 2 adds the TTL-purge index on
+    `queries(timestamp)`. Future schema changes append
     `if version < N: ...; conn.execute("PRAGMA user_version = N")`.
     """
     version = conn.execute("PRAGMA user_version").fetchone()[0]
-    if version < SCHEMA_VERSION:
+    if version < 1:
         conn.executescript(SCHEMA_SQL)
-        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        conn.execute("PRAGMA user_version = 1")
+        version = 1
+    if version < 2:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_queries_timestamp ON queries(timestamp)")
+        conn.execute("PRAGMA user_version = 2")
 
 
 def connect() -> sqlite3.Connection:

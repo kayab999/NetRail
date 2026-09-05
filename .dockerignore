@@ -1,0 +1,28 @@
+# Keep the build context small and secret-free. Both Dockerfiles COPY only
+# what they need; everything else must not reach the daemon at all.
+.git
+.github
+.venv
+__pycache__
+.pytest_cache
+.mypy_cache
+.coverage
+htmlcov
+.coveragerc
+target
+node_modules
+dist
+packaging
+branding
+.env
+*.db
+*.db-wal
+*.db-shm
+screenshot*.png
+.vscode
+.idea
+*.log
+audit.log
+requirements.txt
+tests
+scripts

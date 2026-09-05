@@ -135,7 +135,7 @@ Enable backends in `~/.config/netrail/settings.json`:
 export BRAVE_SEARCH_API_KEY="your-key"
 ```
 
-Set `search_strategy` to `"fallback"` for legacy sequential behavior.
+Set `search_strategy` to `"fallback"` for flattened single-list behavior (all enabled backends are still queried in parallel inside the 20 s fanout budget; `fallback` only changes the merge to dedupe-and-flatten instead of round-robin interleave).
 
 ---
 

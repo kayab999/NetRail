@@ -289,6 +289,12 @@
       "code": "OPEN_URL_LINK_LOCAL"
     },
     {
+      "id": "reject_azure_imds_open",
+      "url": "http://168.63.129.16/",
+      "expect": "block",
+      "code": "OPEN_URL_CLOUD_METADATA"
+    },
+    {
       "id": "reject_nat64_wkp_embedded_loopback",
       "url": "http://[64:ff9b::7f00:1]/",
       "expect": "block",
@@ -536,6 +542,12 @@
       "code": "BACKEND_URL_CLOUD_METADATA"
     },
     {
+      "id": "reject_azure_imds_backend",
+      "url": "http://168.63.129.16/",
+      "expect": "block",
+      "code": "BACKEND_URL_CLOUD_METADATA"
+    },
+    {
       "id": "reject_nip_io_backend",
       "url": "http://127.0.0.1.nip.io/",
       "expect": "block",
@@ -693,6 +705,14 @@
       "expect": "block",
       "code": "BACKEND_URL_CLOUD_METADATA",
       "resolved_ips": ["fd00:ec2::254"]
+    },
+    {
+      "id": "reject_resolved_azure_imds_backend",
+      "url": "http://searxng.example:8080",
+      "expect": "block",
+      "code": "BACKEND_URL_CLOUD_METADATA",
+      "resolved_ips": ["168.63.129.16"],
+      "note": "Azure IMDS wire address is public-routable; only the explicit metadata-IP table catches it."
     },
     {
       "id": "reject_resolved_link_local_backend",

@@ -6,8 +6,15 @@ import pytest
 
 from netrail.backends import registry
 from netrail.backends.types import SearchResult
+from netrail.backends.wikipedia import WikipediaBackend
 from netrail.errors import NetRailError
 from netrail.search import search
+
+
+def _stub_wiki_empty(monkeypatch) -> None:
+    """Deadline tests must never touch the real network: Wikipedia is the
+    fallback under test-budget, so stub it to empty."""
+    monkeypatch.setattr(WikipediaBackend, "search", lambda self, *a, **k: [])
 
 
 class _FastBackend:
@@ -49,6 +56,7 @@ def _deadline_short(monkeypatch) -> None:
 
 
 def test_partial_results_kept_200_with_timed_out_error(monkeypatch):
+    _stub_wiki_empty(monkeypatch)
     _deadline_short(monkeypatch)
     monkeypatch.setattr(
         registry,
@@ -69,6 +77,7 @@ def test_partial_results_kept_200_with_timed_out_error(monkeypatch):
 
 
 def test_total_failure_raises_502_fanout_total_failure(monkeypatch):
+    _stub_wiki_empty(monkeypatch)
     _deadline_short(monkeypatch)
     monkeypatch.setattr(
         registry,
@@ -83,6 +92,7 @@ def test_total_failure_raises_502_fanout_total_failure(monkeypatch):
 
 
 def test_hung_backend_does_not_stretch_request_past_deadline(monkeypatch):
+    _stub_wiki_empty(monkeypatch)
     _deadline_short(monkeypatch)
     monkeypatch.setattr(
         registry,

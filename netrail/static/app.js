@@ -12,6 +12,7 @@ const state = {
     private_mode: false,
     max_results: 25,
   },
+  settingsEtag: null,
   browsers: [],
   collections: [],
   saveTarget: null,
@@ -53,6 +54,18 @@ const els = {
   saveNotes: document.getElementById("save-notes"),
   saveTargetUrl: document.getElementById("save-target-url"),
   saveCancel: document.getElementById("save-cancel"),
+  collectionDelete: document.getElementById("collection-delete"),
+  settingsBtn: document.getElementById("settings-btn"),
+  settingsDialog: document.getElementById("settings-dialog"),
+  settingsForm: document.getElementById("settings-form"),
+  settingsMaxResults: document.getElementById("settings-max-results"),
+  settingsSearxngUrl: document.getElementById("settings-searxng-url"),
+  settingsStrategy: document.getElementById("settings-strategy"),
+  settingsHistoryEnabled: document.getElementById("settings-history-enabled"),
+  settingsHistoryEncrypt: document.getElementById("settings-history-encrypt"),
+  settingsHistoryTtl: document.getElementById("settings-history-ttl"),
+  settingsError: document.getElementById("settings-error"),
+  settingsCancel: document.getElementById("settings-cancel"),
   helpMenuBtn: document.getElementById("help-menu-btn"),
   helpDropdown: document.getElementById("help-dropdown"),
   donateBtn: document.getElementById("donate-btn"),
@@ -155,6 +168,24 @@ function setView(view, mode) {
   } else {
     els.historyPanel.classList.add("hidden");
   }
+  syncTabIndex();
+}
+
+/** APG tablist: roving tabindex — only the selected tab is in Tab order. */
+function syncTabIndex() {
+  if (!els.tabs) return;
+  els.tabs.forEach((tab) => {
+    tab.tabIndex = tab.getAttribute("aria-selected") === "true" ? 0 : -1;
+  });
+}
+
+function focusTabAt(index) {
+  const tabs = [...els.tabs];
+  const tab = tabs[(index + tabs.length) % tabs.length];
+  if (tab) {
+    tab.focus();
+    tab.click();
+  }
 }
 
 function renderBrowsers() {
@@ -184,13 +215,48 @@ function renderBrowsers() {
   state.settings.browser_id = selected;
 }
 
+async function fetchSettings() {
+  const response = await fetch("/api/settings", { headers: apiHeaders() });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.detail || `Request failed (${response.status})`);
+  }
+  state.settingsEtag = response.headers.get("ETag");
+  state.settings = await response.json();
+  return state.settings;
+}
+
+function syncSettingsControls() {
+  els.privateMode.checked = Boolean(state.settings.private_mode);
+  renderBrowsers();
+}
+
 async function persistSettings() {
   state.settings.browser_id = els.browserSelect.value || null;
   state.settings.private_mode = els.privateMode.checked;
-  state.settings = await api("/api/settings", {
-    method: "PUT",
-    body: JSON.stringify(state.settings),
-  });
+  const headers = apiHeaders();
+  if (state.settingsEtag) headers["If-Match"] = state.settingsEtag;
+  try {
+    const response = await fetch("/api/settings", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(state.settings),
+    });
+    if (response.status === 409) {
+      await fetchSettings();
+      syncSettingsControls();
+      showState("Settings conflict", "Settings changed elsewhere — reloaded the latest. Review and retry.", true);
+      return;
+    }
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload.detail || `Request failed (${response.status})`);
+    }
+    state.settingsEtag = response.headers.get("ETag");
+    state.settings = await response.json();
+  } catch (error) {
+    showState("Saving settings failed", error.message, true);
+  }
 }
 
 function showState(title, message, isError = false) {
@@ -534,6 +600,7 @@ function buildResultCard(item, index) {
   saveBtn.className = "icon-btn";
   saveBtn.type = "button";
   saveBtn.title = "Save to collection";
+  saveBtn.setAttribute("aria-label", `Save to collection: ${item.title || item.url}`);
   saveBtn.textContent = "★";
   saveBtn.addEventListener("click", () => openSaveDialog(item));
   actions.appendChild(saveBtn);
@@ -559,20 +626,24 @@ function buildResultCard(item, index) {
 
 async function openLink(url, resultId = null, forcePrivate = null) {
   const privateMode = forcePrivate ?? state.settings.private_mode;
-  const result = await api("/api/open", {
-    method: "POST",
-    body: JSON.stringify({
-      url,
-      browser_id: state.settings.browser_id,
-      private_mode: privateMode,
-      result_id: resultId,
-    }),
-  });
+  try {
+    const result = await api("/api/open", {
+      method: "POST",
+      body: JSON.stringify({
+        url,
+        browser_id: state.settings.browser_id,
+        private_mode: privateMode,
+        result_id: resultId,
+      }),
+    });
 
-  const modeLabel = result.mode === "private" ? " (private)" : "";
-  els.state.hidden = false;
-  els.state.classList.remove("error");
-  els.state.innerHTML = `<h2>Opened in ${escapeHtml(result.browser)}${modeLabel}</h2><p>${escapeHtml(result.url)}</p>`;
+    const modeLabel = result.mode === "private" ? " (private)" : "";
+    els.state.hidden = false;
+    els.state.classList.remove("error");
+    els.state.innerHTML = `<h2>Opened in ${escapeHtml(result.browser)}${modeLabel}</h2><p>${escapeHtml(result.url)}</p>`;
+  } catch (error) {
+    showState("Open failed", error.message, true);
+  }
 }
 
 async function runSearch() {
@@ -682,33 +753,113 @@ async function saveToCollection(event) {
   const item = state.saveTarget;
   if (!item) return;
 
-  let collectionId = els.saveCollectionSelect.value;
-  const newName = els.saveNewCollection.value.trim();
+  try {
+    let collectionId = els.saveCollectionSelect.value;
+    const newName = els.saveNewCollection.value.trim();
 
-  if (newName) {
-    const created = await api("/api/collections", {
+    if (newName) {
+      const created = await api("/api/collections", {
+        method: "POST",
+        body: JSON.stringify({ name: newName }),
+      });
+      collectionId = String(created.id);
+    }
+
+    if (!collectionId) {
+      alert("Choose or create a collection.");
+      return;
+    }
+
+    await api(`/api/collections/${collectionId}/items`, {
       method: "POST",
-      body: JSON.stringify({ name: newName }),
+      body: JSON.stringify({
+        url: item.url,
+        title: item.title,
+        notes: els.saveNotes.value.trim() || null,
+      }),
     });
-    collectionId = String(created.id);
+
+    els.saveDialog.close();
+    await loadCollections();
+  } catch (error) {
+    alert(`Save failed: ${error.message}`);
   }
+}
 
-  if (!collectionId) {
-    alert("Choose or create a collection.");
-    return;
+function openSettingsDialog() {
+  if (!els.settingsDialog) return;
+  syncSettingsDialog();
+  els.settingsError.hidden = true;
+  els.settingsError.textContent = "";
+  els.settingsDialog.showModal();
+}
+
+function syncSettingsDialog() {
+  const s = state.settings;
+  els.settingsMaxResults.value = s.max_results ?? 25;
+  els.settingsSearxngUrl.value = s.searxng_url ?? "";
+  els.settingsStrategy.value = s.search_strategy === "fallback" ? "fallback" : "fanout";
+  els.settingsHistoryEnabled.checked = s.history_enabled !== false;
+  els.settingsHistoryEncrypt.checked = s.history_encrypt !== false;
+  els.settingsHistoryTtl.value = s.history_ttl_days ?? 90;
+}
+
+async function saveSettingsDialog(event) {
+  event.preventDefault();
+  const maxResults = Number.parseInt(els.settingsMaxResults.value, 10);
+  const ttl = Number.parseInt(els.settingsHistoryTtl.value, 10);
+  const next = {
+    ...state.settings,
+    max_results: Number.isFinite(maxResults) ? maxResults : state.settings.max_results,
+    searxng_url: els.settingsSearxngUrl.value.trim() || null,
+    search_strategy: els.settingsStrategy.value === "fallback" ? "fallback" : "fanout",
+    history_enabled: els.settingsHistoryEnabled.checked,
+    history_encrypt: els.settingsHistoryEncrypt.checked,
+    history_ttl_days: Number.isFinite(ttl) ? ttl : state.settings.history_ttl_days,
+  };
+  const headers = apiHeaders();
+  if (state.settingsEtag) headers["If-Match"] = state.settingsEtag;
+  try {
+    const response = await fetch("/api/settings", {
+      method: "PUT",
+      headers,
+      body: JSON.stringify(next),
+    });
+    if (response.status === 409) {
+      await fetchSettings();
+      syncSettingsControls();
+      syncSettingsDialog();
+      throw new Error("Settings changed elsewhere — reloaded the latest. Review and retry.");
+    }
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      const err = new Error(payload.detail || `Request failed (${response.status})`);
+      if (payload.code) err.code = payload.code;
+      throw err;
+    }
+    state.settingsEtag = response.headers.get("ETag");
+    state.settings = await response.json();
+    syncSettingsControls();
+    els.settingsDialog.close();
+  } catch (error) {
+    els.settingsError.textContent = error.code
+      ? `${error.message} (${error.code})`
+      : error.message;
+    els.settingsError.hidden = false;
   }
+}
 
-  await api(`/api/collections/${collectionId}/items`, {
-    method: "POST",
-    body: JSON.stringify({
-      url: item.url,
-      title: item.title,
-      notes: els.saveNotes.value.trim() || null,
-    }),
-  });
-
-  els.saveDialog.close();
-  await loadCollections();
+async function deleteSelectedCollection() {
+  const collectionId = els.saveCollectionSelect.value;
+  if (!collectionId) return;
+  const name = els.saveCollectionSelect.selectedOptions[0]?.textContent || collectionId;
+  if (!confirm(`Delete collection ${name}? Its saved links go with it.`)) return;
+  try {
+    await api(`/api/collections/${collectionId}`, { method: "DELETE" });
+    await loadCollections();
+  } catch (error) {
+    alert(`Delete failed: ${error.message}`);
+  }
 }
 
 async function loadHistory() {
@@ -755,8 +906,12 @@ async function loadHistory() {
 
 async function purgeHistory() {
   if (!confirm("Delete all local search history?")) return;
-  await api("/api/history", { method: "DELETE" });
-  loadHistory();
+  try {
+    await api("/api/history", { method: "DELETE" });
+    loadHistory();
+  } catch (error) {
+    showState("Purge failed", error.message, true);
+  }
 }
 
 function handleKeyboard(event) {
@@ -791,7 +946,15 @@ function handleKeyboard(event) {
     return;
   }
 
-  if (event.key === "Enter" && state.highlightIndex >= 0) {
+  // Enter with the query box focused always submits a new search —
+  // opening the highlighted result is only for list-navigation context.
+  if (event.key === "Enter" && queryFocused) {
+    event.preventDefault();
+    runSearch();
+    return;
+  }
+
+  if (event.key === "Enter" && !queryFocused && state.highlightIndex >= 0) {
     event.preventDefault();
     const item = state.lastPayload.results[state.highlightIndex];
     if (!item) return;
@@ -866,13 +1029,12 @@ async function bootstrap() {
   try {
     const [browsers, settings, health] = await Promise.all([
       api("/api/browsers"),
-      api("/api/settings"),
+      fetchSettings(),
       api("/api/health"),
     ]);
     state.browsers = browsers;
     state.settings = settings;
-    els.privateMode.checked = Boolean(settings.private_mode);
-    renderBrowsers();
+    syncSettingsControls();
     applyHealthSecurity(health);
     const versionEl = document.getElementById("app-version");
     if (versionEl && health.version) {
@@ -895,13 +1057,30 @@ els.form.addEventListener("submit", (event) => {
   runSearch();
 });
 
-els.tabs.forEach((tab) => {
+els.tabs.forEach((tab, index) => {
   tab.addEventListener("click", () => {
     const view = tab.dataset.view;
     const mode = tab.dataset.mode || state.mode;
     setView(view, mode);
   });
+  // APG tablist keyboard: arrows move + activate, Home/End jump.
+  tab.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      focusTabAt(index + 1);
+    } else if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      focusTabAt(index - 1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      focusTabAt(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      focusTabAt(els.tabs.length - 1);
+    }
+  });
 });
+syncTabIndex();
 
 els.browserSelect.addEventListener("change", persistSettings);
 els.privateMode.addEventListener("change", persistSettings);
@@ -909,6 +1088,18 @@ els.historySearchBtn.addEventListener("click", loadHistory);
 els.historyPurgeBtn.addEventListener("click", purgeHistory);
 els.saveForm.addEventListener("submit", saveToCollection);
 els.saveCancel.addEventListener("click", () => els.saveDialog.close());
+if (els.collectionDelete) {
+  els.collectionDelete.addEventListener("click", deleteSelectedCollection);
+}
+if (els.settingsBtn && els.settingsDialog) {
+  els.settingsBtn.addEventListener("click", openSettingsDialog);
+}
+if (els.settingsForm) {
+  els.settingsForm.addEventListener("submit", saveSettingsDialog);
+}
+if (els.settingsCancel) {
+  els.settingsCancel.addEventListener("click", () => els.settingsDialog.close());
+}
 
 if (els.exportBtn) {
   els.exportBtn.addEventListener("click", (event) => {
@@ -922,10 +1113,53 @@ if (els.loadMoreBtn) {
 
 document.addEventListener("keydown", handleKeyboard);
 
+function focusHelpItemAt(index) {
+  const items = [...els.helpDropdown.querySelectorAll('[role="menuitem"]')];
+  const item = items[(index + items.length) % items.length];
+  if (item) item.focus();
+}
+
 if (els.helpMenuBtn) {
   els.helpMenuBtn.addEventListener("click", (event) => {
     event.stopPropagation();
     toggleHelpMenu();
+  });
+  // APG menu-button: ArrowDown opens and moves into the menu.
+  els.helpMenuBtn.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (els.helpDropdown.hidden) toggleHelpMenu();
+      focusHelpItemAt(event.key === "ArrowDown" ? 0 : -1);
+    } else if (event.key === "Escape" && !els.helpDropdown.hidden) {
+      event.preventDefault();
+      closeHelpMenu();
+    }
+  });
+}
+
+if (els.helpDropdown) {
+  // APG menu keyboard: Escape closes (focus back on the button),
+  // arrows/Home/End move between items.
+  els.helpDropdown.addEventListener("keydown", (event) => {
+    const items = [...els.helpDropdown.querySelectorAll('[role="menuitem"]')];
+    const current = items.indexOf(document.activeElement);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeHelpMenu();
+      els.helpMenuBtn?.focus();
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      focusHelpItemAt(current + 1);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      focusHelpItemAt(current - 1);
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      focusHelpItemAt(0);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      focusHelpItemAt(-1);
+    }
   });
 }
 
@@ -958,7 +1192,7 @@ window.netrailDonate = openDonate;
 function focusSearchInput() {
   if (!els.query) return;
   // Skip when a modal dialog owns the surface.
-  if (els.docDialog?.open || els.saveDialog?.open) return;
+  if (els.docDialog?.open || els.saveDialog?.open || els.settingsDialog?.open) return;
   els.query.focus();
   els.query.select();
 }

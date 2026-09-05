@@ -52,6 +52,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/api/history", get(get_history).delete(purge_history))
         .route("/api/history/{query_id}", delete(delete_history_entry))
         .route("/api/collections", get(list_collections).post(create_collection))
+        .route("/api/collections/{collection_id}", delete(delete_collection))
         .route(
             "/api/collections/{collection_id}/items",
             post(add_collection_item),
@@ -66,6 +67,35 @@ pub fn build_router(state: AppState) -> Router {
         .with_state(state)
         .layer(axum::middleware::from_fn(api_auth_middleware))
         .layer(axum::middleware::from_fn(security_headers))
+        // Registered last so it runs first: reject non-loopback Host
+        // headers (DNS rebinding) before auth, routing or token logic.
+        .layer(axum::middleware::from_fn(host_allowlist))
+}
+
+/// TTL purge cadence for long-lived daemons. `HistoryStore::open` purges at
+/// (re)bind, but a systemd `netrail-api` running for months would otherwise
+/// never purge — this task closes that gap (best-effort, logged).
+const PURGE_INTERVAL: std::time::Duration = std::time::Duration::from_secs(6 * 3600);
+
+fn spawn_periodic_purge(store: Arc<SharedStore>, settings_fn: Arc<dyn Fn() -> Settings + Send + Sync>) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(PURGE_INTERVAL);
+        // First tick fires immediately; open() already purged — skip it.
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            let settings = (settings_fn)();
+            if !settings.history_enabled || settings.history_ttl_days == 0 {
+                continue;
+            }
+            let ttl = settings.history_ttl_days;
+            match store.with_store(&settings, |s| s.purge_expired(ttl)) {
+                Some(Ok(0)) | None => {}
+                Some(Ok(n)) => tracing::info!(purged = n, "periodic TTL history purge"),
+                Some(Err(err)) => tracing::warn!(error = %err, "periodic TTL history purge failed"),
+            }
+        }
+    });
 }
 
 pub async fn start() -> Result<(), String> {
@@ -76,6 +106,7 @@ pub async fn start() -> Result<(), String> {
         rate_limiter: RateLimiter::from_env(),
         store: Arc::new(SharedStore::new(&settings)),
     };
+    spawn_periodic_purge(state.store.clone(), state.settings_fn.clone());
 
     let app = build_router(state);
 
@@ -137,6 +168,26 @@ async fn security_headers(request: Request<axum::body::Body>, next: Next) -> Res
         );
     }
     response
+}
+
+/// Reject non-loopback `Host` headers (DNS-rebinding depth). Absent Host
+/// (HTTP/1.0) is allowed — the listener is loopback-bound either way.
+async fn host_allowlist(request: Request<axum::body::Body>, next: Next) -> Response {
+    let host = request
+        .headers()
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if !host.is_empty() && !crate::security::host_allowed(host) {
+        return ApiError::from(NetRailError::InvalidConfig {
+            code: "HOST_INVALID",
+            message: format!(
+                "Unexpected Host {host:?}; this API only serves 127.0.0.1:7421."
+            ),
+        })
+        .into_response();
+    }
+    next.run(request).await
 }
 
 async fn api_auth_middleware(request: Request<axum::body::Body>, next: Next) -> Response {
@@ -663,6 +714,36 @@ async fn create_collection(
         ?;
     audit::log_event("collection.create", serde_json::json!({ "name_len": name.len() }));
     Ok(Json(created))
+}
+
+async fn delete_collection(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(collection_id): Path<i64>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    ensure_mutable()?;
+    state.rate_limiter.check_mutate(&request_identity(&headers))?;
+    let settings = (state.settings_fn)();
+    let deleted = state
+        .store
+        .with_store(&settings, |store| store.delete_collection(collection_id))
+        .ok_or_else(history_disabled_error)?
+        ?;
+    if !deleted {
+        return Err(NetRailError::NotFound {
+            code: "COLLECTION_NOT_FOUND",
+            entity: format!("collection {collection_id}"),
+        }
+        .into());
+    }
+    audit::log_event(
+        "collection.delete",
+        serde_json::json!({ "collection_id": collection_id }),
+    );
+    Ok(Json(serde_json::json!({
+        "status": "ok",
+        "deleted_id": collection_id,
+    })))
 }
 
 #[derive(Deserialize)]

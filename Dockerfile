@@ -7,8 +7,10 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Pinned runtime closure (regenerate with scripts/generate-requirements-lock.sh);
+# requirements.txt keeps the human-edited lower bounds.
+COPY requirements.lock .
+RUN pip install --no-cache-dir -r requirements.lock
 
 COPY netrail ./netrail
 COPY assets ./assets

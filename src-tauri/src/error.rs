@@ -117,6 +117,9 @@ impl NetRailError {
             Self::InvalidConfig { code, .. } if *code == "AUTH_REQUIRED" => {
                 StatusCode::UNAUTHORIZED
             }
+            Self::InvalidConfig { code, .. } if *code == "HOST_INVALID" => {
+                StatusCode::FORBIDDEN
+            }
 
             Self::InvalidQuery { .. }
             | Self::InvalidOpenUrl { .. }

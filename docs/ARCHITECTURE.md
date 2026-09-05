@@ -39,7 +39,7 @@ Production **1.2.x** runs a **Rust Axum API** on `127.0.0.1:7421`, shared with a
 
 | Component | Primary implementation | Notes |
 |-----------|------------------------|-------|
-| Search fanout | `src-tauri/src/backends/mod.rs` | `join_all`, merge, 20s timeout |
+| Search fanout | `src-tauri/src/backends/mod.rs` | `JoinSet` + `select!` deadline (abort-on-remainder, partial → 200), merge, 20s budget incl. Wikipedia fallback |
 | History | `src-tauri/src/history/mod.rs` | Fernet encryption, FTS5 |
 | URL safety | `src-tauri/src/security.rs` | Open vs backend URL policies |
 | UI | `netrail/static/app.js` | Shared across all modes |
@@ -311,7 +311,7 @@ Backlog shipped on `main` (all in v1.6.3 / Sprints):
 | Test suite (API, backends, security) | ✅ |
 | Open Letter honesty rewrite | ✅ |
 | Result caching | 🔲 optional backlog |
-| Async multi-backend fanout | ✅ 1.x (`join_all` / thread pool) |
+| Async multi-backend fanout | ✅ 1.x (`JoinSet` + `select!` / thread pool + `as_completed`) |
 | Brave Search API (BYO key) | ✅ 1.x (`BRAVE_SEARCH_API_KEY`) |
 
 **Exit criteria:** User sees where results come from; SearXNG works when configured; tests gate releases. ✅
@@ -381,7 +381,7 @@ Backlog shipped on `main` (all in v1.6.3 / Sprints):
 
 | Item | Status |
 |------|--------|
-| Async fanout + dedupe merge | ✅ `join_all` fanout; `merge.rs` normalize → dedupe → interleave |
+| Async fanout + dedupe merge | ✅ `JoinSet` + `select!` fanout; `merge.rs` normalize → dedupe → interleave |
 | Brave BYO-key backend | ✅ `BRAVE_SEARCH_API_KEY` env; never stored in settings |
 | Pro-console UI | ✅ Backend pills, keyboard nav, result export (JSON/CSV) |
 | GitHub Release CI | ✅ AppImage + `.deb` + `netrail-api` on tag push |

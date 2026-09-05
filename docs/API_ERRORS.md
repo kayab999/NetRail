@@ -26,13 +26,14 @@ The frontend branches on `code`; `detail` is human-readable. Rust (Tauri / `netr
 | `OPEN_URL_LINK_LOCAL` | 400 | Link-local IP |
 | `OPEN_URL_PRIVATE` | 400 | Private / non-public IP (RFC1918, ULA, multicast, …) |
 | `OPEN_URL_DNS_UNRESOLVABLE` | 400 | Hostname does not resolve (fails closed before spawn) |
-| `OPEN_URL_CLOUD_METADATA` | 400 | Cloud metadata hostname (e.g. `metadata.google.internal`) |
+| `OPEN_URL_CLOUD_METADATA` | 400 | Cloud metadata hostname (e.g. `metadata.google.internal`) or IP (169.254.169.254 maps to `OPEN_URL_LINK_LOCAL`; 168.63.129.16 Azure IMDS maps here) |
 | `COLLECTION_ITEM_NOTES_INVALID` | 400 | Collection item notes longer than 2000 characters |
 | `REQUEST_INVALID` | 400 | Generic request validation failure (malformed body/query params) — both stacks |
 | `RATE_LIMITED` | 429 | Too many search/open/mutation calls in a 60s window (disable with `NETRAIL_RATE_LIMIT=0`) |
-| `SETTINGS_CONFLICT` | 409 | `If-Match` on `PUT /api/settings` doesn't match the current settings `ETag` (settings changed since read; re-fetch and retry) |
-| `READONLY_MODE` | 403 | `NETRAIL_READONLY=1` — mutations (settings PUT, history delete/purge, collection create/add) rejected. Note that search/visit history logging is still performed in this mode to preserve audit logs. |
+| `SETTINGS_CONFLICT` | 409 | `If-Match` on `PUT /api/settings` doesn't match the current settings `ETag` (settings changed since read; re-fetch and retry). ETags are opaque and per-stack (Rust base64 / Python hex) — always reuse the value from your last `GET` on the same process |
+| `READONLY_MODE` | 403 | `NETRAIL_READONLY=1` — mutations (settings PUT, history delete/purge, collection create/add/delete) rejected. Note that search/visit history logging is still performed in this mode to preserve audit logs. |
 | `AUTH_REQUIRED` | 401 | `NETRAIL_API_TOKEN` set but Bearer / `X-NetRail-Token` missing or wrong |
+| `HOST_INVALID` | 403 | `Host` header is not loopback (`127.0.0.1:7421` / `localhost:7421`) — DNS-rebinding depth, checked before auth on every route |
 | `BACKEND_URL_STRICT_PRIVATE` | 400 | `strict_backend_urls` rejected private/loopback backend host |
 | `OPEN_URL_REDIRECT_DEPTH` | 400 | Too many DDG redirect unwraps |
 | `CONFIG_MAX_RESULTS` | 400 | `max_results` not in 1–50 |
@@ -44,7 +45,7 @@ The frontend branches on `code`; `detail` is human-readable. Rust (Tauri / `netr
 | `BACKEND_URL_CREDENTIALS` | 400 | Credentials in backend URL |
 | `BACKEND_URL_NO_HOST` | 400 | Backend URL missing host |
 | `BACKEND_URL_DNS_REBINDING` | 400 | Rebinding hostname in backend URL |
-| `BACKEND_URL_CLOUD_METADATA` | 400 | 169.254.169.254, fd00:ec2::254, or known metadata hostnames |
+| `BACKEND_URL_CLOUD_METADATA` | 400 | 169.254.169.254, 168.63.129.16 (Azure IMDS), fd00:ec2::254, or known metadata hostnames |
 | `BACKEND_URL_LINK_LOCAL` | 400 | Link-local backend address |
 | `BACKEND_URL_DNS_UNRESOLVABLE` | 400 | Fetch-time guard: backend hostname resolved to no addresses (fails closed) |
 | `HISTORY_DISABLED` | 400 | History endpoints with history off |
