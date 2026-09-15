@@ -33,6 +33,7 @@ Post-`v1.6.6` work on `main`. Not in the GitHub `v1.6.6` tag or release binaries
 - **Fanout panic:** Rust `JoinError` is recorded as a backend error instead of dropped (empty-errors total-failure hole).
 - **Open audit:** Rust logs the effective `private_mode` (settings OR request), matching Python.
 - **HTTP client:** fail-closed on TLS/redirect policy; `/docs` and `/openapi.json` are not served; history `limit` clamped to match Rust; `record_search` / purge run in a transaction.
+- **Supply chain:** `h2` 0.4.15 → 0.4.19 (RUSTSEC-2026-0258 empty DATA-frame DoS) and `rustls` 0.23.41 → 0.23.45 (RUSTSEC-2026-0285 TLS 1.3 encryption-level handshake). `cargo audit` clean of vulnerabilities.
 
 ## [1.6.6] — 2026-08-11 (security convergence)
 
