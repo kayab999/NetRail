@@ -2,6 +2,38 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+Post-`v1.6.6` work on `main`. Not in the GitHub `v1.6.6` tag or release binaries.
+
+### Added
+
+- **S1 attach-explicit:** desktop/`netrail-api` probes `GET /api/health` on `127.0.0.1:7421` before bind. Empty port → bind; NetRail fingerprint (`status`/`version`/`api_contract`) → attach; anything else on the port → `exit(1)` (never hijack a foreign process). Re-probes if the bind loses the race.
+- **S3 deadline budget:** Wikipedia fallback stays inside the 20s fanout budget on both stacks; Python Wikipedia client uses a Chrome UA. Deadline tests use stubs (no live network).
+- **Collections:** `DELETE /api/collections/{id}` on both stacks (`COLLECTION_NOT_FOUND` when missing).
+- **Host allowlist:** `Host` must be loopback (`127.0.0.1:7421` / `localhost:7421`); otherwise `HOST_INVALID` 403 before auth.
+- **Azure IMDS:** `168.63.129.16` blocked at open-URL and backend-URL policy (golden fixture vectors).
+- **History schema v2:** `idx_queries_timestamp` for TTL purge; periodic purge every 6h on long-lived daemons (open() still purges at bind).
+- **SearXNG health cache:** 60s TTL on availability probes, both stacks.
+- **Devops:** `.dockerignore`; `requirements.lock` (36 pins) + `scripts/generate-requirements-lock.sh`.
+- **UX:** Enter in `#query` always searches; visible errors on open/save/purge; `If-Match` + 409 reloads settings; in-app settings dialog; native confirm on close with `wal_checkpoint` + exit; global shortcut failure is non-fatal.
+
+### Fixed
+
+- **Decrypt fallback (S1/S2):** undecryptable Fernet blobs now surface `[DECRYPTION_FAILED]` instead of base64 garbage (both stacks). Legacy plaintext rows (no `gAAAAA` prefix) still pass through.
+- **Invalid `NETRAIL_DB_KEY`:** both stacks treat an unusable key as inactive (`encryption_state=degraded`). Python no longer 500s `/api/health`; Rust `encryption_active()` / `ensure_encryption_key()` require `Fernet::new` to succeed (a present-but-invalid env key previously reported encrypted while writes fell back to plaintext).
+- **Python Docker Help:** image now copies `docs/` + `README.md`; missing in-app docs return typed `DOC_NOT_FOUND` instead of an untyped 500.
+- **Collection name store code:** Rust `HistoryStore::create_collection` uses `COLLECTION_NAME_INVALID` (was unused `COLLECTION_NAME_REQUIRED`).
+- **Docs/SSOT:** README + API_ERRORS version drift closed; DISTRIBUTION systemd path matches `ExecStart=/usr/local/bin/netrail-api`; env table no longer split by the QA-08 prose; `check-versions.sh` now gates the README + API_ERRORS spots.
+- **UI:** search / open / donate no longer `PUT /api/settings` (was breaking `NETRAIL_READONLY` kiosk search and burning the 60/min mutate budget). Settings still persist on browser/private control change.
+- **Python token compare:** non-ASCII Bearer / `X-NetRail-Token` values return typed `401 AUTH_REQUIRED` instead of `TypeError` 500.
+- **Python settings I/O:** write/rename failure is `CONFIG_SAVE_FAILED` 500 (Rust parity); `load_settings` deep-copies defaults so env overrides cannot mutate the module-level `DEFAULT_BACKENDS`.
+- **Whitespace query:** Python rejects `"   "` as `QUERY_INVALID` (Rust already trimmed).
+- **Rust Docker build:** `Dockerfile.rust` copies repo-root `README.md` so `include_str!` in `docs.rs` compiles.
+- **Fanout panic:** Rust `JoinError` is recorded as a backend error instead of dropped (empty-errors total-failure hole).
+- **Open audit:** Rust logs the effective `private_mode` (settings OR request), matching Python.
+- **HTTP client:** fail-closed on TLS/redirect policy; `/docs` and `/openapi.json` are not served; history `limit` clamped to match Rust; `record_search` / purge run in a transaction.
+
 ## [1.6.6] — 2026-08-11 (security convergence)
 
 ### Added
@@ -17,18 +49,6 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 - **A-10 (canonical IPv6 semantics, Python 3.13):** `is_site_local` is the deprecated RFC 3513 site-local (`fec0::/10`), not ULA; `3fff::/20` and `2001::/23` boundary bit-math corrected on both stacks; Rust `Ipv4Addr::is_shared()` is unstable (E0658) and was replaced with an explicit CGNAT check (`100.64.0.0/10`).
 - **A-05:** Rust fetch fanout (SearXNG health/search via reqwest) had no SSRF guard — now gated by the same fetch-time validation; `BackendKind::Searxng` carries its strict flag.
 - **Dead code:** removed write-only `_encryption_enabled` global (`netrail/history/crypto.py`); clippy `-D warnings` clean.
-- **Decrypt fallback (S1/S2):** undecryptable Fernet blobs now surface `[DECRYPTION_FAILED]` instead of base64 garbage (both stacks). Legacy plaintext rows (no `gAAAAA` prefix) still pass through.
-- **Invalid `NETRAIL_DB_KEY`:** both stacks now treat an unusable key as inactive (`encryption_state=degraded`). Python no longer 500s `/api/health`; Rust `encryption_active()` / `ensure_encryption_key()` require `Fernet::new` to succeed (a present-but-invalid env key previously reported encrypted while writes fell back to plaintext).
-- **Python Docker Help:** image now copies `docs/` + `README.md`; missing in-app docs return typed `DOC_NOT_FOUND` instead of an untyped 500.
-- **Collection name store code:** Rust `HistoryStore::create_collection` uses `COLLECTION_NAME_INVALID` (was unused `COLLECTION_NAME_REQUIRED`).
-- **Docs/SSOT:** README + API_ERRORS version drift closed; DISTRIBUTION systemd path matches `ExecStart=/usr/local/bin/netrail-api`; env table no longer split by the QA-08 prose; `check-versions.sh` now gates the README + API_ERRORS spots.
-- **UI:** search / open / donate no longer `PUT /api/settings` (was breaking `NETRAIL_READONLY` kiosk search and burning the 60/min mutate budget). Settings still persist on browser/private control change.
-- **Python token compare:** non-ASCII Bearer / `X-NetRail-Token` values return typed `401 AUTH_REQUIRED` instead of `TypeError` 500.
-- **Python settings I/O:** write/rename failure is `CONFIG_SAVE_FAILED` 500 (Rust parity); `load_settings` deep-copies defaults so env overrides cannot mutate the module-level `DEFAULT_BACKENDS`.
-- **Whitespace query:** Python rejects `"   "` as `QUERY_INVALID` (Rust already trimmed).
-- **Rust Docker build:** `Dockerfile.rust` copies repo-root `README.md` so `include_str!` in `docs.rs` compiles.
-- **Fanout panic:** Rust `JoinError` is recorded as a backend error instead of dropped (empty-errors total-failure hole).
-- **Open audit:** Rust logs the effective `private_mode` (settings OR request), matching Python.
 
 ## [1.6.5] — 2026-08-10 (release-readiness)
 
@@ -456,6 +476,7 @@ All notable changes to NetRail are documented here. The project follows [Semanti
 - URL open restricted to `http://` and `https://` schemes
 - Localhost-only server bind in v0.1
 
+[Unreleased]: https://github.com/kayab999/NetRail/compare/v1.6.6...HEAD
 [1.4.0]: https://github.com/kayab999/NetRail/releases/tag/v1.4.0
 [1.3.0]: https://github.com/kayab999/NetRail/releases/tag/v1.3.0
 [1.6.1]: https://github.com/kayab999/NetRail/releases/tag/v1.6.1

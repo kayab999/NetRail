@@ -8,7 +8,7 @@
 | **License** | AGPL-3.0 |
 | **Repo** | https://github.com/kayab999/NetRail |
 | **Freeze date** | 2026-07-12 (invariants; state refreshed 2026-08-02) |
-| **HEAD note** | **1.6.6 SSOT** (security convergence A-05/A-06/A-10/A-11 + decrypt-marker fix). Primary path: Rust Axum + Tauri; Python for Docker/Flatpak/tests. Official distribution: **AppImage-first** — [packaging/README.md](packaging/README.md). v1.6.4 assets were published (NR-16 closed). Full agent handoff snapshot: [docs/HANDOFF_OPENCODE_2026-08-02.md](docs/HANDOFF_OPENCODE_2026-08-02.md) (historical 1.6.4). Release notes: [docs/RELEASE_v1.6.6.md](docs/RELEASE_v1.6.6.md). Audits: [AUDIT_ARCH](docs/AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE](docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). |
+| **HEAD note** | **1.6.6 SSOT** (tagged `v1.6.6`). `main` is ahead: [CHANGELOG Unreleased](CHANGELOG.md#unreleased) (Fases 1–3: attach-explicit, Host allowlist, schema v2, collections DELETE, decrypt-marker). Primary path: Rust Axum + Tauri; Python for Docker/Flatpak/tests. Official distribution: **AppImage-first** — [packaging/README.md](packaging/README.md). GitHub Latest binaries remain **v1.6.6**. Full agent handoff snapshot: [docs/HANDOFF_OPENCODE_2026-08-02.md](docs/HANDOFF_OPENCODE_2026-08-02.md) (historical 1.6.4). Release notes: [docs/RELEASE_v1.6.6.md](docs/RELEASE_v1.6.6.md). Audits: [AUDIT_ARCH](docs/AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE](docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). |
 
 ---
 
