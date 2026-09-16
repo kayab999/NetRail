@@ -2,12 +2,18 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.7.0] — 2026-09-16
 
-Post-`v1.6.6` work on `main`. Not in the GitHub `v1.6.6` tag or release binaries.
+### Breaking
+
+- **Headless API token required:** `netrail-api` and `python -m netrail` (incl. Docker) now refuse to start without `NETRAIL_API_TOKEN` (exit 1 with setup instructions). Existing deployments without a token fail fast — set a token (`openssl rand -hex 32`) or `NETRAIL_API_TOKEN=""` explicitly to preserve the old unauthenticated behavior (runs with a stderr warning). The desktop Tauri binary is unaffected (token stays optional). Migration: add the token to `.env` (see `.env.example`), systemd `EnvironmentFile` (`/etc/netrail/netrail.env`, see `packaging/netrail-api.service`), and CI scripts (`NETRAIL_API_TOKEN=""` for localhost-only harnesses).
 
 ### Added
 
+- **Request timeout middleware (both stacks):** 30s default wall-clock budget (`NETRAIL_REQUEST_TIMEOUT_SECS` override, `0` disables), typed `408 REQUEST_TIMEOUT`, outermost layer so slow-loris body stalls can't hold a worker.
+- **`NETRAIL_FANOUT_DEADLINE_SECS` (Rust):** env override for the 20s fanout budget (fast deadline tests; `errors[]` timeout string unchanged for parity).
+- **Headless token gate:** fail-fast `headless_token_gate` on both stacks with shared setup message; `--sbom` bypasses; `TestClient` imports unaffected.
+- **Images mode CDN privacy note** in `docs/MANUAL.md`.
 - **S1 attach-explicit:** desktop/`netrail-api` probes `GET /api/health` on `127.0.0.1:7421` before bind. Empty port → bind; NetRail fingerprint (`status`/`version`/`api_contract`) → attach; anything else on the port → `exit(1)` (never hijack a foreign process). Re-probes if the bind loses the race.
 - **S3 deadline budget:** Wikipedia fallback stays inside the 20s fanout budget on both stacks; Python Wikipedia client uses a Chrome UA. Deadline tests use stubs (no live network).
 - **Collections:** `DELETE /api/collections/{id}` on both stacks (`COLLECTION_NOT_FOUND` when missing).
@@ -16,10 +22,15 @@ Post-`v1.6.6` work on `main`. Not in the GitHub `v1.6.6` tag or release binaries
 - **History schema v2:** `idx_queries_timestamp` for TTL purge; periodic purge every 6h on long-lived daemons (open() still purges at bind).
 - **SearXNG health cache:** 60s TTL on availability probes, both stacks.
 - **Devops:** `.dockerignore`; `requirements.lock` (36 pins) + `scripts/generate-requirements-lock.sh`.
-- **UX:** Enter in `#query` always searches; visible errors on open/save/purge; `If-Match` + 409 reloads settings; in-app settings dialog; native confirm on close with `wal_checkpoint` + exit; global shortcut failure is non-fatal.
+ - **UX:** Enter in `#query` always searches; visible errors on open/save/purge; `If-Match` + 409 reloads settings; in-app settings dialog; native confirm on close with `wal_checkpoint` + exit; global shortcut failure is non-fatal.
 
 ### Fixed
 
+- **Merge ordering:** fanout batches now follow configured backend order on both stacks (was response-completion order on both — fast backends sorted first regardless of settings). `backends_used`/`provenance_chain` follow configuration; `errors[]` keeps completion order.
+- **URL dedup over-normalization:** `normalize_url_key` preserves path/query case (RFC 3986: only scheme+host lowercased) on both stacks — `/Page` and `/page` no longer dedupe. Plus fragment strip, default-port strip, bare-host root-slash and query-param sort alignment; raw query `+` unifies with `%20` while `%2B` stays distinct (byte-exact parity pins both sides).
+- **Fanout deadline coverage:** Rust had zero deadline tests (only result-shape wiremock tests); `fanout_deadline.rs` pins abort-on-remainder, bounded wall time and partial-result preservation.
+- **CI:** `chaos_process.rs` spawns the binary with the token escape hatch (headless gate); `e2e`/`parity`/`fuzz`/`chaos`/`load`/`bench` harnesses all set `NETRAIL_API_TOKEN=""`.
+- **DDGS title fallback:** empty-anchor-text path documented as near-dead code (`clean_result_title` already derives a host+path title) — cleanup candidate, not removed.
 - **Decrypt fallback (S1/S2):** undecryptable Fernet blobs now surface `[DECRYPTION_FAILED]` instead of base64 garbage (both stacks). Legacy plaintext rows (no `gAAAAA` prefix) still pass through.
 - **Invalid `NETRAIL_DB_KEY`:** both stacks treat an unusable key as inactive (`encryption_state=degraded`). Python no longer 500s `/api/health`; Rust `encryption_active()` / `ensure_encryption_key()` require `Fernet::new` to succeed (a present-but-invalid env key previously reported encrypted while writes fell back to plaintext).
 - **Python Docker Help:** image now copies `docs/` + `README.md`; missing in-app docs return typed `DOC_NOT_FOUND` instead of an untyped 500.
@@ -33,7 +44,12 @@ Post-`v1.6.6` work on `main`. Not in the GitHub `v1.6.6` tag or release binaries
 - **Fanout panic:** Rust `JoinError` is recorded as a backend error instead of dropped (empty-errors total-failure hole).
 - **Open audit:** Rust logs the effective `private_mode` (settings OR request), matching Python.
 - **HTTP client:** fail-closed on TLS/redirect policy; `/docs` and `/openapi.json` are not served; history `limit` clamped to match Rust; `record_search` / purge run in a transaction.
-- **Supply chain:** `h2` 0.4.15 → 0.4.19 (RUSTSEC-2026-0258 empty DATA-frame DoS) and `rustls` 0.23.41 → 0.23.45 (RUSTSEC-2026-0285 TLS 1.3 encryption-level handshake). `cargo audit` clean of vulnerabilities.
+ - **Supply chain:** `h2` 0.4.15 → 0.4.19 (RUSTSEC-2026-0258 empty DATA-frame DoS) and `rustls` 0.23.41 → 0.23.45 (RUSTSEC-2026-0285 TLS 1.3 encryption-level handshake). `cargo audit` clean of vulnerabilities.
+
+### Changed
+
+- **Coverage (backend fetch matrix):** Rust 71.8% → 80.0% lines (`llvm-cov --all-targets`), Python 80% → 85% — brave/ddgs/wikipedia fetch+parse code via wiremock/`MockTransport`/patched clients; `base_url` test hooks on Rust Brave/Wikipedia/DDGS (production endpoints unchanged); pure `parse_text_html`/`extract_vqd_token` extraction on DDGS.
+- **Docs:** DISTRIBUTION/SECURITY/API_ERRORS updated for the headless token requirement; `check-versions.sh` prose spots unchanged (all still gated).
 
 ## [1.6.6] — 2026-08-11 (security convergence)
 
@@ -477,7 +493,8 @@ Post-`v1.6.6` work on `main`. Not in the GitHub `v1.6.6` tag or release binaries
 - URL open restricted to `http://` and `https://` schemes
 - Localhost-only server bind in v0.1
 
-[Unreleased]: https://github.com/kayab999/NetRail/compare/v1.6.6...HEAD
+[Unreleased]: https://github.com/kayab999/NetRail/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/kayab999/NetRail/releases/tag/v1.7.0
 [1.4.0]: https://github.com/kayab999/NetRail/releases/tag/v1.4.0
 [1.3.0]: https://github.com/kayab999/NetRail/releases/tag/v1.3.0
 [1.6.1]: https://github.com/kayab999/NetRail/releases/tag/v1.6.1

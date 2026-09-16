@@ -14,7 +14,9 @@ export NETRAIL_AUTO_OPEN=false
 # discovering or spawning a browser, so the harness is headless-safe
 # (no fake-browser PATH needed).
 export NETRAIL_NO_OPEN=1
-unset NETRAIL_API_TOKEN || true
+# Headless gate escape hatch: smoke runs localhost-only without auth.
+# (Explicit empty preserves pre-1.7 behavior; production must set a token.)
+export NETRAIL_API_TOKEN=""
 
 echo "== Python golden security probes (pytest) =="
 if [[ -x "$ROOT/.venv/bin/python" ]]; then

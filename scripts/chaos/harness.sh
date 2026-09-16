@@ -46,7 +46,8 @@ trap cleanup EXIT
 
 start_server() {
   purge_stale
-  NETRAIL_DB_PATH="$1" NETRAIL_DB_KEY="$2" "${BIN}" >/dev/null 2>&1 &
+  # Headless gate escape hatch: chaos runs localhost-only without auth.
+  NETRAIL_API_TOKEN="" NETRAIL_DB_PATH="$1" NETRAIL_DB_KEY="$2" "${BIN}" >/dev/null 2>&1 &
   SERVER_PID=$!
   wait_healthy
 }

@@ -7,6 +7,12 @@ fn main() {
         return;
     }
 
+    // Fail-fast: headless deployments must make a conscious auth decision.
+    // Unset → exit 1 with setup instructions; explicit empty → warn + run.
+    if let Err(code) = netrail_lib::auth::headless_token_gate() {
+        std::process::exit(code);
+    }
+
     netrail_lib::logging::init("netrail=info");
 
     let rt = tokio::runtime::Runtime::new().expect("tokio runtime");

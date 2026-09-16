@@ -4,6 +4,7 @@ import asyncio
 import base64
 import hashlib
 import json
+import logging
 import os
 import re
 import sqlite3
@@ -257,6 +258,57 @@ async def host_allowlist_middleware(request: Request, call_next) -> Response:
             },
         )
     return await call_next(request)
+
+
+# Default request wall-clock budget (parity with Rust
+# `DEFAULT_REQUEST_TIMEOUT_SECS`). Generous vs the 20s fanout budget so
+# legitimate search + Wikipedia fallback never trips it. Override with
+# `NETRAIL_REQUEST_TIMEOUT_SECS` (0 disables, useful for debugging);
+# tests set a short budget via monkeypatched env.
+DEFAULT_REQUEST_TIMEOUT_SECS = 30.0
+
+
+def _request_timeout_secs() -> float:
+    raw = os.environ.get("NETRAIL_REQUEST_TIMEOUT_SECS", "").strip()
+    if not raw:
+        return DEFAULT_REQUEST_TIMEOUT_SECS
+    try:
+        return float(raw)
+    except ValueError:
+        return DEFAULT_REQUEST_TIMEOUT_SECS
+
+
+@app.middleware("http")
+async def request_timeout_middleware(request: Request, call_next) -> Response:
+    """Bound slow-loris / stalled-body requests (parity with Rust
+    `request_timeout`). Registered last so it runs first (outermost).
+
+    Note: sync route handlers run in Starlette's threadpool, so
+    `asyncio.wait_for` cancels the awaitable while the worker thread may
+    still finish in the background. That is fine: the slow-client threat
+    (body read stall) is cancellable, and handlers are already bounded by
+    the 20s fanout budget.
+    """
+    timeout = _request_timeout_secs()
+    if timeout <= 0:
+        return await call_next(request)
+    try:
+        return await asyncio.wait_for(call_next(request), timeout=timeout)
+    except asyncio.TimeoutError:
+        logging.getLogger(__name__).warning(
+            "request exceeded timeout: %s %s (%.1fs)",
+            request.method,
+            request.url.path,
+            timeout,
+        )
+        return JSONResponse(
+            status_code=408,
+            content={
+                "code": "REQUEST_TIMEOUT",
+                "detail": f"Request exceeded {timeout:g}s timeout.",
+                "status": 408,
+            },
+        )
 
 
 class SearchRequest(BaseModel):
@@ -741,6 +793,11 @@ def _schedule_ui_open() -> None:
 
 
 def main() -> None:
+    from netrail.auth import headless_token_gate
+
+    # Fail-fast: headless deployments must make a conscious auth decision.
+    # Unset → exit 1 with setup instructions; explicit empty → warn + run.
+    headless_token_gate()
     _schedule_ui_open()
     uvicorn.run(
         "netrail.main:app",

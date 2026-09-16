@@ -26,7 +26,7 @@ The Tauri shell embeds the UI and starts the Rust API on `127.0.0.1:7421`. Use t
 On Ubuntu 24.04 without FUSE:
 
 ```bash
-APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.6.6_amd64.AppImage
+APPIMAGE_EXTRACT_AND_RUN=1 ./NetRail_1.7.0_amd64.AppImage
 ```
 
 ### Headless API (`netrail-api`)
@@ -105,6 +105,11 @@ Default mode. Returns titles, URLs, and text snippets. Best for research, docume
 ### Images
 
 Switch to the **Images** tab before searching. Returns thumbnail previews with source URLs. Click **Open** to visit the page hosting the image.
+
+> **Images mode privacy note:** thumbnails load directly from remote image
+> CDNs. NetRail sets `no-referrer` on these requests, but the CDN still sees
+> your IP address and the requested image URL. If that is unacceptable,
+> stay in **Web** mode. A local image proxy is planned for v2.x.
 
 ---
 

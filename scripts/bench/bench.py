@@ -200,6 +200,8 @@ def main() -> int:
             "NETRAIL_DB_KEY": base64.urlsafe_b64encode(os.urandom(32)).decode(),
             "NETRAIL_RATE_LIMIT": "0",
             "NETRAIL_AUTO_OPEN": "false",
+            # Headless gate escape hatch: bench runs localhost-only without auth.
+            "NETRAIL_API_TOKEN": "",
         }
     )
     if args.stack == "rust":

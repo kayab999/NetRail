@@ -106,6 +106,12 @@ pub enum NetRailError {
         code: &'static str,
         message: String,
     },
+
+    #[error("Request timeout: {message}")]
+    RequestTimeout {
+        code: &'static str,
+        message: String,
+    },
 }
 
 pub type NetRailResult<T> = Result<T, NetRailError>;
@@ -130,6 +136,8 @@ impl NetRailError {
             Self::NotFound { .. } => StatusCode::NOT_FOUND,
 
             Self::RateLimited { .. } => StatusCode::TOO_MANY_REQUESTS,
+
+            Self::RequestTimeout { .. } => StatusCode::REQUEST_TIMEOUT,
 
             Self::Conflict { .. } => StatusCode::CONFLICT,
 
@@ -164,6 +172,7 @@ impl NetRailError {
             | Self::Encryption { code, .. }
             | Self::Internal { code, .. }
             | Self::RateLimited { code, .. }
+            | Self::RequestTimeout { code, .. }
             | Self::Conflict { code, .. }
             | Self::Readonly { code, .. } => code,
         }
@@ -183,6 +192,7 @@ impl NetRailError {
             | Self::Encryption { message, .. }
             | Self::Internal { message, .. }
             | Self::RateLimited { message, .. }
+            | Self::RequestTimeout { message, .. }
             | Self::Conflict { message, .. }
             | Self::Readonly { message, .. } => message.clone(),
             Self::MissingField { field, .. } => format!("Missing required field: {field}"),
@@ -308,5 +318,108 @@ mod tests {
         let err: NetRailError = bad.into();
         assert_eq!(err.error_code(), "JSON_PARSE_ERROR");
         assert_eq!(err.status_code(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn status_mapping_covers_all_families() {
+        let cases: Vec<(NetRailError, StatusCode, &str)> = vec![
+            (
+                NetRailError::InvalidConfig {
+                    code: "AUTH_REQUIRED",
+                    message: "x".into(),
+                },
+                StatusCode::UNAUTHORIZED,
+                "AUTH_REQUIRED",
+            ),
+            (
+                NetRailError::InvalidConfig {
+                    code: "HOST_INVALID",
+                    message: "x".into(),
+                },
+                StatusCode::FORBIDDEN,
+                "HOST_INVALID",
+            ),
+            (
+                NetRailError::RateLimited {
+                    code: "RATE_LIMITED",
+                    message: "x".into(),
+                },
+                StatusCode::TOO_MANY_REQUESTS,
+                "RATE_LIMITED",
+            ),
+            (
+                NetRailError::Conflict {
+                    code: "SETTINGS_CONFLICT",
+                    message: "x".into(),
+                },
+                StatusCode::CONFLICT,
+                "SETTINGS_CONFLICT",
+            ),
+            (
+                NetRailError::Readonly {
+                    code: "READONLY_MODE",
+                    message: "x".into(),
+                },
+                StatusCode::FORBIDDEN,
+                "READONLY_MODE",
+            ),
+            (
+                NetRailError::RequestTimeout {
+                    code: "REQUEST_TIMEOUT",
+                    message: "x".into(),
+                },
+                StatusCode::REQUEST_TIMEOUT,
+                "REQUEST_TIMEOUT",
+            ),
+            (
+                NetRailError::BackendHttp {
+                    code: "BRAVE_HTTP_ERROR",
+                    backend: "brave".into(),
+                    status: 429,
+                },
+                StatusCode::BAD_GATEWAY,
+                "BRAVE_HTTP_ERROR",
+            ),
+            (
+                NetRailError::Database {
+                    code: "DB_ERROR",
+                    message: "x".into(),
+                },
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+            ),
+        ];
+        for (err, status, code) in cases {
+            assert_eq!(err.status_code(), status, "{code}");
+            assert_eq!(err.error_code(), code);
+            assert!(!err.detail_message().is_empty(), "{code}");
+            assert_eq!(err.to_json()["code"], code);
+        }
+    }
+
+    #[test]
+    fn detail_message_covers_structured_variants() {
+        let missing = NetRailError::MissingField {
+            code: "REQUEST_INVALID",
+            field: "query".into(),
+        };
+        assert!(missing.detail_message().contains("query"));
+        let not_found = NetRailError::NotFound {
+            code: "DOC_NOT_FOUND",
+            entity: "doc x".into(),
+        };
+        assert!(not_found.detail_message().contains("doc x"));
+        let http = NetRailError::BackendHttp {
+            code: "SEARXNG_HTTP_ERROR",
+            backend: "searxng".into(),
+            status: 500,
+        };
+        assert!(http.detail_message().contains("500"));
+        let failure = NetRailError::BackendFailure {
+            code: "DDGS_BOT_CHALLENGE",
+            backend: "ddgs".into(),
+            message: "blocked".into(),
+        };
+        assert!(failure.detail_message().contains("blocked"));
     }
 }

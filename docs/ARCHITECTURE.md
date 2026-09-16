@@ -1,6 +1,6 @@
 # NetRail — Architecture & Lifecycle Blueprint
 
-> **Current product:** NetRail **1.6.6** (Rust-primary, dual-stack). Lifecycle tables below retain historical phase labels; rows marked ✅ are shipped. Open items are backlog, not “still in Phase 1.” Residual risk: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). Remaining-work plan: [docs/HANDOFF_OPENCODE_2026-08-02.md](HANDOFF_OPENCODE_2026-08-02.md) §9.
+> **Current product:** NetRail **1.7.0** (Rust-primary, dual-stack). Lifecycle tables below retain historical phase labels; rows marked ✅ are shipped. Open items are backlog, not “still in Phase 1.” Residual risk: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). Remaining-work plan: [docs/HANDOFF_OPENCODE_2026-08-02.md](HANDOFF_OPENCODE_2026-08-02.md) §9.
 
 ## Vision
 
@@ -260,7 +260,7 @@ The roadmap is organized into **phases** with explicit goals, deliverables, exit
 
 ### Current state (2026-08-14)
 
-Released line: **v1.6.6** (security convergence: fetch-time backend SSRF guard, cipher-state, settings directivity, canonical v4/v6 policy) on top of **v1.6.5** (release-readiness: clippy gate, differential fuzz, browser-discovery parity, fanout deadline symmetry). **v1.6.4** restored Linux packaging end-to-end (AppImage/deb/rpm + keyless cosign + SBOM). **v1.6.3** = SBOM-in-bundle + fixture growth + CSS guard. **v1.6.2** = chaos/load/bench + read-only/systemd/backup. **v1.6.1** = DNS pin A15, webview E2E, signed CI, FTS sync, typed 422s, CSP token.
+Released line: **v1.7.0** (headless token gate, request-timeout middleware, merge ordering/normalization parity, backend-fetch coverage) on top of **v1.6.6** (security convergence: fetch-time backend SSRF guard, cipher-state, settings directivity, canonical v4/v6 policy) on top of **v1.6.5** (release-readiness: clippy gate, differential fuzz, browser-discovery parity, fanout deadline symmetry). **v1.6.4** restored Linux packaging end-to-end (AppImage/deb/rpm + keyless cosign + SBOM). **v1.6.3** = SBOM-in-bundle + fixture growth + CSS guard. **v1.6.2** = chaos/load/bench + read-only/systemd/backup. **v1.6.1** = DNS pin A15, webview E2E, signed CI, FTS sync, typed 422s, CSP token.
 
 Backlog shipped on `main` (all in v1.6.3 / Sprints):
 

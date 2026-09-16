@@ -12,7 +12,7 @@ NetRail ships as a **Rust/Tauri desktop app** (AppImage / `.deb` / `.rpm`) and a
 | **`netrail-api`** (Rust headless) | **Production** | Homelab, scripting, CI smoke |
 | **Python** (`python -m netrail`, Docker, Flatpak) | **Compatibility** | API parity targeted; prefer Rust when packaging allows |
 
-### Feature parity matrix (1.6.6)
+### Feature parity matrix (1.7.0)
 
 | Feature | Rust | Python |
 |---------|------|--------|
@@ -173,10 +173,17 @@ Set in `.env`:
 ```
 SEARXNG_URL=http://searxng:8080
 NETRAIL_DB_KEY=...   # required for encrypted history
-NETRAIL_API_TOKEN=...  # recommended for Docker: guards against other containers/processes
+NETRAIL_API_TOKEN=...  # REQUIRED for headless/Docker: generate with `openssl rand -hex 32`
 NETRAIL_STRICT_BACKEND_URLS=1  # recommended: forbid private/loopback backend URLs
 NETRAIL_AUDIT_LOG=1            # optional: JSONL audit of search/open/settings/history
 ```
+
+> **Breaking (1.7.0):** `netrail-api` and `python -m netrail` refuse to
+> start without `NETRAIL_API_TOKEN`. Existing deployments without a token
+> fail fast with setup instructions. For localhost-only testing/CI, set
+> `NETRAIL_API_TOKEN=""` explicitly to preserve the old unauthenticated
+> behavior (runs with a stderr warning). The desktop Tauri binary is
+> unaffected (token stays optional there).
 
 ### Security warning
 
@@ -199,7 +206,7 @@ Build Rust image directly: `docker build -f Dockerfile.rust -t netrail-api .`
 | `NETRAIL_STATIC_DIR` | Directory containing `index.html` / UI assets | Rust |
 | `NETRAIL_AUTO_OPEN` | Open browser on start (`true`/`false`) | Python |
 | `NETRAIL_RATE_LIMIT` | `0` / `false` disables the per-identity 90/120/60 per-minute caps (defaults; when a token is configured, limits apply per token identity, otherwise to the anonymous bucket) | Both |
-| `NETRAIL_API_TOKEN` | Optional API token; require Bearer / `X-NetRail-Token` on `/api/*` (except health) | Both |
+| `NETRAIL_API_TOKEN` | Desktop: optional token; headless (`netrail-api` / `python -m netrail` / Docker): **required** — unset exits 1 before bind, explicit empty runs unauthenticated with warning. Require Bearer / `X-NetRail-Token` on `/api/*` (except health) | Both |
 | `NETRAIL_INJECT_UI_TOKEN` | When token set, inject into served HTML for UI (default on). Note: the injected page (`/`) is unauthenticated, so any local HTTP client can read the token from it — see SECURITY.md. Set `0` and supply via `localStorage` if you need tighter behavior | Both |
 | `NETRAIL_STRICT_BACKEND_URLS` | `1` rejects private/loopback SearXNG/backend URLs | Both |
 | `NETRAIL_AUDIT_LOG` | `1` appends JSON lines to XDG data `netrail/audit.log` | Both |

@@ -62,7 +62,7 @@ curl http://127.0.0.1:7421/api/health
 
 *Fanout search across SearXNG and DDGS. Results stay in the link rail until you open them.*
 
-**Version:** 1.6.6 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
+**Version:** 1.7.0 · **License:** [AGPL-3.0](LICENSE) · **Manifesto:** [OPEN_LETTER.md](OPEN_LETTER.md)
 
 ---
 
@@ -178,6 +178,7 @@ Full API: [docs/MANUAL.md](docs/MANUAL.md)
 | [Packaging](packaging/README.md) | AppImage/deb build SSOT, artifacts, caveats |
 | [Open Letter](OPEN_LETTER.md) | Philosophy and the v1.0 postscript |
 | [API error codes](docs/API_ERRORS.md) | Stable `code` / `detail` / `status` reference |
+| [Release notes 1.7.0](docs/RELEASE_v1.7.0.md) | Headless token gate, request timeout, merge parity, coverage |
 | [Release notes 1.6.6](docs/RELEASE_v1.6.6.md) | Security convergence (A-05/A-06/A-10/A-11) |
 | [Release notes 1.3.0](docs/RELEASE_v1.3.0.md) | Wave 2 security/parity hardening |
 | [Release notes 1.2.3](docs/RELEASE_v1.2.3.md) | Docs truth + open-URL/env P1 hardening |

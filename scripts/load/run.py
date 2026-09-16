@@ -123,6 +123,8 @@ def main() -> int:
             "NETRAIL_DB_PATH": str(workdir / "netrail.db"),
             "NETRAIL_DB_KEY": "X" * 44,  # placeholder; replaced below if needed
             "NETRAIL_RATE_LIMIT": "0",
+            # Headless gate escape hatch: load runs localhost-only without auth.
+            "NETRAIL_API_TOKEN": "",
         }
     )
     import base64

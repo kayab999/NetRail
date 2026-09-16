@@ -106,9 +106,10 @@ def spawn_server(binary: str, base: str) -> subprocess.Popen:
         NETRAIL_HISTORY_ENCRYPT="false",
         NETRAIL_AUTO_OPEN="false",
         NETRAIL_NO_OPEN="1",
+        # Headless gate escape hatch: fuzz runs localhost-only without auth.
+        NETRAIL_API_TOKEN="",
         NETRAIL_STATIC_DIR=os.path.join(_REPO_ROOT, "netrail", "static"),
     )
-    env.pop("NETRAIL_API_TOKEN", None)
     proc = subprocess.Popen([binary], env=env, stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL)
     host = base.split("://")[1].rsplit(":", 1)[0]

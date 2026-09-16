@@ -19,14 +19,20 @@ const TRACKING_PARAMS: &[&str] = &[
     "si",
 ];
 
-/// Normalize a URL for deduplication: lowercase host without www, strip tracking params.
+/// Normalize a URL for deduplication: lowercase scheme+host (case-insensitive
+/// per RFC 3986), strip `www.`, tracking params, fragment and trailing slash;
+/// sort query params. Path and query case is preserved (case-sensitive) so
+/// `/Page` and `/page` do NOT dedupe.
 pub fn normalize_url_key(raw: &str) -> String {
     let trimmed = resolve_result_url(raw, 0);
     if let Ok(mut parsed) = Url::parse(&trimmed) {
+        // `Url::parse` already lowercases scheme+host; strip www. explicitly.
         if let Some(host) = parsed.host_str() {
             let host = host.strip_prefix("www.").unwrap_or(host).to_lowercase();
             let _ = parsed.set_host(Some(&host));
         }
+        // Fragments are client-side only — never part of the identity.
+        parsed.set_fragment(None);
         if let Some(segments) = parsed.path_segments() {
             let path: Vec<_> = segments.collect();
             if path.last().is_some_and(|s| s.is_empty()) && path.len() > 1 {
@@ -39,7 +45,9 @@ pub fn normalize_url_key(raw: &str) -> String {
             .filter(|(k, _)| !TRACKING_PARAMS.contains(&k.to_lowercase().as_str()))
             .map(|(k, v)| (k.into_owned(), v.into_owned()))
             .collect();
-        pairs.sort_by(|a, b| a.0.cmp(&b.0));
+        // Sort by (key, value) — canonical param order, parity with Python
+        // `pairs.sort()`.
+        pairs.sort();
         parsed.set_query(None);
         if !pairs.is_empty() {
             let query: String = pairs
@@ -49,11 +57,13 @@ pub fn normalize_url_key(raw: &str) -> String {
                 .join("&");
             parsed.set_query(Some(&query));
         }
+        // NOTE: no `.to_lowercase()` here — `to_string()` already emits a
+        // lowercased scheme+host while preserving path/query case.
         let mut out = parsed.to_string();
         while out.ends_with('/') && out.len() > 8 {
             out.pop();
         }
-        return out.to_lowercase();
+        return out;
     }
     trimmed.trim_end_matches('/').to_lowercase()
 }
@@ -179,6 +189,147 @@ mod tests {
         let a = normalize_url_key("https://www.Example.com/page?utm_source=x&id=1");
         let b = normalize_url_key("https://example.com/page?id=1");
         assert_eq!(a, b);
+    }
+
+    #[test]
+    fn scheme_and_host_case_insensitive() {
+        assert_eq!(
+            normalize_url_key("HTTPS://EXAMPLE.com/Page"),
+            normalize_url_key("https://example.com/Page")
+        );
+        assert_eq!(
+            normalize_url_key("https://www.example.com/Page"),
+            normalize_url_key("https://example.com/Page")
+        );
+    }
+
+    #[test]
+    fn path_case_sensitive() {
+        // RFC 3986: path is case-sensitive — different resources, no dedupe.
+        assert_ne!(
+            normalize_url_key("https://example.com/Page"),
+            normalize_url_key("https://example.com/page")
+        );
+    }
+
+    #[test]
+    fn query_case_sensitive() {
+        assert_ne!(
+            normalize_url_key("https://example.com/search?q=Hello"),
+            normalize_url_key("https://example.com/search?q=hello")
+        );
+        assert_ne!(
+            normalize_url_key("https://example.com/Page?A=1"),
+            normalize_url_key("https://example.com/Page?a=1")
+        );
+    }
+
+    #[test]
+    fn query_param_order_normalized() {
+        assert_eq!(
+            normalize_url_key("https://example.com/Page?a=1&b=2"),
+            normalize_url_key("https://example.com/Page?b=2&a=1")
+        );
+    }
+
+    #[test]
+    fn fragment_stripped() {
+        assert_eq!(
+            normalize_url_key("https://example.com/Page#section"),
+            normalize_url_key("https://example.com/Page")
+        );
+    }
+
+    #[test]
+    fn default_port_stripped_non_default_kept() {
+        assert_eq!(
+            normalize_url_key("https://example.com:443/Page"),
+            normalize_url_key("https://example.com/Page")
+        );
+        assert_ne!(
+            normalize_url_key("https://example.com:8443/Page"),
+            normalize_url_key("https://example.com/Page")
+        );
+    }
+
+    #[test]
+    fn tracking_param_match_case_insensitive() {
+        assert_eq!(
+            normalize_url_key("https://example.com/Page?UTM_SOURCE=x&id=1"),
+            normalize_url_key("https://example.com/Page?id=1")
+        );
+    }
+
+    #[test]
+    fn dedupe_respects_path_case() {
+        let items = vec![
+            result("https://a.test/Page", "first", "ddgs"),
+            result("https://a.test/page", "second", "searxng"),
+        ];
+        assert_eq!(dedupe_results(items).len(), 2);
+    }
+
+    #[test]
+    fn exact_keys_match_python_parity() {
+        // Byte-exact pins shared with Python `normalize_url_key` — the two
+        // stacks must emit identical dedupe keys for the same input.
+        assert_eq!(
+            normalize_url_key("https://EXAMPLE.com/Page"),
+            "https://example.com/Page"
+        );
+        assert_eq!(
+            normalize_url_key("https://www.example.com/Page?a=1&b=2&utm_source=x"),
+            "https://example.com/Page?a=1&b=2"
+        );
+        assert_eq!(
+            normalize_url_key("https://example.com:443/Page#s"),
+            "https://example.com/Page"
+        );
+        assert_eq!(
+            normalize_url_key("http://example.com:8080/A?B=C"),
+            "http://example.com:8080/A?B=C"
+        );
+        assert_eq!(normalize_url_key("https://example.com"), "https://example.com");
+        assert_eq!(
+            normalize_url_key("https://example.com/?id=1"),
+            "https://example.com/?id=1"
+        );
+        // Space-encoding parity with Python (`quote_via` emitting `%20`,
+        // literal `+` left bare on both sides).
+        assert_eq!(
+            normalize_url_key("https://example.com/search?q=rust+programming"),
+            "https://example.com/search?q=rust%20programming"
+        );
+        assert_eq!(
+            normalize_url_key("https://example.com/calc?a=1%2B2"),
+            "https://example.com/calc?a=1+2"
+        );
+    }
+
+    #[test]
+    fn plus_unifies_with_percent20_space() {
+        // Raw `+` in a query is form-encoding for space — same key as `%20`.
+        assert_eq!(
+            normalize_url_key("https://example.com/search?q=rust+programming"),
+            normalize_url_key("https://example.com/search?q=rust%20programming")
+        );
+    }
+
+    #[test]
+    fn encoded_plus_stays_distinct_from_space() {
+        // `%2B` is a literal plus — must NOT merge with a space.
+        assert_ne!(
+            normalize_url_key("https://example.com/calc?a=1%2B2"),
+            normalize_url_key("https://example.com/calc?a=1%202")
+        );
+    }
+
+    #[test]
+    fn plus_in_path_untouched() {
+        // Only the query portion normalizes `+`; path `+` is literal.
+        let key = normalize_url_key("https://example.com/a+b?x=1");
+        assert!(key.contains("a+b"), "path plus must survive: {key}");
+        assert!(key.contains("?x=1"), "query must survive: {key}");
     }
 
     #[test]

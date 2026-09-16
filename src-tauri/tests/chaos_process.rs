@@ -19,6 +19,8 @@ fn spawn_server(db_path: &PathBuf, key: &str) -> Child {
     Command::new(env!("CARGO_BIN_EXE_netrail-api"))
         .env("NETRAIL_DB_PATH", db_path)
         .env("NETRAIL_DB_KEY", key)
+        // Headless gate escape hatch: chaos runs localhost-only without auth.
+        .env("NETRAIL_API_TOKEN", "")
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()

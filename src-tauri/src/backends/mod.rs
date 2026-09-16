@@ -181,6 +181,11 @@ struct BackendBatch {
     name: String,
     provenance: String,
     results: Vec<SearchResult>,
+    /// Position in the configured backend list. The fanout completes in
+    /// arbitrary order, but merge input follows user configuration so
+    /// round-robin output is deterministic per settings (parity with Python
+    /// `registry.py`, which sorts by spawn index).
+    order: usize,
 }
 
 async fn query_backend(
@@ -189,6 +194,7 @@ async fn query_backend(
     query: &str,
     mode: SearchMode,
     max_results: usize,
+    order: usize,
 ) -> Result<BackendBatch, String> {
     let name = backend.name().to_string();
     let provenance = backend.provenance();
@@ -200,10 +206,26 @@ async fn query_backend(
         name,
         provenance,
         results,
+        order,
     })
 }
 
 const FANOUT_DEADLINE: Duration = Duration::from_secs(20);
+
+/// Default fanout wall-clock budget (QA-10). Overridable via
+/// `NETRAIL_FANOUT_DEADLINE_SECS` for fast deadline tests (0 or
+/// unparseable falls back to default). The `errors[]` timeout string stays
+/// the stable `"fanout: timed out after 20 seconds"` contract regardless of
+/// the configured budget (parity with Python `registry.py`, whose tests
+/// monkeypatch the deadline but assert the same string).
+fn fanout_deadline() -> Duration {
+    std::env::var("NETRAIL_FANOUT_DEADLINE_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|secs| *secs > 0)
+        .map(Duration::from_secs)
+        .unwrap_or(FANOUT_DEADLINE)
+}
 
 pub async fn search_with_fanout(
     client: &Client,
@@ -255,15 +277,15 @@ pub async fn search_with_fanout(
 
     let mut tasks = tokio::task::JoinSet::new();
     let query_owned = query.to_string();
-    for backend in backends {
+    for (idx, backend) in backends.into_iter().enumerate() {
         let client = client.clone();
         let query = query_owned.clone();
-        tasks.spawn(async move { query_backend(&client, backend, &query, mode, max_results).await });
+        tasks.spawn(async move { query_backend(&client, backend, &query, mode, max_results, idx).await });
     }
 
     let mut outcomes: Vec<Result<BackendBatch, String>> = Vec::new();
     let mut timed_out = false;
-    let deadline = tokio::time::sleep(FANOUT_DEADLINE);
+    let deadline = tokio::time::sleep(fanout_deadline());
     tokio::pin!(deadline);
     loop {
         tokio::select! {
@@ -286,13 +308,14 @@ pub async fn search_with_fanout(
     let mut backends_used = Vec::new();
     let mut provenance_chain = Vec::new();
 
+    // Successful batches are re-sorted into configured backend order so the
+    // round-robin merge is deterministic per settings, not per response
+    // speed. Errors stay in completion order (no contract on errors[] order).
+    // Empty batches never reach the merge — they consume no interleave slot.
+    let mut succeeded: Vec<BackendBatch> = Vec::new();
     for outcome in outcomes {
         match outcome {
-            Ok(batch) if !batch.results.is_empty() => {
-                backends_used.push(batch.name.clone());
-                provenance_chain.push(batch.provenance.clone());
-                batches.push((batch.name, batch.results));
-            }
+            Ok(batch) if !batch.results.is_empty() => succeeded.push(batch),
             Ok(batch) => {
                 tracing::warn!(backend = %batch.name, "backend returned zero parseable results");
                 errors.push(format!("{}: returned no results", batch.name));
@@ -302,6 +325,13 @@ pub async fn search_with_fanout(
                 errors.push(err);
             }
         }
+    }
+    succeeded.sort_by_key(|b| b.order);
+
+    for batch in succeeded {
+        backends_used.push(batch.name.clone());
+        provenance_chain.push(batch.provenance.clone());
+        batches.push((batch.name, batch.results));
     }
 
     if timed_out {
@@ -324,7 +354,7 @@ pub async fn search_with_fanout(
         // after it. Wall time stays ~FANOUT_DEADLINE even when every backend
         // hangs (parity with Python registry.py).
         let elapsed = start.elapsed();
-        let remaining = FANOUT_DEADLINE.saturating_sub(elapsed);
+        let remaining = fanout_deadline().saturating_sub(elapsed);
         if remaining.is_zero() {
             tracing::warn!("wikipedia fallback skipped — fanout deadline exhausted");
             errors.push("wikipedia: skipped (fanout deadline exhausted)".into());

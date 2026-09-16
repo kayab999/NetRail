@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from urllib.parse import parse_qsl, unquote, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, quote, unquote, urlencode, urlparse, urlunparse
 
 from netrail.backends.types import SearchResult
 
@@ -39,11 +39,38 @@ TRACKING_PARAMS = frozenset(
 )
 
 
+def _quote_space20(s: str, safe: str = "", encoding: str = "utf-8", errors: str = "strict") -> str:
+    """`urlencode` quoter emitting `%20` for spaces (parity with Rust
+    `Url::set_query`). `safe` is forced to `"+"` so a literal `+` stays
+    `+` (Rust also leaves it unencoded) while `/` stays `%2F`, matching
+    the previous `quote_plus` behavior for everything except spaces."""
+    return quote(str(s), safe="+", encoding=encoding, errors=errors)
+
+
 def normalize_url_key(raw: str) -> str:
+    """Normalize a URL for deduplication.
+
+    Scheme + host are case-insensitive per RFC 3986 (lowercased); path and
+    query are case-sensitive (preserved) so `/Page` and `/page` do NOT
+    dedupe. Strips `www.`, tracking params, fragment and trailing slash;
+    sorts query params; drops default ports. Falls back to
+    the old lowercase behavior when unparseable.
+    """
     trimmed = resolve_result_url(raw)
     try:
         parsed = urlparse(trimmed)
+        scheme = parsed.scheme.lower()
         host = (parsed.hostname or "").lower().removeprefix("www.")
+        if not scheme or not host:
+            return trimmed.rstrip("/").lower()
+        # Drop default ports (parity with Rust `Url::to_string()`); keep
+        # non-default ones.
+        port = parsed.port
+        if port is not None and not (
+            (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
+        ):
+            host = f"{host}:{port}"
+        # Path is case-sensitive — preserve as-is.
         path = parsed.path.rstrip("/") or "/"
         pairs = [
             (k, v)
@@ -51,18 +78,17 @@ def normalize_url_key(raw: str) -> str:
             if k.lower() not in TRACKING_PARAMS
         ]
         pairs.sort()
-        query = urlencode(pairs)
-        rebuilt = urlunparse(
-            (
-                parsed.scheme.lower(),
-                host + (f":{parsed.port}" if parsed.port else ""),
-                path,
-                "",
-                query,
-                "",
-            )
-        )
-        return rebuilt.lower()
+        # `parse_qsl` decodes both `+` and `%20` to space; re-encode as `%20`
+        # so `?q=a+b` and `?q=a%20b` share one key (Rust parity). `%2B`
+        # decodes to a literal `+`, which re-encodes as `%2B` — stays distinct.
+        query = urlencode(pairs, quote_via=_quote_space20)
+        # Parity with Rust `Url::to_string()` + trailing-slash strip: a bare
+        # host serializes without `/` (`https://example.com`, not `.../`).
+        if not query and path == "/":
+            return f"{scheme}://{host}"
+        rebuilt = urlunparse((scheme, host, path, "", query, ""))
+        # NOTE: no `.lower()` here — only scheme+host were lowercased above.
+        return rebuilt
     except Exception:  # noqa: BLE001
         return trimmed.rstrip("/").lower()
 

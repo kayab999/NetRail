@@ -11,10 +11,10 @@ services:
     environment:
       NETRAIL_DB_PATH: /app/data/netrail.db
       NETRAIL_DB_KEY: "${NETRAIL_DB_KEY:?Set NETRAIL_DB_KEY in .env — generate with: python -c \"from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())\"}"
+      NETRAIL_API_TOKEN: "${NETRAIL_API_TOKEN?Set NETRAIL_API_TOKEN in .env — generate with: openssl rand -hex 32 (or set explicitly empty for localhost-only testing)}"
       NETRAIL_AUTO_OPEN: "false"
       NETRAIL_HISTORY_ENCRYPT: "true"
       # Recommended for any Docker deployment (not pure single-user trust):
-      #   NETRAIL_API_TOKEN: ${NETRAIL_API_TOKEN:-}
       #   NETRAIL_STRICT_BACKEND_URLS: "1"
       #   NETRAIL_AUDIT_LOG: "1"
       # Note: with a token set, NETRAIL_INJECT_UI_TOKEN (default on) places the
@@ -36,6 +36,7 @@ services:
     environment:
       NETRAIL_DB_PATH: /app/data/netrail.db
       NETRAIL_DB_KEY: ${NETRAIL_DB_KEY:?Set NETRAIL_DB_KEY in .env}
+      NETRAIL_API_TOKEN: ${NETRAIL_API_TOKEN?Set NETRAIL_API_TOKEN in .env — generate with: openssl rand -hex 32 (or set explicitly empty for localhost-only testing)}
       NETRAIL_STATIC_DIR: /usr/share/netrail/static
       NETRAIL_AUTO_OPEN: "false"
       NETRAIL_HISTORY_ENCRYPT: "true"

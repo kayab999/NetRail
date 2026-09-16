@@ -67,9 +67,44 @@ pub fn build_router(state: AppState) -> Router {
         .with_state(state)
         .layer(axum::middleware::from_fn(api_auth_middleware))
         .layer(axum::middleware::from_fn(security_headers))
-        // Registered last so it runs first: reject non-loopback Host
-        // headers (DNS rebinding) before auth, routing or token logic.
         .layer(axum::middleware::from_fn(host_allowlist))
+        // Registered last so it runs first (outermost): bound slow-loris /
+        // stalled-body requests before they can hold a worker indefinitely.
+        // Covers host/auth/handler time; fanout already budgets 20s inside,
+        // so 30s default never trips legitimate traffic.
+        .layer(axum::middleware::from_fn(request_timeout))
+}
+
+/// Default request wall-clock budget. Generous vs the 20s fanout budget so
+/// legitimate search + Wikipedia fallback never trips it.
+pub const DEFAULT_REQUEST_TIMEOUT_SECS: u64 = 30;
+
+fn request_timeout_secs() -> u64 {
+    std::env::var("NETRAIL_REQUEST_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .unwrap_or(DEFAULT_REQUEST_TIMEOUT_SECS)
+}
+
+async fn request_timeout(request: Request<axum::body::Body>, next: Next) -> Response {
+    let secs = request_timeout_secs();
+    if secs == 0 {
+        return next.run(request).await;
+    }
+    // Capture for logging before `request` is moved into `next`.
+    let method = request.method().clone();
+    let path = request.uri().path().to_owned();
+    match tokio::time::timeout(std::time::Duration::from_secs(secs), next.run(request)).await {
+        Ok(response) => response,
+        Err(_) => {
+            tracing::warn!(%method, %path, timeout_secs = secs, "request exceeded timeout");
+            ApiError::from(NetRailError::RequestTimeout {
+                code: "REQUEST_TIMEOUT",
+                message: format!("Request exceeded {secs}s timeout."),
+            })
+            .into_response()
+        }
+    }
 }
 
 /// TTL purge cadence for long-lived daemons. `HistoryStore::open` purges at

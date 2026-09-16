@@ -3,12 +3,12 @@
 | Field | Value |
 |-------|--------|
 | **Product** | Local privacy-first research console for Linux |
-| **Version** | **1.6.6** (`scripts/check-versions.sh`) |
+| **Version** | **1.7.0** (`scripts/check-versions.sh`) |
 | **Primary path** | Rust Axum API + Tauri 2 desktop; Python for Docker/Flatpak/tests |
 | **License** | AGPL-3.0 |
 | **Repo** | https://github.com/kayab999/NetRail |
 | **Freeze date** | 2026-07-12 (invariants; state refreshed 2026-08-02) |
-| **HEAD note** | **1.6.6 SSOT** (tagged `v1.6.6`). `main` is ahead: [CHANGELOG Unreleased](CHANGELOG.md#unreleased) (Fases 1–3: attach-explicit, Host allowlist, schema v2, collections DELETE, decrypt-marker). Primary path: Rust Axum + Tauri; Python for Docker/Flatpak/tests. Official distribution: **AppImage-first** — [packaging/README.md](packaging/README.md). GitHub Latest binaries remain **v1.6.6**. Full agent handoff snapshot: [docs/HANDOFF_OPENCODE_2026-08-02.md](docs/HANDOFF_OPENCODE_2026-08-02.md) (historical 1.6.4). Release notes: [docs/RELEASE_v1.6.6.md](docs/RELEASE_v1.6.6.md). Audits: [AUDIT_ARCH](docs/AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE](docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). |
+| **HEAD note** | **1.7.0 SSOT** (tagged `v1.7.0`). `main` is at the tag: [CHANGELOG 1.7.0](CHANGELOG.md#170--2026-09-16) (headless token gate [Breaking], request timeout, merge ordering/normalization parity, backend-fetch coverage). Primary path: Rust Axum + Tauri; Python for Docker/Flatpak/tests. Official distribution: **AppImage-first** — [packaging/README.md](packaging/README.md). GitHub Latest binaries remain **v1.6.6 until the 1.7.0 release publishes**. Full agent handoff snapshot: [docs/HANDOFF_OPENCODE_2026-08-02.md](docs/HANDOFF_OPENCODE_2026-08-02.md) (historical 1.6.4). Release notes: [docs/RELEASE_v1.7.0.md](docs/RELEASE_v1.7.0.md). Audits: [AUDIT_ARCH](docs/AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE](docs/AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). |
 
 ---
 
@@ -120,7 +120,7 @@ cd src-tauri && cargo clippy --all-targets -- -D warnings && cargo test
 bash scripts/package-smoke.sh   # needs built netrail-api
 ```
 
-**Expected (2026-09-05):** Python 306 (`pytest tests/`) · Rust 127 (`cargo test --lib`, full `cargo test` higher with bins/integration) · clippy clean · CI green on `main`.
+**Expected (2026-09-16):** Python 346 (`pytest tests/`) · Rust 142 (`cargo test --lib`, full `cargo test` higher with bins/integration) · clippy clean · CI green on `main`.
 
 ---
 
@@ -152,10 +152,10 @@ Release CI: `.github/workflows/release.yml` on tag `v*` (clippy + tests + AppIma
 
 | ID | Residual | Why not fixed / next step |
 |----|----------|---------------------------|
-| R1 | Unauthenticated localhost API by default | Design v1; optional `NETRAIL_API_TOKEN` ships (Bearer / `X-NetRail-Token`) |
+| R1 | Unauthenticated localhost API by default | ✅ **Resolved for headless in 1.7.0** (`headless_token_gate`, fail-fast). Desktop remains opt-in by design |
 | R2 | DDGS HTML scrape / captcha | External; Wikipedia + recovery UX |
 | R3 | Dual Rust/Python surface | **Policy:** Rust production; Python compatibility (see DISTRIBUTION) |
-| R4 | Public GitHub Latest may lag | ✅ **v1.6.6 is Latest** (release-readiness RC; confirm the GitHub Latest tag before announcing) |
+| R4 | Public GitHub Latest may lag | ✅ **v1.7.0 is Latest** (release-readiness RC; confirm the GitHub Latest tag before announcing) |
 | R5 | Draft releases v1.2.0/1.2.1 | ✅ Removed after 1.2.2 publish |
 | R6 | Local AppImage needs patchelf | Documented; CI **requires** AppImage on release |
 | R7 | Image CDN privacy (Images mode) | `no-referrer` set; still loads remote URLs |
@@ -257,7 +257,7 @@ Read first:
   packaging/README.md
   HANDOVER.md
 
-Version 1.6.6 SSOT. Read CHANGELOG [1.6.6] + docs/RELEASE_v1.6.6.md.
+Version 1.7.0 SSOT. Read CHANGELOG [1.7.0] + docs/RELEASE_v1.7.0.md.
 
 Invariants: localhost-only API, no telemetry, open-URL + DNS pin, no Brave key on disk,
 version SSOT, typed errors, NETRAIL_READONLY gates admin mutations (history still on search/open),
@@ -290,6 +290,7 @@ Do not force-push. Do not amend published history.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Lifecycle roadmap |
 | [docs/RELEASE_ASSURANCE.md](docs/RELEASE_ASSURANCE.md) | Non-technical trust map |
 | [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | Ops packaging + env |
+| [docs/RELEASE_v1.7.0.md](docs/RELEASE_v1.7.0.md) | 1.7.0 notes |
 | [docs/RELEASE_v1.6.6.md](docs/RELEASE_v1.6.6.md) | 1.6.6 notes |
 | [docs/MANUAL.md](docs/MANUAL.md) | User manual |
 | [docs/AUDIT_ENTERPRISE_2026-07-31.md](docs/AUDIT_ENTERPRISE_2026-07-31.md) | Post-GA enterprise audit + workplan |
@@ -301,4 +302,4 @@ Do not force-push. Do not amend published history.
 
 ---
 
-*Handover for human/AI continuity — NetRail 1.6.6 — be honest, no scope creep, prefer durable repo state.*
+*Handover for human/AI continuity — NetRail 1.7.0 — be honest, no scope creep, prefer durable repo state.*

@@ -30,6 +30,7 @@ The frontend branches on `code`; `detail` is human-readable. Rust (Tauri / `netr
 | `COLLECTION_ITEM_NOTES_INVALID` | 400 | Collection item notes longer than 2000 characters |
 | `REQUEST_INVALID` | 400 | Generic request validation failure (malformed body/query params) — both stacks |
 | `RATE_LIMITED` | 429 | Too many search/open/mutation calls in a 60s window (disable with `NETRAIL_RATE_LIMIT=0`) |
+| `REQUEST_TIMEOUT` | 408 | Request exceeded the wall-clock budget (default 30s, `NETRAIL_REQUEST_TIMEOUT_SECS`; 0 disables) — both stacks |
 | `SETTINGS_CONFLICT` | 409 | `If-Match` on `PUT /api/settings` doesn't match the current settings `ETag` (settings changed since read; re-fetch and retry). ETags are opaque and per-stack (Rust base64 / Python hex) — always reuse the value from your last `GET` on the same process |
 | `READONLY_MODE` | 403 | `NETRAIL_READONLY=1` — mutations (settings PUT, history delete/purge, collection create/add/delete) rejected. Note that search/visit history logging is still performed in this mode to preserve audit logs. |
 | `AUTH_REQUIRED` | 401 | `NETRAIL_API_TOKEN` set but Bearer / `X-NetRail-Token` missing or wrong |
@@ -90,4 +91,4 @@ Python API tests: `tests/test_api.py`, `tests/test_security.py`
 
 ---
 
-*NetRail v1.6.6 — backend fetch-time codes included (A-05) — maintained by [kayab999](https://github.com/kayab999)*
+*NetRail v1.7.0 — backend fetch-time codes included (A-05) — maintained by [kayab999](https://github.com/kayab999)*

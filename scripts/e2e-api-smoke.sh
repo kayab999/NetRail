@@ -18,6 +18,8 @@ EXPECTED_VERSION="$(python3 -c "import json; print(json.load(open('$ROOT/package
 export NETRAIL_AUTO_OPEN=false
 export NETRAIL_HISTORY_ENCRYPT=false
 export NETRAIL_RATE_LIMIT=0
+# Headless gate escape hatch: CI smoke runs localhost-only without auth.
+export NETRAIL_API_TOKEN=""
 export NETRAIL_STATIC_DIR="${NETRAIL_STATIC_DIR:-$ROOT/netrail/static}"
 
 # Isolate the live binary from real user state (settings, history DB, audit).

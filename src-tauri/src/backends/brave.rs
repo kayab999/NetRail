@@ -5,12 +5,33 @@ use std::env;
 
 pub const PROVENANCE: &str = "Brave Search API (your key, your quota)";
 
+const DEFAULT_BASE_URL: &str = "https://api.search.brave.com";
+
 pub struct BraveBackend {
     api_key: String,
     client: Client,
+    base_url: String,
 }
 
 impl BraveBackend {
+    pub fn new(client: Client, api_key: &str) -> Self {
+        Self {
+            api_key: api_key.to_string(),
+            client,
+            base_url: DEFAULT_BASE_URL.into(),
+        }
+    }
+
+    /// Test hook: point the API at a wiremock server. Production callers use
+    /// `from_env`/`from_env_var`, which keep the default Brave endpoint.
+    pub fn with_base_url(client: Client, api_key: &str, base_url: &str) -> Self {
+        Self {
+            api_key: api_key.to_string(),
+            client,
+            base_url: base_url.trim_end_matches('/').to_string(),
+        }
+    }
+
     pub fn from_env(client: Client) -> Option<Self> {
         Self::from_env_var(client, None)
     }
@@ -39,6 +60,7 @@ impl BraveBackend {
         Some(Self {
             api_key: key,
             client,
+            base_url: DEFAULT_BASE_URL.into(),
         })
     }
 
@@ -67,9 +89,10 @@ impl BraveBackend {
     }
 
     async fn search_web(&self, query: &str, max_results: usize) -> NetRailResult<Vec<SearchResult>> {
+        let url = format!("{}/res/v1/web/search", self.base_url);
         let response = self
             .client
-            .get("https://api.search.brave.com/res/v1/web/search")
+            .get(&url)
             .header("Accept", "application/json")
             .header("X-Subscription-Token", &self.api_key)
             .query(&[("q", query), ("count", &max_results.min(20).to_string())])
@@ -124,9 +147,10 @@ impl BraveBackend {
         query: &str,
         max_results: usize,
     ) -> NetRailResult<Vec<SearchResult>> {
+        let url = format!("{}/res/v1/images/search", self.base_url);
         let response = self
             .client
-            .get("https://api.search.brave.com/res/v1/images/search")
+            .get(&url)
             .header("Accept", "application/json")
             .header("X-Subscription-Token", &self.api_key)
             .query(&[("q", query), ("count", &max_results.min(20).to_string())])

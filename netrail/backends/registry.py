@@ -106,26 +106,30 @@ def search_with_fallback(
 
     pool = ThreadPoolExecutor(max_workers=max(1, len(backends)))
     futures = {}
-    for backend in backends:
+    for idx, backend in enumerate(backends):
         future = pool.submit(_query_backend, backend, query, mode, max_results)
-        futures[future] = backend
+        futures[future] = idx
+    # Completions arrive in response-speed order; stash by spawn index so the
+    # merge below follows configured backend order, not speed (parity with
+    # Rust `BackendBatch.order` sort). Errors stay completion-ordered.
+    done: dict[int, tuple[str, str, list[SearchResult], str | None]] = {}
+    completion_order_errors: list[str] = []
+    timed_out = False
     try:
         for future in as_completed(futures, timeout=FANOUT_DEADLINE_SECONDS):
             name, provenance, batch, err = future.result()
             if err:
                 logger.warning("backend search failed: %s", err)
-                errors.append(err)
+                completion_order_errors.append(err)
                 continue
             if batch:
-                backends_used.append(name)
-                provenance_chain.append(provenance)
-                batches.append((name, batch))
+                done[futures[future]] = (name, provenance, batch, err)
             else:
                 logger.warning("%s returned zero parseable results", name)
-                errors.append(f"{name}: returned no results")
+                completion_order_errors.append(f"{name}: returned no results")
     except FuturesTimeout:
+        timed_out = True
         logger.warning("fanout timed out after %.0fs", FANOUT_DEADLINE_SECONDS)
-        errors.append("fanout: timed out after 20 seconds")
         # Cancel queued work and stop waiting on the pool (QA-10): the old
         # `with ThreadPoolExecutor` blocked in __exit__ on hung/queued futures,
         # stretching the request wall time past the 20s deadline. Pending
@@ -137,6 +141,17 @@ def search_with_fallback(
         pool.shutdown(wait=False, cancel_futures=True)
     else:
         pool.shutdown(wait=True)
+
+    # Errors keep completion order with the timeout marker last (pre-existing
+    # contract); successes follow configured backend order (see above).
+    errors.extend(completion_order_errors)
+    if timed_out:
+        errors.append("fanout: timed out after 20 seconds")
+    for idx in sorted(done):
+        name, provenance, batch, _err = done[idx]
+        backends_used.append(name)
+        provenance_chain.append(provenance)
+        batches.append((name, batch))
 
     if strategy == "fallback":
         flat = [item for _, batch in batches for item in batch]

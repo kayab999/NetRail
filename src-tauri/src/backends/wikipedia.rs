@@ -6,13 +6,28 @@ use std::collections::HashMap;
 pub const PROVENANCE: &str =
     "Wikipedia OpenSearch + intro extracts (direct, no API key)";
 
+const DEFAULT_BASE_URL: &str = "https://en.wikipedia.org";
+
 pub struct WikipediaBackend {
     client: Client,
+    base_url: String,
 }
 
 impl WikipediaBackend {
     pub fn new(client: Client) -> Self {
-        Self { client }
+        Self {
+            client,
+            base_url: DEFAULT_BASE_URL.into(),
+        }
+    }
+
+    /// Test hook: point the API at a wiremock server. Production callers use
+    /// `new`, which keeps the default Wikipedia endpoint.
+    pub fn with_base_url(client: Client, base_url: &str) -> Self {
+        Self {
+            client,
+            base_url: base_url.trim_end_matches('/').to_string(),
+        }
     }
 
     pub fn name(&self) -> &'static str {
@@ -38,7 +53,8 @@ impl WikipediaBackend {
         }
 
         let url = format!(
-            "https://en.wikipedia.org/w/api.php?action=opensearch&profile=fuzzy&search={}&limit={}&namespace=0&format=json",
+            "{}/w/api.php?action=opensearch&profile=fuzzy&search={}&limit={}&namespace=0&format=json",
+            self.base_url,
             urlencoding::encode(query),
             max_results
         );
@@ -128,7 +144,8 @@ impl WikipediaBackend {
             .join("|");
 
         let url = format!(
-            "https://en.wikipedia.org/w/api.php?action=query&format=json&prop=extracts&exintro=1&explaintext=1&exchars=400&redirects=1&titles={titles_param}"
+            "{}/w/api.php?action=query&format=json&prop=extracts&exintro=1&explaintext=1&exchars=400&redirects=1&titles={titles_param}",
+            self.base_url
         );
         let response = self.client.get(&url).send().await?;
         if !response.status().is_success() {

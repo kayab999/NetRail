@@ -1,5 +1,8 @@
-//! Optional localhost API token (`NETRAIL_API_TOKEN`).
-//! When unset, behavior is unchanged (v1 single-user model).
+//! Localhost API token (`NETRAIL_API_TOKEN`).
+//! Desktop (Tauri): optional — when unset, behavior is unchanged (v1
+//! single-user model). Headless `netrail-api`/Docker: required — the binary
+//! exits before bind unless the operator sets a token or explicitly opts out
+//! with `NETRAIL_API_TOKEN=""` (see `headless_token_gate`).
 //! When set, `/api/*` except `/api/health` requires
 //! `Authorization: Bearer <token>` or `X-NetRail-Token: <token>`.
 
@@ -102,6 +105,47 @@ pub fn path_requires_token(path: &str) -> bool {
     path.starts_with("/api/")
 }
 
+/// Headless startup gate for `netrail-api`/Docker (fail-fast).
+///
+/// Returns `Ok(())` when the process may bind, `Err(exit_code)` when the
+/// caller should exit. Three states, distinguished by presence:
+/// - unset → `Err(1)` after printing setup instructions to stderr.
+/// - explicitly empty/whitespace → `Ok(())` + loud stderr warning
+///   (testing/CI escape hatch; preserves pre-1.7 unauthenticated behavior).
+/// - non-empty → `Ok(())`, token auth enforced by `check_request_token`.
+pub fn headless_token_gate() -> Result<(), i32> {
+    match std::env::var("NETRAIL_API_TOKEN") {
+        Err(_) => {
+            eprintln!("{HEADLESS_TOKEN_REQUIRED_MSG}");
+            Err(1)
+        }
+        Ok(raw) if raw.trim().is_empty() => {
+            eprintln!(
+                "WARNING: NETRAIL_API_TOKEN is explicitly empty — running WITHOUT authentication. \
+                 Any local process can read/write the API. Set a token for any shared host."
+            );
+            Ok(())
+        }
+        Ok(_) => Ok(()),
+    }
+}
+
+pub const HEADLESS_TOKEN_REQUIRED_MSG: &str = "ERROR: netrail-api requires an API token for authentication.\n\
+\n\
+Generate one:\n  \
+openssl rand -hex 32\n\
+\n\
+Then set it:\n  \
+export NETRAIL_API_TOKEN=\"your-generated-token\"\n  \
+# or in Docker:\n  \
+docker run -e NETRAIL_API_TOKEN=\"your-token\" ...\n\
+\n\
+For testing/CI where auth is unnecessary (localhost-only):\n  \
+export NETRAIL_API_TOKEN=\"\"\n  \
+# WARNING: runs without authentication — any local process can access the API\n\
+\n\
+See docs/DISTRIBUTION.md for persistent token setup (systemd EnvironmentFile, Docker Compose).";
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -121,6 +165,31 @@ mod tests {
         assert!(check_request_token(Some("Bearer secret-test-token"), None).is_ok());
         assert!(check_request_token(None, Some("secret-test-token")).is_ok());
         assert!(check_request_token(Some("Bearer wrong"), None).is_err());
+        std::env::remove_var("NETRAIL_API_TOKEN");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn headless_gate_missing_exits_1() {
+        std::env::remove_var("NETRAIL_API_TOKEN");
+        assert_eq!(headless_token_gate(), Err(1));
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn headless_gate_explicit_empty_warns_but_runs() {
+        std::env::set_var("NETRAIL_API_TOKEN", "");
+        assert_eq!(headless_token_gate(), Ok(()));
+        std::env::set_var("NETRAIL_API_TOKEN", "   ");
+        assert_eq!(headless_token_gate(), Ok(()));
+        std::env::remove_var("NETRAIL_API_TOKEN");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn headless_gate_configured_runs() {
+        std::env::set_var("NETRAIL_API_TOKEN", "headless-secret");
+        assert_eq!(headless_token_gate(), Ok(()));
         std::env::remove_var("NETRAIL_API_TOKEN");
     }
 }

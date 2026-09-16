@@ -4,7 +4,8 @@
 
 | Version | Supported |
 |---------|-----------|
-| 1.6.x   | Yes (current: 1.6.6) |
+| 1.7.x   | Yes (current: 1.7.0) |
+| 1.6.x   | Yes (security fixes) |
 | 1.5.x   | Yes (security fixes) |
 | 1.4.x   | Yes (security fixes) |
 | 1.3.x   | Yes (security fixes) |
@@ -50,9 +51,20 @@ Backend HTTP clients **do not follow redirects**, so a SearXNG/Brave hop cannot 
 
 **By design, search and open still record local history/visits** so the console remains useful as a kiosk/archive viewer with an intact local audit trail. Read endpoints (settings GET, history list, collections list/export, docs, health) keep working. See `docs/API_ERRORS.md` and `docs/DISTRIBUTION.md`.
 
-## Optional API token
+## API token
 
-`NETRAIL_API_TOKEN` requires `Authorization: Bearer …` or `X-NetRail-Token: …` on `/api/*` (health is exempt). It is a guard against **accidental cross-process access** (other users' processes, browser extensions, containers sharing the loopback) — **not** a defense against malware already running as your user.
+Desktop (Tauri): `NETRAIL_API_TOKEN` is **optional**. When unset, behavior is
+unchanged (v1 single-user model).
+
+Headless (`netrail-api`, `python -m netrail`, Docker): `NETRAIL_API_TOKEN`
+is **required**. The process exits before bind with setup instructions when
+the variable is unset; set it explicitly empty (`NETRAIL_API_TOKEN=""`) to
+run without authentication for localhost-only testing/CI (prints a stderr
+warning). Systemd deployments should persist the token in an
+`EnvironmentFile` (`/etc/netrail/netrail.env`, see
+`packaging/netrail-api.service`); Docker Compose reads it from `.env`.
+
+When set, the token requires `Authorization: Bearer …` or `X-NetRail-Token: …` on `/api/*` (health is exempt). It is a guard against **accidental cross-process access** (other users' processes, browser extensions, containers sharing the loopback) — **not** a defense against malware already running as your user.
 
 Important tradeoff: when the token is set, `NETRAIL_INJECT_UI_TOKEN` (default **on**) injects the token into the HTML of the **unauthenticated** `/` page so the web UI can authenticate. Any local HTTP client can `GET http://127.0.0.1:7421/` and read it. Since same-user malware can read `NETRAIL_API_TOKEN` from the environment anyway, this does not weaken the threat model — but do not treat the token as a secret that survives local readers. For Docker/multi-process hosts, set `NETRAIL_INJECT_UI_TOKEN=0` and supply the token to the UI via `localStorage` only if you understand the consequence (the UI cannot authenticate until you do).
 
@@ -76,7 +88,7 @@ We aim to acknowledge reports within **72 hours** and ship fixes for confirmed i
 
 - Metasearch provider rate limits, CAPTCHAs, or HTML layout changes (DDGS scraping)
 - User-configured SearXNG instances on private networks (intentional for self-hosters)
-- Lack of API token auth on localhost (documented design choice for v1.x)
+ - Lack of API token auth on desktop localhost (documented design choice for v1.x; headless requires a token)
 - Remote image loads in Images mode (HTTPS thumbnails; privacy residual)
 
 ## Safe defaults
@@ -84,9 +96,9 @@ We aim to acknowledge reports within **72 hours** and ship fixes for confirmed i
 - URL open validation as above
 - Backend URL validation blocks cloud metadata and rebinding hostnames
 - CSP, `nosniff`, and `no-referrer` on API responses
-- Local rate limits on search/open/mutations (90 / 120 / 60 per minute); set `NETRAIL_RATE_LIMIT=0` to disable
-- Optional `NETRAIL_API_TOKEN` (Bearer / `X-NetRail-Token`) for Docker or multi-process hosts
-- Optional `NETRAIL_STRICT_BACKEND_URLS` to forbid private/loopback SearXNG URLs
+ - Local rate limits on search/open/mutations (90 / 120 / 60 per minute); set `NETRAIL_RATE_LIMIT=0` to disable
+ - `NETRAIL_API_TOKEN` (Bearer / `X-NetRail-Token`): optional on desktop, required for headless/Docker
+ - Optional `NETRAIL_STRICT_BACKEND_URLS` to forbid private/loopback SearXNG URLs
 - Optional `NETRAIL_AUDIT_LOG` JSON lines for search/open/settings/history mutations
 - Optional `NETRAIL_READONLY=1` to lock settings/history/collections mutations (search/visit logging stays active)
 - Zero telemetry

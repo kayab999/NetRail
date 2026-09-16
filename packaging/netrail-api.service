@@ -20,12 +20,16 @@ Type=simple
 User=netrail
 Group=netrail
 ExecStart=/usr/local/bin/netrail-api
+# Persistent token (required — the binary exits 1 without it):
+#   sudo install -d -o root -g netrail -m 750 /etc/netrail
+#   echo 'NETRAIL_API_TOKEN=your-generated-token' | sudo tee /etc/netrail/netrail.env >/dev/null
+#   sudo chmod 640 /etc/netrail/netrail.env && sudo chown root:netrail /etc/netrail/netrail.env
+EnvironmentFile=-/etc/netrail/netrail.env
 Environment=NETRAIL_DB_PATH=/var/lib/netrail/netrail.db
 Environment=XDG_CONFIG_HOME=/var/lib/netrail
 Environment=NETRAIL_AUTO_OPEN=false
 # Optional hardening:
 #   Environment=NETRAIL_READONLY=1         block all mutations (backup window)
-#   Environment=NETRAIL_API_TOKEN=change-me   cross-process guard (see SECURITY.md)
 #   Environment=NETRAIL_AUDIT_LOG=1       local JSONL audit log (rotates)
 #   Environment=NETRAIL_LOG_JSON=1        structured logs on stdout (journalctl)
 #   Environment=NETRAIL_HISTORY_ENCRYPT=true + NETRAIL_DB_KEY=...  (keyring is unavailable; use env key)
