@@ -1,5 +1,10 @@
 # NetRail — Auditoría técnica profunda
 
+> **Provenance note:** this document was generated during development by the
+> same process that wrote the code. It is internal quality assurance, **not**
+> an independent third-party security audit. Verify against the public repo
+> and CI, which re-runs the same suites on every push.
+
 **Fecha:** 2026-06-27  
 **Versión auditada:** v1.1.0 (`597838d` + cambios post-release)  
 **Alcance:** Rust (Tauri/Axum), Python (fallback), frontend estático, CI/CD, seguridad, tests

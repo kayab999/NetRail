@@ -1,5 +1,10 @@
 # 🛡️ Tribunal v12.0 — NetRail Audit-Fix Loop (3 Cycles)
 
+> **Provenance note:** this document was generated during development by the
+> same process that wrote the code. It is internal quality assurance, **not**
+> an independent third-party security audit. Verify against the public repo
+> and CI, which re-runs the same suites on every push.
+
 **Date:** 2026-06-27  
 **Scope:** Search regression, backend fanout, observability, blast radius  
 **Stack:** Rust (Tauri) + Axum + static JS  

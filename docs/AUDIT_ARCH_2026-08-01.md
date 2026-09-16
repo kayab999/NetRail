@@ -1,5 +1,10 @@
 # NetRail — Architecture-Level Technical Audit (Enterprise Grade)
 
+> **Provenance note:** this document was generated during development by the
+> same process that wrote the code. It is internal quality assurance, **not**
+> an independent third-party security audit. Verify against the public repo
+> and CI, which re-runs the same suites on every push.
+
 | Field | Value |
 |-------|--------|
 | **Date** | 2026-08-01 |

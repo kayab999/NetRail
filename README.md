@@ -229,6 +229,22 @@ NetRail/
 
 ---
 
+## Verification
+
+Every push and release is automatically verified
+([view CI runs](https://github.com/kayab999/NetRail/actions)):
+
+- `cargo clippy --all-targets -- -D warnings` — zero warnings tolerated
+- `cargo test` — Rust suite (unit + integration)
+- `pytest tests/` — Python suite
+- `cargo audit`, `pip-audit`, `npm audit` — zero known dependency
+  vulnerabilities (these are dependency-scanning tools, not third-party
+  security audits)
+- SBOM generated, embedded in binaries and release bundles
+- Release `SHA256SUMS` signed with sigstore keyless (`cosign`)
+
+---
+
 ## Maintainer
 
 Developed by [Carlos Hernández (@kayab999)](https://github.com/kayab999). Support development via [Buy Me a Coffee](https://buymeacoffee.com/kayabsoftware) (also in the app **Help → Donate** menu).

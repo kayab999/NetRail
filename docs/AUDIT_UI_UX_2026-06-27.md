@@ -1,5 +1,10 @@
 # NetRail — Adversarial UI/UX audit (2026-06-27)
 
+> **Provenance note:** this document was generated during development by the
+> same process that wrote the code. It is internal quality assurance, **not**
+> an independent third-party security audit. Verify against the public repo
+> and CI, which re-runs the same suites on every push.
+
 **Reporter symptom:** Desktop app shows only `index.html not found`. Native Help/About/Donate visible but inert. No search box.
 
 **Severity:** P0 ship-blocker for packaged installs.
