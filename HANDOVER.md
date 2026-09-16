@@ -161,6 +161,7 @@ Release CI: `.github/workflows/release.yml` on tag `v*` (clippy + tests + AppIma
 | R7 | Image CDN privacy (Images mode) | `no-referrer` set; still loads remote URLs |
 | R8 | Webview E2E is display-dependent | Manual pre-tag gate (`scripts/webview-e2e.sh`); API E2E smoke in CI |
 | R9 | Collection add uses open-URL policy | Private LAN URLs cannot be saved via API — intentional safety |
+| R10 | Browser re-resolves DNS after open | `/api/open` validates + pins pre-launch, but the external browser resolves independently post-launch outside NetRail's connection boundary (DNS-rebinding TOCTOU class). Rebinding-helper domains blocked; remainder accepted, depends on browser/resolver controls |
 
 ---
 

@@ -1,6 +1,6 @@
 # NetRail — Architecture & Lifecycle Blueprint
 
-> **Current product:** NetRail **1.7.0** (Rust-primary, dual-stack). Lifecycle tables below retain historical phase labels; rows marked ✅ are shipped. Open items are backlog, not “still in Phase 1.” Residual risk: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). Remaining-work plan: [docs/HANDOFF_OPENCODE_2026-08-02.md](HANDOFF_OPENCODE_2026-08-02.md) §9.
+> **Current product:** NetRail **1.7.0** (Rust-primary, dual-stack). **Current state: v1.7.0** — the sections below describe the architecture as built. Sections under `Historical Evolution` are provenance, not backlog: completed phases and superseded designs kept to explain how the design got here. Lifecycle tables below retain historical phase labels; rows marked ✅ are shipped. Open items are backlog, not “still in Phase 1.” Residual risk: [AUDIT_ARCH_2026-08-01.md](AUDIT_ARCH_2026-08-01.md) + [AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md](AUDIT_OPENCODE_ADVERSARIAL_2026-08-01.md). Remaining-work plan: [docs/HANDOFF_OPENCODE_2026-08-02.md](HANDOFF_OPENCODE_2026-08-02.md) §9.
 
 ## Vision
 
@@ -10,9 +10,9 @@ NetRail does not try to rebuild Google's data centers on a laptop. It tries to p
 
 ---
 
-## High-Level Design (v1.2.x — current)
+## High-Level Design (current — v1.7.x)
 
-Production **1.2.x** runs a **Rust Axum API** on `127.0.0.1:7421`, shared with a static web UI (`netrail/static/`). The Tauri desktop shell (`src-tauri/`) embeds that UI and spawns the API in-process. A headless `netrail-api` binary ships the same engine without GTK/Tauri. Python (`netrail/main.py`) remains for tests, Docker, Flatpak, and `install.sh` fallback.
+Production runs a **Rust Axum API** on `127.0.0.1:7421`, shared with a static web UI (`netrail/static/`). The Tauri desktop shell (`src-tauri/`) embeds that UI and spawns the API in-process. A headless `netrail-api` binary ships the same engine without GTK/Tauri. Python (`netrail/main.py`) remains for tests, Docker, Flatpak, and `install.sh` fallback.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
@@ -60,112 +60,6 @@ Repository: [github.com/kayab999/NetRail](https://github.com/kayab999/NetRail)
 | **Modular** | Standalone product; optional integration via HTTP API only |
 | **Inspectable** | AGPL-3.0; behavior auditable; no hidden network calls beyond search |
 | **Incremental sovereignty** | v1.0 fanout metasearch; later phases add owned indexes and local AI |
-
----
-
-## High-Level Design (v0.1 — historical Python baseline)
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        Entry Points                              │
-│           ./run.sh  │  python -m netrail  │  curl API            │
-└────────────────────────────┬────────────────────────────────────┘
-                             │
-                             ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                     netrail/main.py                              │
-│              FastAPI @ 127.0.0.1:7421                            │
-│   /  /api/search  /api/open  /api/browsers  /api/settings        │
-└────────────┬───────────────────────────────┬────────────────────┘
-             │                               │
-             ▼                               ▼
-┌────────────────────────┐      ┌────────────────────────────┐
-│   static/ (Web UI)     │      │   Core modules              │
-│   index.html           │      │   search.py   → ddgs        │
-│   app.js  style.css    │      │   browsers.py → subprocess  │
-│   Link rail + controls │      │   config.py   → ~/.config/  │
-└────────────────────────┘      └──────────────┬─────────────┘
-                                               │
-                                               ▼
-                              ┌────────────────────────────────┐
-                              │   External (user-initiated)     │
-                              │   Metasearch providers (ddgs)   │
-                              │   Desktop browser (on Open)     │
-                              └────────────────────────────────┘
-```
-
-### Request flow: search
-
-```
-User types query + operators
-        │
-        ▼
-POST /api/search  { query, mode, max_results }
-        │
-        ▼
-search.py  →  DDGS().text() | DDGS().images()
-        │
-        ▼
-Normalized result list  { title, url, snippet, image? }
-        │
-        ▼
-Link rail renders locally  (no auto-navigation)
-```
-
-### Request flow: open link
-
-```
-User clicks Open
-        │
-        ▼
-POST /api/open  { url, browser_id?, private_mode? }
-        │
-        ▼
-config.py  →  merge saved preferences
-        │
-        ▼
-browsers.py  →  discover → build argv → subprocess.Popen
-        │
-        ▼
-Chosen browser opens URL (private flag if supported)
-```
-
----
-
-## Core Modules
-
-| Module | Responsibility |
-|--------|----------------|
-| `main.py` | HTTP server, routing, request validation, error surfacing |
-| `search.py` | Metasearch adapter; normalizes provider responses |
-| `browsers.py` | Freedesktop `.desktop` parsing; known-browser private flags |
-| `config.py` | XDG settings load/save with safe defaults |
-| `static/` | Self-contained UI; no external CDN dependencies |
-
-### Search adapter boundary
-
-`search.py` is the **only** module that talks to metasearch providers in v0.1. All future backends (SearXNG, Brave API, local index) plug in behind this interface:
-
-```python
-def search(query: str, mode: SearchMode, max_results: int) -> list[dict]:
-    ...
-```
-
-Returning a stable shape:
-
-```json
-{
-  "title": "string",
-  "url": "string",
-  "snippet": "string",
-  "image": "string | null",
-  "source": "string"
-}
-```
-
-### Browser launcher boundary
-
-`browsers.py` owns all process-spawn logic for opening URLs. Future desktop shell (Tauri) reuses this module from the Rust side via Python subprocess or a ported implementation.
 
 ---
 
@@ -274,121 +168,7 @@ Backlog shipped on `main` (all in v1.6.3 / Sprints):
 
 **Next milestone:** the engineering backlog is empty. Remaining work is "don't build unless asked": C3 DNS resolve-and-warn flag, C4 images-off flag, multi-user/RBAC, egress proxy/TLS pinning, metrics/SLO, Windows/macOS ports, then the long-horizon phases below (see [HANDOFF §9](HANDOFF_OPENCODE_2026-08-02.md#9-remaining-work-points-post-164-push)).
 
----
-
-### Phase 0 — Genesis (complete)
-
-**Version:** 0.1.0  
-**Status:** Released
-
-| Deliverable | State |
-|-------------|-------|
-| Web + image metasearch | ✅ |
-| Operator passthrough | ✅ |
-| Link rail UI | ✅ |
-| Browser picker + private mode | ✅ |
-| Local REST API | ✅ |
-| Zero telemetry | ✅ |
-| AGPL-3.0 + open letter | ✅ |
-
-**Exit criteria:** User can search, review, and open links locally without accounts or analytics.
-
----
-
-### Phase 1 — Credibility + Reliability (complete for 1.x)
-
-**Version:** 0.2.0 → absorbed into **1.2.x**  
-**Theme:** Close the manifesto–reality gap; survive `ddgs` breakage
-
-| Deliverable | State |
-|-------------|-------|
-| `SearchBackend` protocol | ✅ |
-| SearXNG backend (configure `searxng_url`) | ✅ |
-| Fallback chaining across backends | ✅ |
-| Backend provenance in API + UI | ✅ |
-| Sovereignty step indicator | ✅ |
-| CSP + stricter URL validation | ✅ |
-| Test suite (API, backends, security) | ✅ |
-| Open Letter honesty rewrite | ✅ |
-| Result caching | 🔲 optional backlog |
-| Async multi-backend fanout | ✅ 1.x (`JoinSet` + `select!` / thread pool + `as_completed`) |
-| Brave Search API (BYO key) | ✅ 1.x (`BRAVE_SEARCH_API_KEY`) |
-
-**Exit criteria:** User sees where results come from; SearXNG works when configured; tests gate releases. ✅
-
----
-
-### Phase 2 — Retention + Utility (complete)
-
-**Version:** 0.3.0  
-**Status:** Released
-
-| Deliverable | State |
-|-------------|-------|
-| SQLite schema (`queries`, `results`, `visits`, `collections`) | ✅ |
-| Fernet field encryption + keyring / `NETRAIL_DB_KEY` | ✅ |
-| FTS5 local history search | ✅ |
-| Revisit badges + visit metadata in search API | ✅ |
-| Collections + CSV/JSON export | ✅ |
-| `history_ttl_days` auto-purge | ✅ |
-| History tab UI | ✅ |
-
-**Exit criteria:** User can search past queries faster than re-Googling them. ✅
-
----
-
-### Phase 3 — Distribution (complete)
-
-**Version:** 0.4.0  
-**Status:** Released
-
-| Deliverable | State |
-|-------------|-------|
-| Flatpak + `flatpak-spawn --host` browser fix | ✅ |
-| Docker + Compose (localhost bind, SearXNG profile) | ✅ |
-| AppImage / PyInstaller build script | ✅ |
-| `install.sh` one-click local install | ✅ |
-| `.desktop` + SVG icon + auto-open UI | ✅ |
-| [DISTRIBUTION.md](DISTRIBUTION.md) | ✅ |
-
-**Exit criteria:** Install in under 60 seconds without manual venv setup. ✅
-
----
-
-### Phase 4 — Native Shell (Rust) ✅
-
-**Version:** 0.5.0  
-**Theme:** End the "open Chrome to use privacy search" paradox
-
-| Item | Status |
-|------|--------|
-| Rust port of search + browser + history modules | ✅ `src-tauri/` — Axum on `127.0.0.1:7421` |
-| Tauri 2 shell | ✅ Webview → local API; tray + `Ctrl+Shift+S` + single-instance |
-| Fernet DB migration | ✅ v0.4 encrypted SQLite opens without data loss |
-| Python variant retained | ✅ `install.sh` falls back to `python -m netrail` |
-| `--api-only` headless mode | ✅ For Docker-style scripting without GUI |
-
-**Architecture decision:** Full Rust port — no Python sidecar. UI in `netrail/static/` unchanged.
-
-**Exit criteria:** ✅ `curl http://127.0.0.1:7421/api/health` returns 200 from native binary; encrypted history readable.
-
----
-
-### Phase 5 — Public Launch
-
-**Target version:** 1.0  
-**Theme:** Multi-backend merge as technical moat
-
-| Item | Status |
-|------|--------|
-| Async fanout + dedupe merge | ✅ `JoinSet` + `select!` fanout; `merge.rs` normalize → dedupe → interleave |
-| Brave BYO-key backend | ✅ `BRAVE_SEARCH_API_KEY` env; never stored in settings |
-| Pro-console UI | ✅ Backend pills, keyboard nav, result export (JSON/CSV) |
-| GitHub Release CI | ✅ AppImage + `.deb` + `netrail-api` on tag push |
-| Polished onboarding | ⏳ Sovereignty wizard; SearXNG setup guide (post-1.0) |
-| Institutional license tier | ⏳ Newsrooms, legal, government (open core) |
-
-**Exit criteria:** ✅ Fanout search, BYO API keys, keyboard workflow, and distributable AppImage.
+> Completed phases 0–5 now live under `Historical Evolution` at the end of this document. Only planned phases (6+) remain in this section.
 
 ---
 
@@ -568,9 +348,236 @@ The **workflow** is the inheritance. The **infrastructure** is modernized for a 
 
 ---
 
+## Historical Evolution (reference only)
+
+Completed phases and superseded designs, kept for provenance. Not backlog, not roadmap — `Lifecycle Roadmap → Current state` above is the authority on what is current vs planned.
+
+### High-Level Design (v0.1 — historical Python baseline)
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        Entry Points                              │
+│           ./run.sh  │  python -m netrail  │  curl API            │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                     netrail/main.py                              │
+│              FastAPI @ 127.0.0.1:7421                            │
+│   /  /api/search  /api/open  /api/browsers  /api/settings        │
+└────────────┬───────────────────────────────┬────────────────────┘
+             │                               │
+             ▼                               ▼
+┌────────────────────────┐      ┌────────────────────────────┐
+│   static/ (Web UI)     │      │   Core modules              │
+│   index.html           │      │   search.py   → ddgs        │
+│   app.js  style.css    │      │   browsers.py → subprocess  │
+│   Link rail + controls │      │   config.py   → ~/.config/  │
+└────────────────────────┘      └──────────────┬─────────────┘
+                                               │
+                                               ▼
+                              ┌────────────────────────────────┐
+                              │   External (user-initiated)     │
+                              │   Metasearch providers (ddgs)   │
+                              │   Desktop browser (on Open)     │
+                              └────────────────────────────────┘
+```
+
+#### Request flow: search
+
+```
+User types query + operators
+        │
+        ▼
+POST /api/search  { query, mode, max_results }
+        │
+        ▼
+search.py  →  DDGS().text() | DDGS().images()
+        │
+        ▼
+Normalized result list  { title, url, snippet, image? }
+        │
+        ▼
+Link rail renders locally  (no auto-navigation)
+```
+
+#### Request flow: open link
+
+```
+User clicks Open
+        │
+        ▼
+POST /api/open  { url, browser_id?, private_mode? }
+        │
+        ▼
+config.py  →  merge saved preferences
+        │
+        ▼
+browsers.py  →  discover → build argv → subprocess.Popen
+        │
+        ▼
+Chosen browser opens URL (private flag if supported)
+```
+
+---
+
+### Core Modules
+
+| Module | Responsibility |
+|--------|----------------|
+| `main.py` | HTTP server, routing, request validation, error surfacing |
+| `search.py` | Metasearch adapter; normalizes provider responses |
+| `browsers.py` | Freedesktop `.desktop` parsing; known-browser private flags |
+| `config.py` | XDG settings load/save with safe defaults |
+| `static/` | Self-contained UI; no external CDN dependencies |
+
+#### Search adapter boundary
+
+`search.py` is the **only** module that talks to metasearch providers in v0.1. All future backends (SearXNG, Brave API, local index) plug in behind this interface:
+
+```python
+def search(query: str, mode: SearchMode, max_results: int) -> list[dict]:
+    ...
+```
+
+Returning a stable shape:
+
+```json
+{
+  "title": "string",
+  "url": "string",
+  "snippet": "string",
+  "image": "string | null",
+  "source": "string"
+}
+```
+
+#### Browser launcher boundary
+
+`browsers.py` owns all process-spawn logic for opening URLs. Future desktop shell (Tauri) reuses this module from the Rust side via Python subprocess or a ported implementation.
+
+---
+
+#### Phase 0 — Genesis (complete)
+
+**Version:** 0.1.0  
+**Status:** Released
+
+| Deliverable | State |
+|-------------|-------|
+| Web + image metasearch | ✅ |
+| Operator passthrough | ✅ |
+| Link rail UI | ✅ |
+| Browser picker + private mode | ✅ |
+| Local REST API | ✅ |
+| Zero telemetry | ✅ |
+| AGPL-3.0 + open letter | ✅ |
+
+**Exit criteria:** User can search, review, and open links locally without accounts or analytics.
+
+---
+
+#### Phase 1 — Credibility + Reliability (complete for 1.x)
+
+**Version:** 0.2.0 → absorbed into **1.2.x**  
+**Theme:** Close the manifesto–reality gap; survive `ddgs` breakage
+
+| Deliverable | State |
+|-------------|-------|
+| `SearchBackend` protocol | ✅ |
+| SearXNG backend (configure `searxng_url`) | ✅ |
+| Fallback chaining across backends | ✅ |
+| Backend provenance in API + UI | ✅ |
+| Sovereignty step indicator | ✅ |
+| CSP + stricter URL validation | ✅ |
+| Test suite (API, backends, security) | ✅ |
+| Open Letter honesty rewrite | ✅ |
+| Result caching | 🔲 optional backlog |
+| Async multi-backend fanout | ✅ 1.x (`JoinSet` + `select!` / thread pool + `as_completed`) |
+| Brave Search API (BYO key) | ✅ 1.x (`BRAVE_SEARCH_API_KEY`) |
+
+**Exit criteria:** User sees where results come from; SearXNG works when configured; tests gate releases. ✅
+
+---
+
+#### Phase 2 — Retention + Utility (complete)
+
+**Version:** 0.3.0  
+**Status:** Released
+
+| Deliverable | State |
+|-------------|-------|
+| SQLite schema (`queries`, `results`, `visits`, `collections`) | ✅ |
+| Fernet field encryption + keyring / `NETRAIL_DB_KEY` | ✅ |
+| FTS5 local history search | ✅ |
+| Revisit badges + visit metadata in search API | ✅ |
+| Collections + CSV/JSON export | ✅ |
+| `history_ttl_days` auto-purge | ✅ |
+| History tab UI | ✅ |
+
+**Exit criteria:** User can search past queries faster than re-Googling them. ✅
+
+---
+
+#### Phase 3 — Distribution (complete)
+
+**Version:** 0.4.0  
+**Status:** Released
+
+| Deliverable | State |
+|-------------|-------|
+| Flatpak + `flatpak-spawn --host` browser fix | ✅ |
+| Docker + Compose (localhost bind, SearXNG profile) | ✅ |
+| AppImage / PyInstaller build script | ✅ |
+| `install.sh` one-click local install | ✅ |
+| `.desktop` + SVG icon + auto-open UI | ✅ |
+| [DISTRIBUTION.md](DISTRIBUTION.md) | ✅ |
+
+**Exit criteria:** Install in under 60 seconds without manual venv setup. ✅
+
+---
+
+#### Phase 4 — Native Shell (Rust) ✅
+
+**Version:** 0.5.0  
+**Theme:** End the "open Chrome to use privacy search" paradox
+
+| Item | Status |
+|------|--------|
+| Rust port of search + browser + history modules | ✅ `src-tauri/` — Axum on `127.0.0.1:7421` |
+| Tauri 2 shell | ✅ Webview → local API; tray + `Ctrl+Shift+S` + single-instance |
+| Fernet DB migration | ✅ v0.4 encrypted SQLite opens without data loss |
+| Python variant retained | ✅ `install.sh` falls back to `python -m netrail` |
+| `--api-only` headless mode | ✅ For Docker-style scripting without GUI |
+
+**Architecture decision:** Full Rust port — no Python sidecar. UI in `netrail/static/` unchanged.
+
+**Exit criteria:** ✅ `curl http://127.0.0.1:7421/api/health` returns 200 from native binary; encrypted history readable.
+
+---
+
+#### Phase 5 — Public Launch
+
+**Target version:** 1.0  
+**Theme:** Multi-backend merge as technical moat
+
+| Item | Status |
+|------|--------|
+| Async fanout + dedupe merge | ✅ `JoinSet` + `select!` fanout; `merge.rs` normalize → dedupe → interleave |
+| Brave BYO-key backend | ✅ `BRAVE_SEARCH_API_KEY` env; never stored in settings |
+| Pro-console UI | ✅ Backend pills, keyboard nav, result export (JSON/CSV) |
+| GitHub Release CI | ✅ AppImage + `.deb` + `netrail-api` on tag push |
+| Polished onboarding | ⏳ Sovereignty wizard; SearXNG setup guide (post-1.0) |
+| Institutional license tier | ⏳ Newsrooms, legal, government (open core) |
+
+**Exit criteria:** ✅ Fanout search, BYO API keys, keyboard workflow, and distributable AppImage.
+
+---
+
+
 ## Summary
 
-NetRail v1.1 is a **modular research console**: localhost API (Rust-primary), multi-backend fanout, typed API errors, encrypted history, browser launcher, zero telemetry. Python and Docker paths remain for packaging parity. The long-term blueprint moves sovereignty forward in four dimensions:
+NetRail v1.7 is a **modular research console**: localhost API (Rust-primary), multi-backend fanout, typed API errors, encrypted history, browser launcher, zero telemetry. Python and Docker paths remain for packaging parity. The long-term blueprint moves sovereignty forward in four dimensions:
 
 1. **Shell** — from browser-hosted UI to native app  
 2. **Discovery** — from borrowed indexes to chosen backends to owned corpora  
@@ -581,4 +588,4 @@ Each phase is shippable alone. No phase requires merging with external projects.
 
 ---
 
-*NetRail Architecture Working Document — v1.1.0 (Rust-primary) — maintained by [kayab999](https://github.com/kayab999) — 2026*
+*NetRail Architecture Working Document — v1.7.0 (Rust-primary) — maintained by [kayab999](https://github.com/kayab999) — 2026*

@@ -90,6 +90,7 @@ We aim to acknowledge reports within **72 hours** and ship fixes for confirmed i
 - User-configured SearXNG instances on private networks (intentional for self-hosters)
  - Lack of API token auth on desktop localhost (documented design choice for v1.x; headless requires a token)
 - Remote image loads in Images mode (HTTPS thumbnails; privacy residual)
+- Browser DNS re-resolution after open (R10): `/api/open` validates the URL and pins the resolved host before browser launch, but browser navigation is outside NetRail's connection boundary — after launch, the external browser may re-resolve the hostname independently, and NetRail does not control that subsequent resolution. Known rebinding-helper domains (`nip.io`, `sslip.io`, `xip.io`, `localtest.me`) are already blocked; the remaining TOCTOU is an accepted residual dependent on browser-side DNS/rebinding protections or equivalent resolver controls outside NetRail
 
 ## Safe defaults
 
