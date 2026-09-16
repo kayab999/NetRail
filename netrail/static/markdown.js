@@ -2,12 +2,15 @@
  * Minimal Markdown renderer for in-app Help/About views.
  * Supports headings, lists, code blocks, links, images, emphasis, blockquotes, tables.
  */
+// NOTE: mirrored in app.js — tests/test_ui_xss.py pins sync.
+// Change both together.
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function inlineMarkdown(text) {

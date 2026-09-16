@@ -382,12 +382,15 @@ function loadMoreResults() {
   updateLoadMoreButton(total, nextCount);
 }
 
+// NOTE: mirrored in markdown.js — tests/test_ui_xss.py pins sync.
+// Change both together.
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 function resolveDisplayUrl(raw) {
