@@ -120,7 +120,7 @@ cd src-tauri && cargo clippy --all-targets -- -D warnings && cargo test
 bash scripts/package-smoke.sh   # needs built netrail-api
 ```
 
-**Expected (2026-09-16):** Python 346 (`pytest tests/`) · Rust 142 (`cargo test --lib`, full `cargo test` higher with bins/integration) · clippy clean · CI green on `main`.
+**Expected (2026-09-16):** Python 351 (`pytest tests/`) · Rust 149 (`cargo test --lib`, full `cargo test` higher with bins/integration) · clippy clean · CI green on `main`.
 
 ---
 

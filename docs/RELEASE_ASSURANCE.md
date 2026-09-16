@@ -4,10 +4,9 @@ Un documento de confianza, no técnico. Para quien llega por primera vez y quier
 saber **qué garantías ofrece el proyecto** y **dónde están respaldadas** sin leer
 el código. Cada fila apunta a la evidencia concreta (test, script o documento).
 
-> Estado a fecha del corte **v1.6.6 (RC)** (2026-08-11), actualizado **2026-09-05**
-> (post-auditoría Fase 1+2+3). Cifras medidas en este árbol: **306** tests Python
-> (`pytest tests/`) + **127** tests Rust (`cargo test --lib`)
-> — antes 279 + 145 en el ciclo de remediación. Reproducir con
+> Estado a fecha del corte **v1.7.0** (2026-09-16). Cifras medidas en este
+> árbol: **351** tests Python (`pytest tests/`) + **149** tests Rust
+> (`cargo test --lib`) — antes 306 + 127 en v1.6.6. Reproducir con
 > `pytest tests/ -q` y `cargo test` (ver `scripts/check-versions.sh`).
 
 ## Garantías, por área
@@ -18,7 +17,7 @@ el código. Cada fila apunta a la evidencia concreta (test, script o documento).
 | **Resiliencia** | La API sobrevive a fallos inyectados de backends/red sin colapsar ni corromper estado | Chaos suite `scripts/chaos/` (`chaos_db`, `chaos_process`) ejecutada en CI; harness de estabilidad de recursos `scripts/load/` (10k peticiones, ambos stacks) → `docs/sprint3-slope.md` |
 | **Concurrencia** | Escrituras concurrentes son serializadas sin datos perdidos | `HistoryStore` con `RLock` + test de 16 threads; settings con ETag/If-Match (409 en conflicto) → `tests/test_history.py`, `tests/test_api.py` |
 | **Rendimiento** | Métricas dual-stack documentadas y reproducibles | Benchmarks `scripts/bench/` → `docs/bench-dual.md`: Rust ≈573 rps / p50 23 ms / 14% CPU / 10.4 MiB; Python ≈295 rps / p50 39 ms / 74% CPU / 64.1 MiB; sin knee hasta C=512 |
-| **Calidad** | Suites completas en verde antes de cada release | **306** tests Python (`pytest tests/`, incl. parity de browsers, fanout-deadline offline con stub de Wikipedia, link-integrity y golds compartidos de URL/cipher-state/directividad) + **127** tests Rust (`cargo test --lib`, incl. browsers, instance-fingerprint, Host allowlist, collections-delete y migración schema v2) + clippy `-D warnings` + gate de fuzz diferencial (`fuzz-parity --ci`, 12 160 URLs, code_diff=0) + smoke de parity E2E en CI. Cobertura visible sin gate (QA-04/T5): Python 77% (branch) / 80% stmts, Rust 57.5% líneas `--lib` — reported en cada run de CI; el umbral es decisión de Baseline #2. Nota honesta: no hay linter Python (ruff/flake8) configurado en el repo |
+| **Calidad** | Suites completas en verde antes de cada release | **351** tests Python (`pytest tests/`, incl. parity de browsers, fanout-deadline offline con stub de Wikipedia, link-integrity, XSS estructural del frontend y golds compartidos de URL/cipher-state/directividad/merge) + **149** tests Rust (`cargo test --lib`, incl. browsers, instance-fingerprint, Host allowlist, collections-delete, migración schema v2, fanout-deadline/ordering, matriz fetch de backends y mapeo de errores) + clippy `-D warnings` + gate de fuzz diferencial (`fuzz-parity --ci`, 12 160 URLs, code_diff=0) + smoke de parity E2E en CI. Cobertura visible sin gate (QA-04/T5): Python 85%, Rust 80.0% líneas (`llvm-cov --all-targets`; el 59.5% `--lib` excluye los tests de integración y subestima el total) — reported en cada run de CI; el umbral es decisión de Baseline #2. Nota honesta: no hay linter Python (ruff/flake8) configurado en el repo |
 | **Cadena de suministro** | El SBOM viaja dentro de cada artefacto y la release está firmada | E2: inventario Rust embebido en el binario (`netrail-api --sbom`, byte-idéntico al `SBOM.txt`) y `SBOM.txt` empaquetado en deb/rpm/AppImage; el CI de release lo verifica (`dpkg-deb`/`rpm -qlp`). Firma keyless cosign (`SHA256SUMS.sig` + `.pem`). `cargo audit` / `npm audit` / `pip-audit` bloquean el release |
 
 ## Disciplina de release (identidad clara por versión)
@@ -33,7 +32,8 @@ arquitectura:
 | 1.6.3 | Reproducibilidad y cadena de suministro | E2 SBOM-in-bundle, E3 snapshot CSS, E5 fixtures golden |
 | 1.6.5 | Release-readiness (RC) | Post-1.6.4 remediation: clippy P0 green, fuzz diferencial CI-gated, parity de browsers, fanout simétrico, cobertura visible (sin gate), link-integrity, docs SSOT; Baseline #2 = **4.65 SHIP-GRADE** como gate de readiness. Verificación R2 desde checkout limpio |
 | 1.6.6 | Convergencia de seguridad | A-10 semántica canónica v4/v6 (IANA + RFC 4291) con fixture de 119 vectores y probe de 12 160 URLs; A-05 guard fetch-time de backends (SSRF/TOCTOU, fail-closed); A-06 cipher-state canónico (`history.encryption_state` en `/api/health` + chip en UI); A-11 directividad de settings (rebind inmediato del store, ambos stacks); UX chip de estado; dead-code removal. Todos con golds compartidos Rust+Python y gates en verde |
-| Próximos | Funcionalidad / arquitectura | Fuera del alcance de 1.6.3: DNS resolve-and-warn, RBAC, TLS pinning, Windows/macOS, LLM on-device, MCP |
+| 1.7.0 | Headless token gate + paridad | Token requerido en headless/Docker (fail-fast, breaking); timeout 30s tipado 408; fanout en orden configurado (no por velocidad); normalización URL case-preserving con paridad byte-exacta (`+`→`%20`); matriz fetch brave/ddgs/wikipedia (Rust 80% / Python 85%); nota de privacidad CDN en MANUAL; disclaimers de procedencia en auditorías internas |
+| Próximos | Funcionalidad / arquitectura | Corpus propio (paso 4), proxy local de imágenes (R7), agrupación multi-instancia; backlog 1.6.x (DNS resolve-and-warn, RBAC, TLS pinning, Windows/macOS, LLM on-device, MCP) |
 
 ## Cómo verificar por uno mismo
 
