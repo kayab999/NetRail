@@ -24,6 +24,7 @@ def search(
     max_results: int = 25,
     *,
     settings: dict[str, Any] | None = None,
+    options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     active_settings = settings if settings is not None else load_settings()
     response = search_with_fallback(
@@ -31,6 +32,7 @@ def search(
         mode=mode,
         max_results=max_results,
         settings=active_settings,
+        options=options,
     )
     if not response.results and response.errors:
         raise NetRailError(

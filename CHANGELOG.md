@@ -2,6 +2,18 @@
 
 All notable changes to NetRail are documented here. The project follows [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] — 2026-11-07
+
+### Added
+
+- **SearXNG search parameters (P0.1):** optional `language`, `time_range` (day/month/year), `pageno` (1-100), `safesearch` (0/1/2) on `SearchRequest` (Rust + Python). Propagated only to the SearXNG backend; DDGS/Brave are unaffected.
+- **SearXNG `/config` discovery (P0.2):** `fetch_config` in both stacks (GET `/config`, 5s timeout, no redirects, SSRF guard, 5-min cache). New `GET /api/searxng/config` endpoint returning status (`not_configured`/`ok`/`unavailable`/`invalid`), categories, enabled engines, and overlap warnings.
+- **Overlap diagnostics (P0.3):** non-blocking warnings when a SearXNG engine (DuckDuckGo/Brave, case-insensitive aliases) overlaps an enabled direct backend.
+
+### Changed
+
+- Search backend signatures accept an optional `SearchOptions`/options dict (ignored by non-SearXNG backends).
+
 ## [1.7.0] — 2026-09-16
 
 ### Breaking

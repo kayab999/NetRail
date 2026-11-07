@@ -50,6 +50,7 @@ class WikipediaBackend:
         mode: SearchMode,
         max_results: int,
         timeout: float | None = None,
+        options: dict[str, Any] | None = None,  # noqa: ARG002
     ) -> list[SearchResult]:
         if mode != "web":
             return []

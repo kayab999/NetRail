@@ -40,7 +40,7 @@ async fn brave_web_success_parses_results() {
 
     let backend =
         BraveBackend::with_base_url(build_http_client(), "test-key", &server.uri());
-    let results = backend.search("rust", SearchMode::Web, 10).await.unwrap();
+    let results = backend.search("rust", SearchMode::Web, 10, &netrail_lib::backends::types::SearchOptions::default()).await.unwrap();
     assert_eq!(results.len(), 2);
     assert_eq!(results[0].url, "https://a.test/1");
     assert_eq!(results[0].title, "A");
@@ -67,7 +67,7 @@ async fn brave_images_success_parses_thumbnails() {
 
     let backend =
         BraveBackend::with_base_url(build_http_client(), "test-key", &server.uri());
-    let results = backend.search("cats", SearchMode::Images, 10).await.unwrap();
+    let results = backend.search("cats", SearchMode::Images, 10, &netrail_lib::backends::types::SearchOptions::default()).await.unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].image.as_deref(), Some("https://img.test/t1.jpg"));
     assert_eq!(results[0].backend, "brave");
@@ -84,7 +84,7 @@ async fn brave_http_error_maps_to_typed_code() {
 
     let backend =
         BraveBackend::with_base_url(build_http_client(), "test-key", &server.uri());
-    let err = backend.search("rust", SearchMode::Web, 10).await.unwrap_err();
+    let err = backend.search("rust", SearchMode::Web, 10, &netrail_lib::backends::types::SearchOptions::default()).await.unwrap_err();
     assert_eq!(err.error_code(), "BRAVE_HTTP_ERROR");
     assert_eq!(err.status_code(), http::StatusCode::BAD_GATEWAY);
 }
@@ -100,7 +100,7 @@ async fn brave_malformed_json_is_error() {
 
     let backend =
         BraveBackend::with_base_url(build_http_client(), "test-key", &server.uri());
-    assert!(backend.search("rust", SearchMode::Web, 10).await.is_err());
+    assert!(backend.search("rust", SearchMode::Web, 10, &netrail_lib::backends::types::SearchOptions::default()).await.is_err());
 }
 
 #[tokio::test]
@@ -116,7 +116,7 @@ async fn brave_empty_results_is_ok_empty() {
 
     let backend =
         BraveBackend::with_base_url(build_http_client(), "test-key", &server.uri());
-    let results = backend.search("rust", SearchMode::Web, 10).await.unwrap();
+    let results = backend.search("rust", SearchMode::Web, 10, &netrail_lib::backends::types::SearchOptions::default()).await.unwrap();
     assert!(results.is_empty());
 }
 
@@ -150,7 +150,7 @@ async fn wikipedia_opensearch_with_descriptions_needs_no_extracts() {
     .await;
 
     let backend = WikipediaBackend::with_base_url(build_http_client(), &server.uri());
-    let results = backend.search("music", SearchMode::Web, 10).await.unwrap();
+    let results = backend.search("music", SearchMode::Web, 10, &netrail_lib::backends::types::SearchOptions::default()).await.unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].title, "Music");
     assert_eq!(results[0].snippet, "Art form");
@@ -181,7 +181,7 @@ async fn wikipedia_empty_description_falls_back_to_extracts() {
         .await;
 
     let backend = WikipediaBackend::with_base_url(build_http_client(), &server.uri());
-    let results = backend.search("music", SearchMode::Web, 10).await.unwrap();
+    let results = backend.search("music", SearchMode::Web, 10, &netrail_lib::backends::types::SearchOptions::default()).await.unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].snippet, "Music is an art form.");
 }
@@ -196,7 +196,7 @@ async fn wikipedia_http_error_maps_to_typed_code() {
         .await;
 
     let backend = WikipediaBackend::with_base_url(build_http_client(), &server.uri());
-    let err = backend.search("music", SearchMode::Web, 10).await.unwrap_err();
+    let err = backend.search("music", SearchMode::Web, 10, &netrail_lib::backends::types::SearchOptions::default()).await.unwrap_err();
     assert_eq!(err.error_code(), "WIKIPEDIA_HTTP_ERROR");
 }
 
@@ -208,7 +208,7 @@ async fn wikipedia_malformed_payload_is_ok_empty() {
         .await;
 
     let backend = WikipediaBackend::with_base_url(build_http_client(), &server.uri());
-    let results = backend.search("music", SearchMode::Web, 10).await.unwrap();
+    let results = backend.search("music", SearchMode::Web, 10, &netrail_lib::backends::types::SearchOptions::default()).await.unwrap();
     assert!(results.is_empty());
 }
 
@@ -216,7 +216,7 @@ async fn wikipedia_malformed_payload_is_ok_empty() {
 async fn wikipedia_non_web_mode_needs_no_network() {
     // No mocks mounted: any request would 404-fail, but Images short-circuits.
     let backend = WikipediaBackend::new(build_http_client());
-    let results = backend.search("cats", SearchMode::Images, 10).await.unwrap();
+    let results = backend.search("cats", SearchMode::Images, 10, &netrail_lib::backends::types::SearchOptions::default()).await.unwrap();
     assert!(results.is_empty());
 }
 
@@ -233,7 +233,7 @@ async fn ddgs_text_parses_fixture_html() {
 
     let backend =
         DdgsBackend::with_base_urls(build_http_client(), &server.uri(), &server.uri());
-    let results = backend.search("rust", SearchMode::Web, 10).await.unwrap();
+    let results = backend.search("rust", SearchMode::Web, 10, &netrail_lib::backends::types::SearchOptions::default()).await.unwrap();
     assert_eq!(results.len(), 2);
     assert_eq!(results[0].url, "https://rust-lang.org/");
     assert_eq!(results[0].title, "Rust Programming Language");
@@ -254,7 +254,7 @@ async fn ddgs_bot_challenge_maps_to_typed_code() {
 
     let backend =
         DdgsBackend::with_base_urls(build_http_client(), &server.uri(), &server.uri());
-    let err = backend.search("rust", SearchMode::Web, 10).await.unwrap_err();
+    let err = backend.search("rust", SearchMode::Web, 10, &netrail_lib::backends::types::SearchOptions::default()).await.unwrap_err();
     assert_eq!(err.error_code(), "DDGS_BOT_CHALLENGE");
 }
 
@@ -280,7 +280,7 @@ async fn ddgs_images_fetches_vqd_then_results() {
 
     let backend =
         DdgsBackend::with_base_urls(build_http_client(), &server.uri(), &server.uri());
-    let results = backend.search("cats", SearchMode::Images, 10).await.unwrap();
+    let results = backend.search("cats", SearchMode::Images, 10, &netrail_lib::backends::types::SearchOptions::default()).await.unwrap();
     assert_eq!(results.len(), 1);
     assert_eq!(results[0].image.as_deref(), Some("https://img.test/t1.jpg"));
 }
@@ -296,6 +296,6 @@ async fn ddgs_images_missing_vqd_maps_to_typed_code() {
 
     let backend =
         DdgsBackend::with_base_urls(build_http_client(), &server.uri(), &server.uri());
-    let err = backend.search("cats", SearchMode::Images, 10).await.unwrap_err();
+    let err = backend.search("cats", SearchMode::Images, 10, &netrail_lib::backends::types::SearchOptions::default()).await.unwrap_err();
     assert_eq!(err.error_code(), "DDGS_VQD_TOKEN_MISSING");
 }

@@ -9,6 +9,15 @@ pub enum SearchMode {
     Images,
 }
 
+/// Optional, SearXNG-specific query parameters. Other backends ignore them.
+#[derive(Debug, Clone, Default)]
+pub struct SearchOptions {
+    pub language: Option<String>,
+    pub time_range: Option<String>,
+    pub pageno: Option<u32>,
+    pub safesearch: Option<u8>,
+}
+
 impl std::str::FromStr for SearchMode {
     type Err = std::convert::Infallible;
 

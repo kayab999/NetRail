@@ -19,7 +19,7 @@ class DDGSBackend:
     def is_available(self) -> bool:
         return True
 
-    def search(self, query: str, mode: SearchMode, max_results: int) -> list[SearchResult]:
+    def search(self, query: str, mode: SearchMode, max_results: int, options: dict[str, Any] | None = None) -> list[SearchResult]:  # noqa: ARG002
         with DDGS() as ddgs:
             if mode == "images":
                 raw = ddgs.images(query, max_results=max_results)

@@ -47,6 +47,7 @@ impl WikipediaBackend {
         query: &str,
         mode: SearchMode,
         max_results: usize,
+        _options: &super::types::SearchOptions,
     ) -> NetRailResult<Vec<SearchResult>> {
         if mode != SearchMode::Web {
             return Ok(vec![]);

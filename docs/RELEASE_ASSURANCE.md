@@ -4,9 +4,9 @@ Un documento de confianza, no técnico. Para quien llega por primera vez y quier
 saber **qué garantías ofrece el proyecto** y **dónde están respaldadas** sin leer
 el código. Cada fila apunta a la evidencia concreta (test, script o documento).
 
-> Estado a fecha del corte **v1.7.0** (2026-09-16). Cifras medidas en este
-> árbol: **351** tests Python (`pytest tests/`) + **149** tests Rust
-> (`cargo test --lib`) — antes 306 + 127 en v1.6.6. Reproducir con
+> Estado a fecha del corte **v1.8.0** (2026-11-07). Cifras medidas en este
+> árbol: **357** tests Python (`pytest tests/`) + **149** tests Rust
+> (`cargo test --lib`) — antes 351 + 149 en v1.7.0. Reproducir con
 > `pytest tests/ -q` y `cargo test` (ver `scripts/check-versions.sh`).
 
 ## Garantías, por área
@@ -33,6 +33,7 @@ arquitectura:
 | 1.6.5 | Release-readiness (RC) | Post-1.6.4 remediation: clippy P0 green, fuzz diferencial CI-gated, parity de browsers, fanout simétrico, cobertura visible (sin gate), link-integrity, docs SSOT; Baseline #2 = **4.65 SHIP-GRADE** como gate de readiness. Verificación R2 desde checkout limpio |
 | 1.6.6 | Convergencia de seguridad | A-10 semántica canónica v4/v6 (IANA + RFC 4291) con fixture de 119 vectores y probe de 12 160 URLs; A-05 guard fetch-time de backends (SSRF/TOCTOU, fail-closed); A-06 cipher-state canónico (`history.encryption_state` en `/api/health` + chip en UI); A-11 directividad de settings (rebind inmediato del store, ambos stacks); UX chip de estado; dead-code removal. Todos con golds compartidos Rust+Python y gates en verde |
 | 1.7.0 | Headless token gate + paridad | Token requerido en headless/Docker (fail-fast, breaking); timeout 30s tipado 408; fanout en orden configurado (no por velocidad); normalización URL case-preserving con paridad byte-exacta (`+`→`%20`); matriz fetch brave/ddgs/wikipedia (Rust 80% / Python 85%); nota de privacidad CDN en MANUAL; disclaimers de procedencia en auditorías internas |
+| 1.8.0 | Enriquecimiento SearXNG (P0) | Params opcionales `language`/`time_range`/`pageno`/`safesearch` en `SearchRequest` (Rust + Python), propagados solo a SearXNG; descubrimiento `/config` con timeout 5s, sin redirects, guard SSRF y caché 5 min; `GET /api/searxng/config` (`not_configured`/`ok`/`unavailable`/`invalid`); avisos no bloqueantes de solapamiento DDG/Brave; sin cambios de UI ni de contrato |
 | Próximos | Funcionalidad / arquitectura | Corpus propio (paso 4), proxy local de imágenes (R7), agrupación multi-instancia; backlog 1.6.x (DNS resolve-and-warn, RBAC, TLS pinning, Windows/macOS, LLM on-device, MCP) |
 
 ## Cómo verificar por uno mismo

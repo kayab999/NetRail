@@ -71,13 +71,19 @@ def _sovereignty_step(backends_used: list[str]) -> int:
     return 1
 
 
-def _query_backend(backend: Any, query: str, mode: SearchMode, max_results: int) -> tuple[str, str, list[SearchResult], str | None]:
+def _query_backend(
+    backend: Any,
+    query: str,
+    mode: SearchMode,
+    max_results: int,
+    options: dict[str, Any] | None = None,
+) -> tuple[str, str, list[SearchResult], str | None]:
     name = backend.name
     provenance = backend.provenance
     if not backend.is_available():
         return name, provenance, [], f"{name}: unavailable"
     try:
-        batch = backend.search(query, mode, max_results)
+        batch = backend.search(query, mode, max_results, options)
         return name, provenance, batch, None
     except Exception as exc:  # noqa: BLE001
         return name, provenance, [], f"{name}: {exc}"
@@ -88,6 +94,7 @@ def search_with_fallback(
     mode: SearchMode = "web",
     max_results: int = 25,
     settings: dict[str, Any] | None = None,
+    options: dict[str, Any] | None = None,
 ) -> SearchResponse:
     settings = settings or load_settings()
     query = query.strip()
@@ -107,7 +114,7 @@ def search_with_fallback(
     pool = ThreadPoolExecutor(max_workers=max(1, len(backends)))
     futures = {}
     for idx, backend in enumerate(backends):
-        future = pool.submit(_query_backend, backend, query, mode, max_results)
+        future = pool.submit(_query_backend, backend, query, mode, max_results, options)
         futures[future] = idx
     # Completions arrive in response-speed order; stash by spawn index so the
     # merge below follows configured backend order, not speed (parity with
@@ -178,7 +185,7 @@ def search_with_fallback(
         wiki = WikipediaBackend()
         try:
             wiki_results = wiki.search(
-                query, mode, max_results, timeout=min(15.0, remaining)
+                query, mode, max_results, timeout=min(15.0, remaining), options=options
             )
             if wiki_results:
                 logger.info("wikipedia fallback succeeded (%d results)", len(wiki_results))

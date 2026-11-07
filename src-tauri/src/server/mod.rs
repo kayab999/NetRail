@@ -1,6 +1,8 @@
 use crate::audit;
 use crate::auth::{self, check_request_token, inject_ui_token, path_requires_token};
 use crate::backends::get_enabled_backends;
+use crate::backends::searxng;
+use crate::backends::types::SearchOptions;
 use crate::browsers::{discover_browsers, open_url};
 use crate::config::{is_flatpak, load_settings, save_settings, static_dir, readonly_mode, Settings, API_CONTRACT, HOST, PORT, VERSION};
 use crate::crypto::{encryption_active, ensure_encryption_key};
@@ -45,6 +47,7 @@ pub fn build_router(state: AppState) -> Router {
         .route("/", get(index))
         .route("/api/health", get(health))
         .route("/api/backends", get(list_backends))
+        .route("/api/searxng/config", get(get_searxng_config))
         .route("/api/browsers", get(list_browsers))
         .route("/api/settings", get(get_settings).put(put_settings))
         .route("/api/search", post(run_search))
@@ -414,6 +417,128 @@ async fn list_backends(State(state): State<AppState>) -> Json<Vec<serde_json::Va
     Json(backends)
 }
 
+async fn get_searxng_config(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let settings = (state.settings_fn)();
+    // Resolve configured instance URL.
+    let mut instance_url: Option<String> = settings.searxng_url.clone();
+    if instance_url.is_none() {
+        for entry in &settings.backends {
+            if entry.id == "searxng" && entry.enabled {
+                if let Some(url) = entry.url.clone() {
+                    instance_url = Some(url);
+                    break;
+                }
+            }
+        }
+    }
+    let instance_url = match instance_url {
+        None => {
+            return Json(serde_json::json!({
+                "status": "not_configured",
+                "instance_url": null,
+                "categories": [],
+                "engines": [],
+                "overlap_warnings": [],
+                "error": null,
+            }));
+        }
+        Some(u) => u,
+    };
+
+    let strict = settings.strict_backend_urls || crate::config::strict_backend_urls_from_env();
+    let result = searxng::fetch_config(&instance_url, strict).await;
+
+    // Overlap warnings (non-blocking).
+    let mut overlap_warnings: Vec<String> = Vec::new();
+    // Determine which direct backends are enabled.
+    let mut ddgs_direct = false;
+    let mut brave_direct = false;
+    if !settings.backends.is_empty() {
+        for entry in &settings.backends {
+            if !entry.enabled {
+                continue;
+            }
+            match entry.id.as_str() {
+                "ddgs" => ddgs_direct = true,
+                "brave" => brave_direct = true,
+                _ => {}
+            }
+        }
+    } else {
+        if settings.ddgs_enabled {
+            ddgs_direct = true;
+        }
+        if settings.brave_enabled {
+            brave_direct = true;
+        }
+    }
+
+    match result {
+        searxng::ConfigFetchResult::Ok(cfg) => {
+            // Check overlap.
+            let mut sx_ddg = false;
+            let mut sx_brave = false;
+            for eng in &cfg.engines {
+                if !eng.enabled {
+                    continue;
+                }
+                let lower = eng.name.to_lowercase();
+                if lower.contains("duckduckgo") || lower == "ddg" || lower.contains("ddg") {
+                    sx_ddg = true;
+                }
+                if lower.contains("brave") {
+                    sx_brave = true;
+                }
+            }
+            if sx_ddg && ddgs_direct {
+                overlap_warnings.push(
+                    "Potential overlap: SearXNG includes a DuckDuckGo engine while the DDGS backend is also enabled.".into(),
+                );
+            }
+            if sx_brave && brave_direct {
+                overlap_warnings.push(
+                    "Potential overlap: SearXNG includes a Brave engine while the Brave backend is also enabled.".into(),
+                );
+            }
+            let engines: Vec<serde_json::Value> = cfg
+                .engines
+                .iter()
+                .map(|e| {
+                    serde_json::json!({
+                        "name": e.name,
+                        "enabled": e.enabled,
+                        "categories": e.categories,
+                    })
+                })
+                .collect();
+            Json(serde_json::json!({
+                "status": "ok",
+                "instance_url": instance_url,
+                "categories": cfg.categories,
+                "engines": engines,
+                "overlap_warnings": overlap_warnings,
+                "error": null,
+            }))
+        }
+        searxng::ConfigFetchResult::Unavailable(msg) => Json(serde_json::json!({
+            "status": "unavailable",
+            "instance_url": instance_url,
+            "categories": [],
+            "engines": [],
+            "overlap_warnings": overlap_warnings,
+            "error": msg,
+        })),
+        searxng::ConfigFetchResult::Invalid(msg) => Json(serde_json::json!({
+            "status": "invalid",
+            "instance_url": instance_url,
+            "categories": [],
+            "engines": [],
+            "overlap_warnings": overlap_warnings,
+            "error": msg,
+        })),
+    }
+}
+
 async fn list_browsers() -> Json<Vec<serde_json::Value>> {
     let browsers = discover_browsers()
         .into_iter()
@@ -494,6 +619,14 @@ struct SearchRequest {
     mode: String,
     #[serde(default = "default_max_results")]
     max_results: u32,
+    #[serde(default)]
+    language: Option<String>,
+    #[serde(default)]
+    time_range: Option<String>,
+    #[serde(default)]
+    pageno: Option<u32>,
+    #[serde(default)]
+    safesearch: Option<u8>,
 }
 
 fn default_mode() -> String {
@@ -526,6 +659,49 @@ async fn run_search(
         }
         .into());
     }
+    // Validate optional SearXNG search params.
+    if let Some(ss) = body.safesearch {
+        if !matches!(ss, 0..=2) {
+            return Err(NetRailError::InvalidQuery {
+                code: "SEARCH_PARAM_INVALID",
+                message: "safesearch must be 0, 1, or 2.".into(),
+            }
+            .into());
+        }
+    }
+    if let Some(pn) = body.pageno {
+        if !(1..=100).contains(&pn) {
+            return Err(NetRailError::InvalidQuery {
+                code: "SEARCH_PARAM_INVALID",
+                message: "pageno must be between 1 and 100.".into(),
+            }
+            .into());
+        }
+    }
+    if let Some(tr) = body.time_range.as_deref() {
+        if !matches!(tr, "day" | "month" | "year") {
+            return Err(NetRailError::InvalidQuery {
+                code: "SEARCH_PARAM_INVALID",
+                message: "time_range must be 'day', 'month', or 'year'.".into(),
+            }
+            .into());
+        }
+    }
+    if let Some(lang) = body.language.as_deref() {
+        if lang.is_empty() || lang.len() > 16 || !lang.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+            return Err(NetRailError::InvalidQuery {
+                code: "SEARCH_PARAM_INVALID",
+                message: "language must be 1-16 ASCII alphanumeric/hyphen/underscore characters.".into(),
+            }
+            .into());
+        }
+    }
+    let options = SearchOptions {
+        language: body.language.clone(),
+        time_range: body.time_range.clone(),
+        pageno: body.pageno,
+        safesearch: body.safesearch,
+    };
     let settings = (state.settings_fn)();
     let payload = search::search(
         &state.http_client,
@@ -534,6 +710,7 @@ async fn run_search(
         body.max_results,
         &settings,
         &state.store,
+        &options,
     )
     .await?;
     audit::log_event(
@@ -920,6 +1097,15 @@ impl From<JsonRejection> for ApiError {
             NetRailError::InvalidOpenUrl {
                 code: "OPEN_URL_INVALID",
                 message: "URL is required.".into(),
+            }
+        } else if lower.contains("safesearch")
+            || lower.contains("pageno")
+            || lower.contains("time_range")
+            || lower.contains("language")
+        {
+            NetRailError::InvalidQuery {
+                code: "SEARCH_PARAM_INVALID",
+                message: "Invalid search parameter.".into(),
             }
         } else if lower.contains("max_results") {
             NetRailError::InvalidConfig {

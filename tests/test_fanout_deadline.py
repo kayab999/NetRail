@@ -24,7 +24,7 @@ class _FastBackend:
     def is_available(self) -> bool:
         return True
 
-    def search(self, query: str, mode, max_results: int) -> list[SearchResult]:
+    def search(self, query: str, mode, max_results: int, options=None) -> list[SearchResult]:
         return [
             SearchResult(
                 title="fast result",
@@ -46,7 +46,7 @@ class _SlowBackend:
     def is_available(self) -> bool:
         return True
 
-    def search(self, query: str, mode, max_results: int) -> list[SearchResult]:
+    def search(self, query: str, mode, max_results: int, options=None) -> list[SearchResult]:
         time.sleep(self.hang)
         return []
 

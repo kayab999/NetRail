@@ -12,6 +12,7 @@ pub async fn search(
     max_results: u32,
     settings: &Settings,
     store: &SharedStore,
+    options: &crate::backends::types::SearchOptions,
 ) -> NetRailResult<serde_json::Value> {
     let mode = match mode.trim().to_lowercase().as_str() {
         "web" => SearchMode::Web,
@@ -23,7 +24,7 @@ pub async fn search(
             });
         }
     };
-    let response = search_with_fallback(client, query, mode, max_results, settings).await;
+    let response = search_with_fallback(client, query, mode, max_results, settings, options).await;
 
     if response.results.is_empty() && !response.errors.is_empty() {
         return Err(NetRailError::FanoutFailure {

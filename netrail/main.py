@@ -18,7 +18,7 @@ from fastapi import FastAPI, Query, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from netrail import API_CONTRACT, __version__
 from netrail import audit
@@ -33,6 +33,7 @@ from netrail.auth import (
 )
 from netrail.errors import NetRailError
 from netrail.backends.registry import get_enabled_backends
+from netrail.backends import searxng as searxng_mod
 from netrail.browsers import discover_browsers, open_url
 from netrail.config import load_settings, readonly_mode, save_settings, strict_backend_urls_from_env
 from netrail.docs_content import asset_path, load_doc
@@ -166,6 +167,12 @@ async def request_validation_handler(
         err = NetRailError(
             "QUERY_INVALID",
             "mode must be 'web' or 'images'.",
+            status=400,
+        )
+    elif _has_field("language", "time_range", "pageno", "safesearch"):
+        err = NetRailError(
+            "SEARCH_PARAM_INVALID",
+            "Invalid search parameter.",
             status=400,
         )
     elif _has_field("url"):
@@ -315,6 +322,21 @@ class SearchRequest(BaseModel):
     query: str = Field(min_length=1, max_length=500)
     mode: Literal["web", "images"] = "web"
     max_results: int = Field(default=25, ge=1, le=50)
+    language: str | None = None
+    time_range: Literal["day", "month", "year"] | None = None
+    pageno: int | None = Field(default=None, ge=1, le=100)
+    safesearch: int | None = Field(default=None, ge=0, le=2)
+
+    @field_validator("language")
+    @classmethod
+    def _validate_language(cls, value):
+        if value is None:
+            return value
+        if not value or len(value) > 16:
+            raise ValueError("language must be 1-16 characters")
+        if not all(c.isalnum() and c.isascii() or c in "-_" for c in value):
+            raise ValueError("language must be ASCII alphanumeric/hyphen/underscore")
+        return value
 
 
 class OpenRequest(BaseModel):
@@ -502,6 +524,79 @@ def list_backends() -> list[dict[str, Any]]:
     ]
 
 
+@app.get("/api/searxng/config")
+def get_searxng_config() -> dict[str, Any]:
+    settings = load_settings()
+    instance_url = settings.get("searxng_url")
+    if not instance_url:
+        for entry in settings.get("backends") or []:
+            if isinstance(entry, dict) and entry.get("id") == "searxng" and entry.get("enabled", True):
+                if entry.get("url"):
+                    instance_url = entry["url"]
+                    break
+    if not instance_url:
+        return {
+            "status": "not_configured",
+            "instance_url": None,
+            "categories": [],
+            "engines": [],
+            "overlap_warnings": [],
+            "error": None,
+        }
+
+    strict = bool(settings.get("strict_backend_urls")) or strict_backend_urls_from_env()
+    result = searxng_mod.fetch_config(instance_url, strict=strict)
+
+    # overlap warnings
+    overlap_warnings: list[str] = []
+    ddgs_direct = False
+    brave_direct = False
+    structured = settings.get("backends") or []
+    if structured:
+        for entry in structured:
+            if not isinstance(entry, dict) or not entry.get("enabled", True):
+                continue
+            if entry.get("id") == "ddgs":
+                ddgs_direct = True
+            elif entry.get("id") == "brave":
+                brave_direct = True
+    else:
+        if settings.get("ddgs_enabled", True):
+            ddgs_direct = True
+        if settings.get("brave_enabled"):
+            brave_direct = True
+
+    if result.get("status") == "ok":
+        sx_ddg = False
+        sx_brave = False
+        for eng in result.get("engines", []):
+            if not eng.get("enabled", True):
+                continue
+            lower = str(eng.get("name", "")).lower()
+            if "duckduckgo" in lower or "ddg" in lower:
+                sx_ddg = True
+            if "brave" in lower:
+                sx_brave = True
+        if sx_ddg and ddgs_direct:
+            overlap_warnings.append(
+                "Potential overlap: SearXNG includes a DuckDuckGo engine while the DDGS backend is also enabled."
+            )
+        if sx_brave and brave_direct:
+            overlap_warnings.append(
+                "Potential overlap: SearXNG includes a Brave engine while the Brave backend is also enabled."
+            )
+
+    status = result.get("status", "invalid")
+    return {
+        "status": status,
+        "instance_url": instance_url,
+        "categories": result.get("categories", []),
+        "engines": result.get("engines", []),
+        "overlap_warnings": overlap_warnings,
+        "error": result.get("error"),
+    }
+
+
 @app.get("/api/browsers")
 def list_browsers() -> list[dict[str, Any]]:
     return [
@@ -591,10 +686,19 @@ def run_search(req: Request, request: SearchRequest) -> dict[str, Any]:
     query = request.query.strip()
     if not query:
         raise NetRailError("QUERY_INVALID", "Query must be 1-500 characters.")
+    options = {
+        "language": request.language,
+        "time_range": request.time_range,
+        "pageno": request.pageno,
+        "safesearch": request.safesearch,
+    }
+    # Drop None values to keep backend params clean.
+    options = {k: v for k, v in options.items() if v is not None}
     payload = search(
         query=query,
         mode=request.mode,
         max_results=request.max_results,
+        options=options,
     )
     audit.log_event(
         "search",

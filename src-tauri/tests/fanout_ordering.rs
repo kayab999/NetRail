@@ -86,7 +86,7 @@ async fn fanout_follows_configured_order_not_speed() {
 
     let settings = searxng_settings(vec![slow.uri(), fast.uri()]);
     let client = build_http_client();
-    let response = search_with_fanout(&client, "rust", SearchMode::Web, 10, &settings).await;
+    let response = search_with_fanout(&client, "rust", SearchMode::Web, 10, &settings, &netrail_lib::backends::types::SearchOptions::default()).await;
 
     assert_eq!(
         response.provenance_chain,
@@ -111,7 +111,7 @@ async fn empty_backend_consumes_no_interleave_slot() {
 
     let settings = searxng_settings(vec![empty.uri(), fast.uri()]);
     let client = build_http_client();
-    let response = search_with_fanout(&client, "rust", SearchMode::Web, 10, &settings).await;
+    let response = search_with_fanout(&client, "rust", SearchMode::Web, 10, &settings, &netrail_lib::backends::types::SearchOptions::default()).await;
 
     assert_eq!(response.backends_used, vec!["searxng"]);
     assert_eq!(

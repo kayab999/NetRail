@@ -55,12 +55,15 @@ impl BackendKind {
         query: &str,
         mode: SearchMode,
         max_results: usize,
+        options: &types::SearchOptions,
     ) -> NetRailResult<Vec<SearchResult>> {
         match self {
-            Self::Ddgs => DdgsBackend::new(client.clone()).search(query, mode, max_results).await,
+            Self::Ddgs => DdgsBackend::new(client.clone())
+                .search(query, mode, max_results, options)
+                .await,
             Self::Searxng(url, strict) => {
                 SearxngBackend::new(client.clone(), url, *strict)
-                    .search(query, mode, max_results)
+                    .search(query, mode, max_results, options)
                     .await
             }
             Self::Brave(env) => {
@@ -70,7 +73,7 @@ impl BackendKind {
                         backend: "brave".into(),
                         message: "API key not set".into(),
                     })?;
-                backend.search(query, mode, max_results).await
+                backend.search(query, mode, max_results, options).await
             }
         }
     }
@@ -194,12 +197,13 @@ async fn query_backend(
     query: &str,
     mode: SearchMode,
     max_results: usize,
+    options: &types::SearchOptions,
     order: usize,
 ) -> Result<BackendBatch, String> {
     let name = backend.name().to_string();
     let provenance = backend.provenance();
     let results = backend
-        .search(client, query, mode, max_results)
+        .search(client, query, mode, max_results, options)
         .await
         .map_err(|e| e.to_string())?;
     Ok(BackendBatch {
@@ -233,6 +237,7 @@ pub async fn search_with_fanout(
     mode: SearchMode,
     max_results: u32,
     settings: &Settings,
+    options: &types::SearchOptions,
 ) -> SearchResponse {
     let query = query.trim();
     let max_results = max_results.clamp(1, 50) as usize;
@@ -277,10 +282,12 @@ pub async fn search_with_fanout(
 
     let mut tasks = tokio::task::JoinSet::new();
     let query_owned = query.to_string();
+    let options = options.clone();
     for (idx, backend) in backends.into_iter().enumerate() {
         let client = client.clone();
         let query = query_owned.clone();
-        tasks.spawn(async move { query_backend(&client, backend, &query, mode, max_results, idx).await });
+        let options = options.clone();
+        tasks.spawn(async move { query_backend(&client, backend, &query, mode, max_results, &options, idx).await });
     }
 
     let mut outcomes: Vec<Result<BackendBatch, String>> = Vec::new();
@@ -363,7 +370,7 @@ pub async fn search_with_fanout(
         let wiki = WikipediaBackend::new(client.clone());
         let wiki_outcome = tokio::time::timeout(
             remaining,
-            wiki.search(query, mode, max_results),
+            wiki.search(query, mode, max_results, &options),
         )
         .await;
         match wiki_outcome {
@@ -432,8 +439,9 @@ pub async fn search_with_fallback(
     mode: SearchMode,
     max_results: u32,
     settings: &Settings,
+    options: &types::SearchOptions,
 ) -> SearchResponse {
-    search_with_fanout(client, query, mode, max_results, settings).await
+    search_with_fanout(client, query, mode, max_results, settings, options).await
 }
 
 #[cfg(test)]
@@ -523,7 +531,7 @@ mod fanout_wiremock_tests {
 
         let client = crate::http_client::build_http_client();
         let response =
-            search_with_fanout(&client, "rust", SearchMode::Web, 10, &settings).await;
+            search_with_fanout(&client, "rust", SearchMode::Web, 10, &settings, &crate::backends::types::SearchOptions::default()).await;
 
         assert!(
             !response.results.is_empty(),
@@ -564,7 +572,7 @@ mod fanout_wiremock_tests {
 
         let client = crate::http_client::build_http_client();
         let response =
-            search_with_fanout(&client, "rust", SearchMode::Web, 10, &settings).await;
+            search_with_fanout(&client, "rust", SearchMode::Web, 10, &settings, &crate::backends::types::SearchOptions::default()).await;
 
         assert!(response.results.is_empty());
         assert_eq!(response.errors.len(), 2);

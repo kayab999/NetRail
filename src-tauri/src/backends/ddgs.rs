@@ -51,6 +51,7 @@ impl DdgsBackend {
         query: &str,
         mode: SearchMode,
         max_results: usize,
+        _options: &super::types::SearchOptions,
     ) -> NetRailResult<Vec<SearchResult>> {
         match mode {
             SearchMode::Images => self.search_images(query, max_results).await,

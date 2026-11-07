@@ -34,7 +34,7 @@ class _SlowBackend:
     def is_available(self) -> bool:
         return True
 
-    def search(self, query: str, mode, max_results: int) -> list[SearchResult]:
+    def search(self, query: str, mode, max_results: int, options=None) -> list[SearchResult]:
         time.sleep(0.4)
         return [_result("https://slow.example/1", self.name)]
 
@@ -46,7 +46,7 @@ class _FastBackend:
     def is_available(self) -> bool:
         return True
 
-    def search(self, query: str, mode, max_results: int) -> list[SearchResult]:
+    def search(self, query: str, mode, max_results: int, options=None) -> list[SearchResult]:
         return [_result("https://fast.example/1", self.name)]
 
 
@@ -57,7 +57,7 @@ class _EmptyBackend:
     def is_available(self) -> bool:
         return True
 
-    def search(self, query: str, mode, max_results: int) -> list[SearchResult]:
+    def search(self, query: str, mode, max_results: int, options=None) -> list[SearchResult]:
         return []
 
 

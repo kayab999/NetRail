@@ -41,7 +41,7 @@ class BraveBackend:
     def is_available(self) -> bool:
         return bool(self.api_key)
 
-    def search(self, query: str, mode: SearchMode, max_results: int) -> list[SearchResult]:
+    def search(self, query: str, mode: SearchMode, max_results: int, options: dict[str, Any] | None = None) -> list[SearchResult]:  # noqa: ARG002
         if mode == "images":
             return self._search_images(query, max_results)
         return self._search_web(query, max_results)

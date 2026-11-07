@@ -85,7 +85,7 @@ async fn partial_results_kept_when_slow_backend_hangs() {
     let settings = searxng_settings(vec![fast.uri(), slow.uri()]);
     let client = build_http_client();
     let start = Instant::now();
-    let response = search_with_fanout(&client, "rust", SearchMode::Web, 10, &settings).await;
+    let response = search_with_fanout(&client, "rust", SearchMode::Web, 10, &settings, &netrail_lib::backends::types::SearchOptions::default()).await;
     let elapsed = start.elapsed();
 
     assert!(
@@ -121,7 +121,7 @@ async fn all_hung_backends_stay_bounded() {
     let settings = searxng_settings(vec![slow_a.uri(), slow_b.uri()]);
     let client = build_http_client();
     let start = Instant::now();
-    let response = search_with_fanout(&client, "rust", SearchMode::Web, 10, &settings).await;
+    let response = search_with_fanout(&client, "rust", SearchMode::Web, 10, &settings, &netrail_lib::backends::types::SearchOptions::default()).await;
     let elapsed = start.elapsed();
 
     assert!(
